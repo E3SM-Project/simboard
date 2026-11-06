@@ -27,8 +27,9 @@ import {
 } from '@/features/diagnostics/compareState';
 import { useComparisonBasket } from '@/features/diagnostics/comparisonBasket';
 import { DiagnosticRunList } from '@/features/diagnostics/components/DiagnosticRunList';
-import { RUN_GROUPS } from '@/features/diagnostics/discoveryState';
+import { periodGroups, RUN_GROUPS } from '@/features/diagnostics/discoveryState';
 import type { CaseDiagnosticsOut } from '@/features/diagnostics/types';
+import { cn } from '@/lib/utils';
 import type { CaseListItemOut } from '@/types';
 
 const LCRC = 'https://web.lcrc.anl.gov/public/e3sm/diagnostic_output';
@@ -217,56 +218,48 @@ export const RunEditor = ({ initialRuns, onApply, onCancel }: RunEditorProps) =>
           </details>
         </TabsContent>
       </Tabs>
-      <section className="space-y-3 border-t pt-4" aria-label="Selected runs">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">
-            Selected runs ({runs.length}/{MAX_COMPARED_RUNS})
-          </h2>
-          {basket.entries.length ? (
-            <div className="flex max-w-full flex-wrap items-center gap-2">
-              {trayGroups.length > 1 ? (
-                <Select value={activeImportGroup} onValueChange={setImportGroup}>
-                  <SelectTrigger
-                    aria-label="Tray group to import"
-                    className="w-full text-xs sm:w-64"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {trayGroups.map((key) => (
-                      <SelectItem key={key} value={key}>
-                        {RUN_GROUPS.find((group) => group.key === key)?.title ?? key}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : null}
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  const selected = [...runs];
-                  for (const entry of basket.entries.filter(
-                    (entry) => groupKey(entry) === activeImportGroup,
-                  ))
-                    if (!selected.some((run) => run.url === entry.url))
-                      selected.push({ url: entry.url, label: entryLabel(entry), entry });
-                  if (selected.length > MAX_COMPARED_RUNS)
-                    setProblem(
-                      `Select at most ${MAX_COMPARED_RUNS} runs. Remove some from the tray before importing.`,
-                    );
-                  else {
-                    setRuns(selected);
-                    setProblem('');
-                  }
-                }}
-              >
-                Import tray selections
-              </Button>
-            </div>
-          ) : null}
-        </div>
+      <section className="space-y-2 border-t pt-3" aria-label="Selected runs">
+        {basket.entries.length ? (
+          <div className="flex max-w-full flex-wrap items-center gap-2">
+            {trayGroups.length > 1 ? (
+              <Select value={activeImportGroup} onValueChange={setImportGroup}>
+                <SelectTrigger aria-label="Tray group to import" className="w-full text-xs sm:w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {trayGroups.map((key) => (
+                    <SelectItem key={key} value={key}>
+                      {RUN_GROUPS.find((group) => group.key === key)?.title ?? key}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                const selected = [...runs];
+                for (const entry of basket.entries.filter(
+                  (entry) => groupKey(entry) === activeImportGroup,
+                ))
+                  if (!selected.some((run) => run.url === entry.url))
+                    selected.push({ url: entry.url, label: entryLabel(entry), entry });
+                if (selected.length > MAX_COMPARED_RUNS)
+                  setProblem(
+                    `Select at most ${MAX_COMPARED_RUNS} runs. Remove some from the tray before importing.`,
+                  );
+                else {
+                  setRuns(selected);
+                  setProblem('');
+                }
+              }}
+            >
+              Import tray selections
+            </Button>
+          </div>
+        ) : null}
         {!runs.length ? (
           <p className="text-sm text-slate-500">
             Choose diagnostics above, import tray selections, or open an example. Only shared plots
@@ -279,58 +272,71 @@ export const RunEditor = ({ initialRuns, onApply, onCancel }: RunEditorProps) =>
             Compare matching tools and comparison types.
           </p>
         ) : null}
-        {runs.map((run, index) => (
-          <div key={index} className="space-y-2 rounded-lg border p-3">
-            <div className="flex items-center justify-between gap-2">
-              <a
-                className="min-w-0 break-words text-sm font-medium hover:underline"
-                href={run.url}
-                target="_blank"
-                rel="noreferrer"
-                title={run.url}
-              >
-                {displayLabel(run)}
-              </a>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                aria-label={`Remove run ${index + 1}`}
-                onClick={() => setRuns(runs.filter((_, i) => i !== index))}
-              >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-              </Button>
+        <div className="max-h-44 space-y-1 overflow-y-auto p-0.5">
+          {runs.map((run, index) => (
+            <div key={index} className="rounded-md border px-2.5 py-1">
+              <div className="flex items-center justify-between gap-2">
+                <a
+                  href={run.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={run.url}
+                  className="min-w-0 text-sm font-medium hover:underline [overflow-wrap:anywhere]"
+                >
+                  {displayLabel(run)}
+                </a>
+                <Button
+                  type="button"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  variant="ghost"
+                  aria-label={`Remove run ${index + 1}`}
+                  onClick={() => setRuns(runs.filter((_, i) => i !== index))}
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </div>
+              <details className="text-xs text-slate-500">
+                <summary className="w-fit cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  Edit address and label
+                </summary>
+                <div className="grid gap-2 py-2 sm:grid-cols-2">
+                  <Input
+                    aria-label={`Run ${index + 1} address`}
+                    value={run.url}
+                    onChange={(event) => edit(index, { url: event.target.value })}
+                  />
+                  <Input
+                    aria-label={`Run ${index + 1} label`}
+                    placeholder="Label (optional)"
+                    value={run.label}
+                    onChange={(event) => edit(index, { label: event.target.value })}
+                  />
+                </div>
+              </details>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Input
-                aria-label={`Run ${index + 1} address`}
-                value={run.url}
-                onChange={(event) => edit(index, { url: event.target.value })}
-              />
-              <Input
-                aria-label={`Run ${index + 1} label`}
-                placeholder="Label (optional)"
-                value={run.label}
-                onChange={(event) => edit(index, { label: event.target.value })}
-              />
-            </div>
-          </div>
-        ))}
-      </section>
-      {problem ? (
-        <p role="alert" className="text-sm text-red-600">
-          {problem}
-        </p>
-      ) : null}
-      <div className="flex gap-2">
-        <Button type="button" onClick={() => apply(runs)}>
-          {onCancel ? 'Apply changes' : 'Compare'}
-        </Button>
-        {onCancel ? (
-          <Button type="button" variant="outline" onClick={onCancel}>
-            Cancel
-          </Button>
+          ))}
+        </div>
+        {problem ? (
+          <p role="alert" className="text-sm text-red-600">
+            {problem}
+          </p>
         ) : null}
+      </section>
+      <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t bg-white py-3">
+        <h2 className="text-sm font-semibold" aria-live="polite">
+          Selected runs ({runs.length}/{MAX_COMPARED_RUNS})
+        </h2>
+        <div className="flex gap-2">
+          {onCancel ? (
+            <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+              Cancel
+            </Button>
+          ) : null}
+          <Button type="button" size="sm" onClick={() => apply(runs)}>
+            {onCancel ? 'Apply changes' : 'Compare'}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -355,12 +361,13 @@ const CaseBrowser = ({
   const [debounced, setDebounced] = useState('');
   const [caseId, setCaseId] = useState<string | null>(null);
   useEffect(() => {
+    if (search.trim() === debounced) return;
     const timer = setTimeout(() => {
       setDebounced(search.trim());
       setCaseId(null);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, debounced]);
   const query = useInfiniteQuery({
     queryKey: ['diagnostics', 'supported-cases', debounced],
     initialPageParam: 1,
@@ -406,7 +413,7 @@ const CaseBrowser = ({
   const supported = checked.filter((item) =>
     item.diagnostics?.sources.some((source) => source.runs.length),
   );
-  const selected = supported.find((item) => item.record.id === caseId);
+  const selected = supported.find((item) => item.record.id === caseId) ?? supported[0];
   const incomplete = checked.some(
     (item) =>
       !item.diagnostics ||
@@ -414,112 +421,141 @@ const CaseBrowser = ({
   );
 
   return (
-    <div className="space-y-3">
-      <div className="space-y-1">
-        <Label htmlFor="diagnostic-case-search">Search cases with supported diagnostics</Label>
-        <Input
-          id="diagnostic-case-search"
-          value={search}
-          placeholder="Search by case name"
-          onChange={(event) => setSearch(event.target.value)}
-        />
-      </div>
-      <p className="text-xs text-slate-500">
-        Only confirmed E3SM Diags and MPAS-Analysis runs appear. General zppy directories are not
-        comparison runs.
-      </p>
-      <div role="status" className="text-sm text-slate-500">
-        {query.isFetching
-          ? 'Checking cases for supported diagnostics…'
-          : !supported.length
-            ? query.hasNextPage
-              ? 'No supported cases in checked results. Load more or narrow your search.'
-              : incomplete
-                ? 'No supported cases found; some archives could not be checked.'
-                : 'No supported cases found.'
-            : `${supported.length} supported cases found in checked results.`}
-      </div>
-      {query.isError || incomplete ? (
-        <div className="flex flex-wrap items-center gap-2 text-sm text-amber-800">
-          <span>Some results could not be read.</span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={async () => {
-              await Promise.all(
-                checked
-                  .filter(
-                    (item) =>
-                      !item.diagnostics ||
-                      item.diagnostics.sources.some((source) => source.error || source.partial),
-                  )
-                  .map((item) =>
-                    client.invalidateQueries({
-                      queryKey: ['diagnostics', 'case-runs', item.record.id],
-                      refetchType: 'none',
-                    }),
-                  ),
-              );
-              await query.refetch();
-            }}
-            disabled={query.isFetching}
-          >
-            Retry discovery
-          </Button>
+    <div className="grid min-w-0 gap-3 md:h-[min(55dvh,34rem)] md:grid-cols-[minmax(14rem,1fr)_minmax(0,2.5fr)]">
+      <section
+        aria-label="Browse cases"
+        className="flex min-h-0 min-w-0 flex-col rounded-lg border"
+      >
+        <div className="space-y-2 border-b p-3">
+          <h3 className="text-sm font-semibold">Browse cases</h3>
+          <div className="space-y-1">
+            <Label htmlFor="diagnostic-case-search">Search cases with supported diagnostics</Label>
+            <Input
+              id="diagnostic-case-search"
+              value={search}
+              placeholder="Search by case name"
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          <p className="text-xs text-slate-500">
+            Only confirmed E3SM Diags and MPAS-Analysis runs appear. General zppy directories are
+            not comparison runs.
+          </p>
+          <div role="status" className="text-xs text-slate-500">
+            {query.isFetching
+              ? 'Checking cases for supported diagnostics…'
+              : !supported.length
+                ? query.hasNextPage
+                  ? 'No supported cases in checked results. Load more or narrow your search.'
+                  : incomplete
+                    ? 'No supported cases found; some archives could not be checked.'
+                    : 'No supported cases found.'
+                : `${supported.length} supported cases found in checked results.`}
+          </div>
         </div>
-      ) : null}
-      <ul className="max-h-48 space-y-1 overflow-y-auto">
-        {supported.map(({ record, diagnostics }) => (
-          <li key={record.id}>
+        <div className="min-h-0 max-h-52 flex-1 overflow-y-auto p-2 md:max-h-none">
+          {query.isError || incomplete ? (
+            <div className="flex flex-wrap items-center gap-2 text-sm text-amber-800">
+              <span>Some results could not be read.</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  await Promise.all(
+                    checked
+                      .filter(
+                        (item) =>
+                          !item.diagnostics ||
+                          item.diagnostics.sources.some((source) => source.error || source.partial),
+                      )
+                      .map((item) =>
+                        client.invalidateQueries({
+                          queryKey: ['diagnostics', 'case-runs', item.record.id],
+                          refetchType: 'none',
+                        }),
+                      ),
+                  );
+                  await query.refetch();
+                }}
+                disabled={query.isFetching}
+              >
+                Retry discovery
+              </Button>
+            </div>
+          ) : null}
+          <ul className="space-y-1">
+            {supported.map(({ record, diagnostics }) => (
+              <li key={record.id}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={cn(
+                    'h-auto w-full justify-start gap-2 whitespace-normal px-2 py-2.5 text-left',
+                    record.id === selected?.record.id &&
+                      'bg-slate-100 text-slate-950 ring-1 ring-inset ring-slate-300',
+                  )}
+                  aria-pressed={record.id === selected?.record.id}
+                  aria-controls="available-case-diagnostics"
+                  onClick={() => setCaseId(record.id)}
+                >
+                  <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{record.name}</span>
+                  <span className="shrink-0 text-xs font-normal text-slate-500">
+                    <span className="sr-only"> · </span>
+                    {periodGroups(diagnostics?.sources ?? []).reduce(
+                      (count, [, runs]) => count + runs.length,
+                      0,
+                    )}{' '}
+                    runs
+                  </span>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        {query.hasNextPage ? (
+          <div className="border-t p-2">
             <Button
               type="button"
-              variant={record.id === caseId ? 'secondary' : 'ghost'}
-              className="h-auto w-full justify-start whitespace-normal break-words text-left"
-              aria-pressed={record.id === caseId}
-              onClick={() => setCaseId(record.id)}
+              size="sm"
+              variant="outline"
+              disabled={query.isFetching || search.trim() !== debounced}
+              onClick={() => void query.fetchNextPage()}
             >
-              {record.name} ·{' '}
-              {diagnostics?.sources.reduce((count, source) => count + source.runs.length, 0)} runs
+              Load more cases
             </Button>
-          </li>
-        ))}
-      </ul>
-      {query.hasNextPage ? (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={query.isFetching || search.trim() !== debounced}
-          onClick={() => void query.fetchNextPage()}
-        >
-          Load more cases
-        </Button>
-      ) : null}
-      {selected ? (
-        <section
-          className="space-y-4 rounded-lg border p-3"
-          aria-label={`Diagnostics for ${selected.record.name}`}
-        >
-          <h3 className="break-words text-sm font-semibold">{selected.record.name}</h3>
-          {selected.record.latestExecution ? (
-            <p className="break-words text-xs text-slate-500">
+          </div>
+        ) : null}
+      </section>
+      <section
+        id="available-case-diagnostics"
+        className="flex min-h-0 min-w-0 flex-col rounded-lg border"
+        aria-label={selected ? `Diagnostics for ${selected.record.name}` : 'Available diagnostics'}
+      >
+        <header className="space-y-1 border-b p-3">
+          <h3 className="text-sm font-semibold">Available diagnostics</h3>
+          <p className="text-xs text-slate-600 [overflow-wrap:anywhere]" aria-live="polite">
+            {selected?.record.name ?? 'Choose a case with supported diagnostics.'}
+          </p>
+          {selected?.record.latestExecution ? (
+            <p className="text-xs text-slate-500 [overflow-wrap:anywhere]">
               Latest case execution: {selected.record.latestExecution.executionId} (not diagnostic
               run provenance)
             </p>
           ) : null}
-          {selected.diagnostics?.sources.map((source, index) => (
+        </header>
+        <div className="min-h-0 max-h-[50dvh] flex-1 overflow-y-auto p-3 md:max-h-none">
+          {selected?.diagnostics ? (
             <DiagnosticRunList
-              key={source.rootUrl}
-              source={source}
-              id={`browser-${selected.record.id}-${index}`}
+              sources={selected.diagnostics.sources}
+              id={`browser-${selected.record.id}`}
               isAdded={isAdded}
               onAdd={(run) => onAdd(toEntry(run, selected.record.id, selected.record.name))}
               onRemove={onRemove}
             />
-          ))}
-        </section>
-      ) : null}
+          ) : null}
+        </div>
+      </section>
     </div>
   );
 };

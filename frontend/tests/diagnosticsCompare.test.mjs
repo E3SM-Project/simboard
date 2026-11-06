@@ -15,7 +15,16 @@ import {
   reconcileBasket,
   toEntry,
 } from '../src/features/diagnostics/compareState.ts';
-import { relatedDirectories, resourceTarget } from '../src/features/diagnostics/discoveryState.ts';
+import {
+  diagnosticClimatologyPeriod,
+  diagnosticIdentifier,
+  diagnosticPeriod,
+  diagnosticTimeSeriesPeriod,
+  diagnosticTitle,
+  periodGroups,
+  relatedDirectories,
+  resourceTarget,
+} from '../src/features/diagnostics/discoveryState.ts';
 
 const LCRC = 'https://web.lcrc.anl.gov/public/e3sm/diagnostic_output';
 const VIEWER = `${LCRC}/x/case/e3sm_diags/a/model_vs_obs_1985-2014/viewer/`;
@@ -75,6 +84,129 @@ test('labels preserve supplied text and shorten only the unlabeled UI fallback',
 test('run periods are zero-padded model years', () => {
   assert.equal(runPeriod({ startYear: 1, endYear: 50 }), '0001-0050');
   assert.equal(runPeriod({ startYear: null, endYear: 50 }), '');
+});
+
+test('discovery groups actual periods across sources and keeps unique runs', () => {
+  const obs = run();
+  const model = run({
+    url: `${LCRC}/model/viewer/`,
+    comparison: 'model_vs_model',
+    subsection: 'atm_monthly_180x360_aave_mvm_PI100',
+  });
+  const early = run({ url: `${LCRC}/early/viewer/`, startYear: 1, endYear: 50 });
+  const unknown = run({
+    url: `${LCRC}/ambiguous_1985-2014/viewer/`,
+    startYear: null,
+    endYear: null,
+  });
+  assert.deepEqual(periodGroups([{ runs: [unknown, obs] }, { runs: [model, obs, early] }]), [
+    ['0001–0050', [early]],
+    ['1985–2014', [obs, model]],
+    ['Unknown period', [unknown]],
+  ]);
+  assert.equal(diagnosticPeriod(unknown), 'Unknown period');
+  assert.equal(diagnosticPeriod(run({ startYear: null })), 'Unknown period');
+  assert.deepEqual(periodGroups([]), []);
+});
+
+test('diagnostic rows retain exact identifiers and explicit comparison metadata', () => {
+  for (const subsection of [
+    'atm_monthly_180x360_aave',
+    'atm_monthly_180x360_aave_mvm_PI100',
+    'lnd_monthly_mvm_lnd',
+  ]) {
+    assert.equal(diagnosticIdentifier(run({ subsection })), subsection);
+  }
+  assert.equal(diagnosticTitle(run()), 'Climatology · Model vs. Observations');
+  assert.equal(
+    diagnosticTitle(run({ comparison: 'model_vs_model' })),
+    'Climatology · Model vs. Model',
+  );
+  assert.equal(diagnosticTitle(run({ comparison: null })), 'Climatology');
+  assert.equal(
+    diagnosticIdentifier(
+      run({
+        subsection: null,
+        url: `${LCRC}/case/e3sm_diags/atm_monthly_180x360_aave/model_vs_obs_1985-2014/viewer/`,
+      }),
+    ),
+    'atm_monthly_180x360_aave',
+  );
+  assert.equal(
+    diagnosticIdentifier(run({ subsection: null, url: `${LCRC}/case/e3sm_diags/index.html` })),
+    'Identifier unavailable',
+  );
+});
+
+test('MPAS keeps both analysis periods without inventing comparison categories', () => {
+  const mpas = run({
+    tool: 'mpas_analysis',
+    url: `${LCRC}/case/mpas_analysis/ts_0001-0500_climo_0451-0500/`,
+    subsection: null,
+    comparison: null,
+    startYear: 451,
+    endYear: 500,
+    tsStartYear: 1,
+    tsEndYear: 500,
+  });
+  assert.equal(diagnosticPeriod(mpas), '0451–0500');
+  assert.equal(diagnosticClimatologyPeriod(mpas), '0451–0500');
+  assert.equal(diagnosticPeriod(mpas, 'climatology'), '0451–0500');
+  assert.equal(diagnosticPeriod(mpas, 'time_series'), '0001–0500');
+  assert.equal(diagnosticTimeSeriesPeriod(mpas), '0001–0500');
+  assert.equal(diagnosticTitle(mpas), 'Climatology · Time Series');
+  assert.equal(diagnosticIdentifier(mpas), 'ts_0001-0500_climo_0451-0500');
+  const timeSeries = { ...mpas, startYear: null, endYear: null };
+  assert.equal(diagnosticPeriod(timeSeries), '0001–0500');
+  assert.equal(diagnosticTitle(timeSeries), 'Time Series');
+  const unknown = { ...timeSeries, tsStartYear: null, tsEndYear: null };
+  assert.equal(diagnosticPeriod(unknown), 'Unknown period');
+  assert.equal(diagnosticTitle(unknown), 'Diagnostic run');
+});
+
+test('analysis filters regroup whole runs using only the matching indexed years', () => {
+  const obs = run();
+  const mpas = run({
+    tool: 'mpas_analysis',
+    url: `${LCRC}/case/mpas_analysis/ts_0001-0100_climo_0051-0100/`,
+    comparison: null,
+    subsection: null,
+    startYear: 51,
+    endYear: 100,
+    tsStartYear: 1,
+    tsEndYear: 100,
+  });
+  const timeSeries = { ...mpas, url: `${LCRC}/time-series/`, startYear: null, endYear: null };
+  const unknown = run({
+    url: `${LCRC}/ambiguous_1985-2014/viewer/`,
+    startYear: null,
+    endYear: null,
+  });
+  const sources = [{ runs: [obs, mpas, timeSeries, unknown] }, { runs: [mpas] }];
+  const original = globalThis.structuredClone(sources);
+  assert.deepEqual(periodGroups(sources), [
+    ['0001–0100', [timeSeries]],
+    ['0051–0100', [mpas]],
+    ['1985–2014', [obs]],
+    ['Unknown period', [unknown]],
+  ]);
+  assert.deepEqual(periodGroups(sources, 'climatology'), [
+    ['0051–0100', [mpas]],
+    ['1985–2014', [obs]],
+  ]);
+  assert.deepEqual(periodGroups(sources, 'time_series'), [['0001–0100', [mpas, timeSeries]]]);
+  assert.equal(periodGroups(sources, 'time_series')[0][1][0], mpas);
+  assert.deepEqual(sources, original);
+  assert.equal(diagnosticPeriod(unknown, 'climatology'), 'Unknown period');
+  assert.equal(diagnosticPeriod(unknown, 'time_series'), 'Unknown period');
+});
+
+test('analysis filters do not classify missing or incomplete periods from names', () => {
+  const partial = run({ startYear: null, tsStartYear: 1, tsEndYear: null });
+  assert.deepEqual(periodGroups([{ runs: [partial] }]), [['Unknown period', [partial]]]);
+  assert.deepEqual(periodGroups([{ runs: [partial] }], 'climatology'), []);
+  assert.deepEqual(periodGroups([{ runs: [partial] }], 'time_series'), []);
+  assert.deepEqual(periodGroups([{ runs: [run()] }], 'time_series'), []);
 });
 
 test('isRunUrl accepts the layouts the backend reads', () => {

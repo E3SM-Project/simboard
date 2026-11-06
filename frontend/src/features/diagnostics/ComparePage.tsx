@@ -181,7 +181,7 @@ export const ComparePage = () => {
             side by side.
           </p>
         </header>
-        <div className="mx-auto max-w-3xl rounded-xl border bg-white p-4 sm:p-6">
+        <div className="rounded-xl border bg-white p-4 sm:p-6">
           <RunEditor initialRuns={[]} onApply={applyRuns} />
         </div>
       </Shell>
@@ -219,7 +219,7 @@ export const ComparePage = () => {
             </DialogTrigger>
             <DialogContent
               overlayClassName="motion-reduce:animate-none"
-              className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-3xl overflow-y-auto motion-reduce:animate-none"
+              className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-6xl overflow-y-auto motion-reduce:animate-none"
             >
               <DialogHeader>
                 <DialogTitle>Edit diagnostic runs</DialogTitle>
