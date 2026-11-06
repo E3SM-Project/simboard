@@ -1,10 +1,9 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Info, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Info, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { listCases } from '@/api/catalog';
 import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -16,7 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { compareRuns, getCaseDiagnosticsRuns } from '@/features/diagnostics/api';
+import { getCaseDiagnosticsRuns } from '@/features/diagnostics/api';
 import {
   type BasketEntry,
   type CompareRun,
@@ -30,6 +29,7 @@ import {
   toEntry,
 } from '@/features/diagnostics/compareState';
 import { useComparisonBasket } from '@/features/diagnostics/comparisonBasket';
+import { validateComparison } from '@/features/diagnostics/comparisonValidation';
 import { CaseBacklink } from '@/features/diagnostics/components/CaseBacklink';
 import { DiagnosticRunList } from '@/features/diagnostics/components/DiagnosticRunList';
 import {
@@ -121,7 +121,6 @@ export const RunEditor = ({
   const [checking, setChecking] = useState(false);
   const validating = useRef(false);
   const mounted = useRef(false);
-  const [selectionsOpen, setSelectionsOpen] = useState(false);
   const [manual, setManual] = useState<CompareRun>({ url: '', label: '' });
   const trayGroups = [...new Set(basket.entries.map(groupKey))];
   const knownKinds = new Set(runs.flatMap((run) => (run.entry ? [groupKey(run.entry)] : [])));
@@ -211,30 +210,13 @@ export const RunEditor = ({
     setChecking(true);
     setProblem('');
     try {
-      const result = await client.fetchQuery({
-        queryKey: ['diagnostics', 'compare', selected, comparisonSet],
-        queryFn: () => compareRuns(selected, comparisonSet),
-        staleTime: 0,
-        retry: false,
-      });
+      const failure = await validateComparison(client, selected, comparisonSet);
       if (!mounted.current) return;
-      const failed = result.runs.filter((run) => run.error);
-      if (failed.length || (!result.sets.length && result.runs.some((run) => run.partial))) {
-        setProblem(
-          failed.length
-            ? `Could not read diagnostics for ${failed.map(displayLabel).join(', ')}. Retry the compatibility check.`
-            : 'Some plots could not be read, so compatibility could not be confirmed. Try again.',
-        );
-        setRetryRuns(next);
+      if (failure) {
+        setProblem(failure.problem);
+        if (failure.retryable) setRetryRuns(next);
         return;
       }
-      if (!result.sets.length) {
-        setProblem('Selected runs have no plots in common. Choose compatible runs.');
-        return;
-      }
-      // The viewer names its resolved category in the URL; reuse this response after that update.
-      if (result.set)
-        client.setQueryData(['diagnostics', 'compare', selected, result.set.name], result);
       const error = onApply(
         selected,
         next.flatMap((run) => (run.entry ? [run.entry] : [])),
@@ -317,106 +299,103 @@ export const RunEditor = ({
   );
 
   return (
-    <Collapsible
-      open={selectionsOpen}
-      onOpenChange={setSelectionsOpen}
-      className="min-w-0 space-y-3"
-    >
+    <div className="min-w-0 space-y-3">
       <fieldset disabled={checking} className="min-w-0 space-y-3">
         {browser}
-        <CollapsibleContent>
-          <section className="space-y-2 border-t pt-3" aria-label="Selected runs">
-            {!onCancel && trayGroups.length > 1 ? (
-              <Select
-                value={selectionGroup}
-                onValueChange={(key) => {
-                  const next = runs.filter((run) => !run.entry);
-                  for (const entry of basket.entries.filter((entry) => groupKey(entry) === key)) {
-                    if (
-                      !next.some((run) => run.url === entry.url && run.label === entryLabel(entry))
-                    )
-                      next.push({ url: entry.url, label: entryLabel(entry), entry });
-                  }
-                  setRetryRuns(null);
-                  if (next.length > MAX_COMPARED_RUNS) {
-                    setProblem(
-                      `Compare at most ${MAX_COMPARED_RUNS} runs at a time. Remove a manual run before switching groups.`,
-                    );
-                    return;
-                  }
-                  setSelectionGroup(key);
-                  setRuns(next);
-                  setProblem('');
-                }}
-              >
-                <SelectTrigger aria-label="Comparison group" className="h-8 w-full text-xs sm:w-72">
-                  <SelectValue placeholder="Staged diagnostic group" />
-                </SelectTrigger>
-                <SelectContent>
-                  {trayGroups.map((key) => (
-                    <SelectItem key={key} value={key}>
-                      {RUN_GROUPS.find((group) => group.key === key)?.title ?? key}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : null}
-            {!runs.length ? <p className="text-sm text-slate-500">No runs selected.</p> : null}
-            <div className="max-h-44 space-y-1 overflow-y-auto p-0.5">
-              {runs.map((run, index) => (
-                <div key={index} className="max-w-3xl rounded-md border px-2.5 py-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <a
-                      href={run.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      title={run.url}
-                      className="min-w-0 text-sm font-medium hover:underline [overflow-wrap:anywhere]"
+        <section className="space-y-2 border-t pt-3" aria-label="Selected runs">
+          <h2 className="text-sm font-semibold" aria-live="polite">
+            Selected runs ({runs.length}/{MAX_COMPARED_RUNS})
+          </h2>
+          {!onCancel && trayGroups.length > 1 ? (
+            <Select
+              value={selectionGroup}
+              onValueChange={(key) => {
+                const next = runs.filter((run) => !run.entry);
+                for (const entry of basket.entries.filter((entry) => groupKey(entry) === key)) {
+                  if (!next.some((run) => run.url === entry.url && run.label === entryLabel(entry)))
+                    next.push({ url: entry.url, label: entryLabel(entry), entry });
+                }
+                setRetryRuns(null);
+                if (next.length > MAX_COMPARED_RUNS) {
+                  setProblem(
+                    `Compare at most ${MAX_COMPARED_RUNS} runs at a time. Remove a manual run before switching groups.`,
+                  );
+                  return;
+                }
+                setSelectionGroup(key);
+                setRuns(next);
+                setProblem('');
+              }}
+            >
+              <SelectTrigger aria-label="Comparison group" className="h-8 w-full text-xs sm:w-72">
+                <SelectValue placeholder="Staged diagnostic group" />
+              </SelectTrigger>
+              <SelectContent>
+                {trayGroups.map((key) => (
+                  <SelectItem key={key} value={key}>
+                    {RUN_GROUPS.find((group) => group.key === key)?.title ?? key} (
+                    {basket.entries.filter((entry) => groupKey(entry) === key).length}/
+                    {MAX_COMPARED_RUNS})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+          {!runs.length ? <p className="text-sm text-slate-500">No runs selected.</p> : null}
+          <div className="max-h-44 space-y-1 overflow-y-auto p-0.5">
+            {runs.map((run, index) => (
+              <div key={index} className="max-w-3xl rounded-md border px-2.5 py-1">
+                <div className="flex items-center justify-between gap-2">
+                  <a
+                    href={run.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={run.url}
+                    className="min-w-0 text-sm font-medium hover:underline [overflow-wrap:anywhere]"
+                  >
+                    {displayLabel(run)}
+                  </a>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {run.entry ? <CaseBacklink entry={run.entry} /> : null}
+                    <Button
+                      type="button"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      variant="ghost"
+                      aria-label={`Remove run ${index + 1}`}
+                      onClick={() => changeRuns(runs.filter((_, i) => i !== index))}
                     >
-                      {displayLabel(run)}
-                    </a>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {run.entry ? <CaseBacklink entry={run.entry} /> : null}
-                      <Button
-                        type="button"
-                        size="icon"
-                        className="h-7 w-7 shrink-0"
-                        variant="ghost"
-                        aria-label={`Remove run ${index + 1}`}
-                        onClick={() => changeRuns(runs.filter((_, i) => i !== index))}
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                    </div>
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </Button>
                   </div>
-                  {run.entry ? (
-                    <p className="text-xs text-slate-500 [overflow-wrap:anywhere]">
-                      {diagnosticIdentifier(run.entry)}
-                    </p>
-                  ) : null}
-                  <details className="text-xs text-slate-500">
-                    <summary className="w-fit cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      Edit address and label
-                    </summary>
-                    <div className="grid gap-2 py-2 sm:grid-cols-2">
-                      <Input
-                        aria-label={`Run ${index + 1} address`}
-                        value={run.url}
-                        onChange={(event) => edit(index, { url: event.target.value })}
-                      />
-                      <Input
-                        aria-label={`Run ${index + 1} label`}
-                        placeholder="Label (optional)"
-                        value={run.label}
-                        onChange={(event) => edit(index, { label: event.target.value })}
-                      />
-                    </div>
-                  </details>
                 </div>
-              ))}
-            </div>
-          </section>
-        </CollapsibleContent>
+                {run.entry ? (
+                  <p className="text-xs text-slate-500 [overflow-wrap:anywhere]">
+                    {diagnosticIdentifier(run.entry)}
+                  </p>
+                ) : null}
+                <details className="text-xs text-slate-500">
+                  <summary className="w-fit cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    Edit address and label
+                  </summary>
+                  <div className="grid gap-2 py-2 sm:grid-cols-2">
+                    <Input
+                      aria-label={`Run ${index + 1} address`}
+                      value={run.url}
+                      onChange={(event) => edit(index, { url: event.target.value })}
+                    />
+                    <Input
+                      aria-label={`Run ${index + 1} label`}
+                      placeholder="Label (optional)"
+                      value={run.label}
+                      onChange={(event) => edit(index, { label: event.target.value })}
+                    />
+                  </div>
+                </details>
+              </div>
+            ))}
+          </div>
+        </section>
       </fieldset>
       <footer className="sticky bottom-0 z-10 space-y-2 border-t bg-white py-2">
         {problem ? (
@@ -437,20 +416,6 @@ export const RunEditor = ({
           </Button>
         ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold" aria-live="polite">
-            <CollapsibleTrigger asChild>
-              <Button type="button" variant="ghost" size="sm" className="gap-2 px-1 font-semibold">
-                Selected runs ({runs.length}/{MAX_COMPARED_RUNS})
-                <ChevronDown
-                  aria-hidden="true"
-                  className={cn(
-                    'h-4 w-4 transition-transform motion-reduce:transition-none',
-                    selectionsOpen && 'rotate-180',
-                  )}
-                />
-              </Button>
-            </CollapsibleTrigger>
-          </h2>
           <div className="flex gap-2">
             {onCancel ? (
               <Button type="button" variant="outline" size="sm" onClick={onCancel}>
@@ -481,7 +446,7 @@ export const RunEditor = ({
           </div>
         </div>
       </footer>
-    </Collapsible>
+    </div>
   );
 };
 

@@ -1,6 +1,7 @@
-import { X } from 'lucide-react';
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { Loader2, X } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import {
   MAX_RUNS_PER_GROUP,
   useComparisonBasket,
 } from '@/features/diagnostics/comparisonBasket';
+import { validateComparison } from '@/features/diagnostics/comparisonValidation';
 
 const GROUP_TITLES: Record<string, string> = {
   'e3sm_diags:model_vs_obs': 'E3SM Diags · model vs observations',
@@ -32,9 +34,16 @@ const GROUP_TITLES: Record<string, string> = {
  */
 export const ComparisonBar = () => {
   const { entries, remove, clear } = useComparisonBasket();
+  const client = useQueryClient();
+  const navigate = useNavigate();
+  const [checking, setChecking] = useState(false);
+  const [problem, setProblem] = useState('');
+  const [retryable, setRetryable] = useState(false);
+  const validating = useRef(false);
+  const mounted = useRef(false);
   const [collapsed, setCollapsed] = useState(true);
   const [selectedGroup, setSelectedGroup] = useState('');
-  const { pathname } = useLocation();
+  const { pathname, key: locationKey } = useLocation();
   const inWorkspace = pathname === '/diagnostics' || pathname === '/diagnostics/compare';
   const visible = entries.length > 0 && !inWorkspace;
   const barRef = useRef<HTMLDivElement | null>(null);
@@ -58,9 +67,52 @@ export const ComparisonBar = () => {
     entries.forEach((e) => byKey.set(groupKey(e), [...(byKey.get(groupKey(e)) ?? []), e]));
     return [...byKey];
   }, [entries]);
+  const active = groups.find(([key]) => key === selectedGroup) ?? groups[0];
+  const signature = JSON.stringify([locationKey, active]);
+  const currentSignature = useRef(signature);
+  currentSignature.current = signature;
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setProblem('');
+    setRetryable(false);
+  }, [signature]);
+
+  const compare = async () => {
+    if (validating.current || !active) return;
+    const runs = active[1].map((entry) => ({ url: entry.url, label: entryLabel(entry) }));
+    const startedSignature = signature;
+    validating.current = true;
+    setChecking(true);
+    setProblem('');
+    setRetryable(false);
+    try {
+      const failure = await validateComparison(client, runs);
+      if (!mounted.current || currentSignature.current !== startedSignature) return;
+      if (failure) {
+        setProblem(failure.problem);
+        setRetryable(failure.retryable);
+        return;
+      }
+      navigate(comparePath(runs));
+    } catch {
+      if (mounted.current && currentSignature.current === startedSignature) {
+        setProblem('Could not check run compatibility. Check your connection and try again.');
+        setRetryable(true);
+      }
+    } finally {
+      validating.current = false;
+      if (mounted.current) setChecking(false);
+    }
+  };
 
   if (entries.length === 0 || inWorkspace) return null;
-  const active = groups.find(([key]) => key === selectedGroup) ?? groups[0];
 
   return (
     <div
@@ -76,10 +128,13 @@ export const ComparisonBar = () => {
             <Badge variant="secondary" aria-live="polite">
               {entries.length} selected
             </Badge>
+            {groups.length > 1 ? (
+              <span className="text-xs text-slate-500">{active[1].length} in this group</span>
+            ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
             {groups.length > 1 ? (
-              <Select value={active[0]} onValueChange={setSelectedGroup}>
+              <Select value={active[0]} onValueChange={setSelectedGroup} disabled={checking}>
                 <SelectTrigger
                   aria-label="Comparison group"
                   className="h-8 w-[min(260px,65vw)] text-xs"
@@ -104,17 +159,43 @@ export const ComparisonBar = () => {
             >
               {collapsed ? 'Expand' : 'Collapse'}
             </Button>
-            <Button asChild size="sm">
-              <Link
-                to={comparePath(
-                  active[1].map((entry) => ({ url: entry.url, label: entryLabel(entry) })),
-                )}
-              >
-                Compare
-              </Link>
+            <Button
+              type="button"
+              size="sm"
+              disabled={checking}
+              aria-busy={checking}
+              onClick={() => void compare()}
+            >
+              {checking ? (
+                <>
+                  <Loader2
+                    className="mr-1 h-4 w-4 animate-spin motion-reduce:animate-none"
+                    aria-hidden="true"
+                  />
+                  <span role="status">Checking compatibility…</span>
+                </>
+              ) : (
+                'Compare'
+              )}
             </Button>
           </div>
         </div>
+        {problem ? (
+          <p role="alert" className="text-sm text-red-600">
+            {problem}
+          </p>
+        ) : null}
+        {retryable && !checking ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-fit"
+            onClick={() => void compare()}
+          >
+            Retry comparison
+          </Button>
+        ) : null}
 
         {collapsed ? null : (
           <div id="comparison-tray-selections" className="space-y-2">
@@ -122,7 +203,7 @@ export const ComparisonBar = () => {
               <p className="text-xs text-slate-500">
                 Compare runs of the same kind, across cases or time ranges.
               </p>
-              <Button variant="ghost" size="sm" onClick={clear}>
+              <Button variant="ghost" size="sm" disabled={checking} onClick={clear}>
                 Clear all
               </Button>
             </div>
@@ -150,6 +231,7 @@ export const ComparisonBar = () => {
                         <span className="text-slate-500">{entry.period}</span>
                         <button
                           type="button"
+                          disabled={checking}
                           onClick={() => remove(entry.url)}
                           className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           aria-label={`Remove ${entryLabel(entry)}`}

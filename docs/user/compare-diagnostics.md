@@ -24,7 +24,8 @@ when available. Filters do not change its primary time-range group.
 Select **Add** on runs
 from different cases or different periods of one case. Picks persist across
 pages in a compact selection tray. **Expand** reviews or removes selections;
-**Compare** opens plots directly. Choose a compatible group if several tools
+**Compare** checks shared plots before opening the viewer. Failed checks keep
+the tray selections and offer recovery actions. Choose a compatible group if several tools
 or comparison types are selected.
 
 Resources keep their original output links. **View in Diagnostics**, when
@@ -46,7 +47,7 @@ IICE. Case pages, the tray, and the workspace synchronize known selections
 automatically. Choose a comparison group to review another staged diagnostic
 kind without mixing groups automatically.
 
-**Selected runs** sits below discovery. Expand it to edit or remove runs, or use
+**Selected runs** sits below discovery and stays open. Edit or remove runs, or use
 **View Case** to return to a linked case. Search, active case, filters, and
 selections persist across navigation and refreshes. Explicit shared URLs take
 precedence over local selections.
