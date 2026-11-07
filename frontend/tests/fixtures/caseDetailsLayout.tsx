@@ -13,6 +13,10 @@ import {
   CaseConfigurationDetails,
   CaseConfigurationSummary,
 } from '../../src/features/catalog/components/CaseConfiguration';
+import {
+  DiagnosticsResourceLink,
+  DiagnosticsRunsCard,
+} from '../../src/features/diagnostics/components/DiagnosticsRunsCard';
 import { HomePage } from '../../src/features/home/HomePage';
 import '../../src/index.css';
 import { useCaseExecutions } from '../../src/lib/catalog/hooks/useCaseExecutions';
@@ -135,6 +139,8 @@ function FixtureCasePage() {
 
   return (
     <CaseDetailsPage
+      renderDiagnostics={(options) => <DiagnosticsRunsCard {...options} />}
+      renderDiagnosticsResource={(options) => <DiagnosticsResourceLink {...options} />}
       selectedCaseExecutionIdsByCase={selectedIds}
       setSelectedCaseExecutionIdsForCase={(caseId, ids) => setSelectedIds({ [caseId]: ids })}
       renderCompareSection={({ caseId, onClose }) => (
@@ -210,6 +216,10 @@ async function run() {
       </QueryClientProvider>,
     );
     await waitFor(() => document.querySelector('h1')?.textContent === record.name);
+    check(
+      !requests.some((url) => url.includes('/diagnostics/runs')),
+      'Cases without diagnostic links do not request diagnostics discovery',
+    );
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     const developer = [...document.querySelectorAll('details')].find(
