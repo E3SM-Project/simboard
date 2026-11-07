@@ -12,6 +12,8 @@ export interface CompareRun {
 
 export interface CompareState {
   runs: CompareRun[];
+  selected?: CompareRun[];
+  filter?: string;
   set: string | null;
   plot: string | null;
   view: PanelView;
@@ -25,17 +27,20 @@ export const MAX_COMPARED_RUNS = 12;
 const SEPARATOR = '|';
 
 export const parseCompareState = (params: URLSearchParams): CompareState => {
-  const runs = params
-    .getAll('run')
-    .map((value) => {
-      const at = value.lastIndexOf(SEPARATOR);
-      const url = (at >= 0 ? value.slice(0, at) : value).trim();
-      return { url, label: (at >= 0 ? value.slice(at + 1) : '').trim() };
-    })
-    .filter((run) => run.url);
+  const readRuns = (key: string) =>
+    params
+      .getAll(key)
+      .map((value) => {
+        const at = value.lastIndexOf(SEPARATOR);
+        const url = (at >= 0 ? value.slice(0, at) : value).trim();
+        return { url, label: (at >= 0 ? value.slice(at + 1) : '').trim() };
+      })
+      .filter((run) => run.url);
   const view = params.get('view');
   return {
-    runs,
+    runs: readRuns('run'),
+    ...(params.has('selected') ? { selected: readRuns('selected') } : {}),
+    ...(params.has('filter') ? { filter: params.get('filter') ?? '' } : {}),
     set: params.get('set'),
     plot: params.get('plot'),
     view: view === 'ref' || view === 'diff' ? view : 'test',
@@ -47,14 +52,18 @@ export const compareSearch = (state: CompareState): string => {
   for (const run of state.runs) {
     params.append('run', `${run.url}${SEPARATOR}${run.label.replaceAll(SEPARATOR, ' ')}`);
   }
+  for (const run of state.selected ?? []) {
+    params.append('selected', `${run.url}${SEPARATOR}${run.label.replaceAll(SEPARATOR, ' ')}`);
+  }
+  if (state.filter !== undefined) params.set('filter', state.filter);
   if (state.set) params.set('set', state.set);
   if (state.plot) params.set('plot', state.plot);
   if (state.view !== 'test') params.set('view', state.view);
   return params.toString();
 };
 
-export const comparePath = (runs: CompareRun[]): string =>
-  `${COMPARE_PATH}?${compareSearch({ runs, set: null, plot: null, view: 'test' })}`;
+export const comparePath = (runs: CompareRun[], selected?: CompareRun[]): string =>
+  `${COMPARE_PATH}?${compareSearch({ runs, selected, set: null, plot: null, view: 'test' })}`;
 
 /**
  * A run label as people see it. A leading ``!`` marks an MPAS case-name
@@ -117,6 +126,16 @@ export interface BasketEntry {
 export interface SelectedRun extends CompareRun {
   entry?: BasketEntry;
 }
+
+/** Scope setup selections; the viewer still verifies actual plot compatibility. */
+export const selectedRunGroup = (run: SelectedRun): string => {
+  if (run.entry) return groupKey(run.entry);
+  if (/\/(mpas_analysis|yrs\d+-\d+|html)\//.test(`${run.url}/`)) return 'mpas_analysis';
+  if (run.url.includes('model_vs_model')) return 'e3sm_diags:model_vs_model';
+  if (run.url.includes('model_vs_obs')) return 'e3sm_diags:model_vs_obs';
+
+  return 'manual';
+};
 
 /** Restore one staged kind automatically, without merging unrelated comparisons. */
 export const syncSelectedRuns = (

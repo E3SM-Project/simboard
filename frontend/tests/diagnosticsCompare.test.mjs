@@ -14,6 +14,7 @@ import {
   parseCompareState,
   runPeriod,
   reconcileBasket,
+  selectedRunGroup,
   syncSelectedRuns,
   toEntry,
 } from '../src/features/diagnostics/compareState.ts';
@@ -65,6 +66,27 @@ test('defaults are left out of the URL and restored when read', () => {
   assert.equal(path, `/diagnostics/compare?run=${encodeURIComponent(`${VIEWER}|`)}`);
   const state = parseCompareState(new URLSearchParams('run=x&view=bogus'));
   assert.deepEqual(state, { runs: [{ url: 'x', label: '' }], set: null, plot: null, view: 'test' });
+});
+
+test('shared URLs retain all selections while active runs and variable filter change', () => {
+  const selected = [
+    { url: VIEWER, label: 'Observations' },
+    { url: `${LCRC}/case/mpas_analysis/ts_1-10/`, label: '!MPAS case' },
+  ];
+  const state = {
+    runs: [selected[1]],
+    selected,
+    set: 'ocean',
+    plot: 'temperature/DJF',
+    view: 'diff',
+    filter: '',
+  };
+  assert.deepEqual(parseCompareState(new URLSearchParams(compareSearch(state))), state);
+  assert.deepEqual(
+    parseCompareState(new URLSearchParams(comparePath([selected[0]], selected).split('?')[1]))
+      .selected,
+    selected,
+  );
 });
 
 test('labels preserve supplied text and shorten only the unlabeled UI fallback', () => {
@@ -241,7 +263,7 @@ test('tool filters keep unique supported runs under periods and order kinds with
     tsEndYear: null,
   };
   const sources = [{ runs: [mpas, model, timeSeries, obs, unknown] }, { runs: [mpas, obs] }];
-  const original = structuredClone(sources);
+  const original = globalThis.structuredClone(sources);
   assert.deepEqual(periodGroups(sources), [
     ['0001–0100', [timeSeries]],
     ['0051–0100', [obs, model, mpas]],
@@ -289,6 +311,19 @@ test('runs group by tool and kind; MPAS runs are one group', () => {
   assert.notEqual(groupKey(obs), groupKey(mvm));
   assert.equal(groupKey(mpas), 'mpas_analysis');
   assert.equal(entryLabel(obs), 'v3.LR.historical 1985-2014');
+});
+
+test('manual selections use their own category, not the active category', () => {
+  assert.equal(selectedRunGroup({ url: VIEWER, label: '' }), 'e3sm_diags:model_vs_obs');
+  assert.equal(
+    selectedRunGroup({ url: VIEWER.replace('model_vs_obs', 'model_vs_model'), label: '' }),
+    'e3sm_diags:model_vs_model',
+  );
+  assert.equal(
+    selectedRunGroup({ url: `${LCRC}/case/mpas_analysis/ts_1-10/`, label: '' }),
+    'mpas_analysis',
+  );
+  assert.equal(selectedRunGroup({ url: `${LCRC}/unknown/viewer/`, label: '' }), 'manual');
 });
 
 test('resource matching respects origin, path boundaries, and common parent sections', () => {

@@ -1,13 +1,14 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Copy, ExternalLink, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -28,12 +29,14 @@ import {
   compareSearch,
   type CompareState,
   displayLabel,
+  entryLabel,
   groupKey,
   imageUrl,
   MAX_COMPARED_RUNS,
   parseCompareState,
 } from '@/features/diagnostics/compareState';
 import { useComparisonBasket } from '@/features/diagnostics/comparisonBasket';
+import { comparisonGroupId, loadComparisonGroups } from '@/features/diagnostics/comparisonGroups';
 import { CaseBacklink } from '@/features/diagnostics/components/CaseBacklink';
 import { RunEditor } from '@/features/diagnostics/components/RunEditor';
 import type {
@@ -74,22 +77,49 @@ export const ComparePage = () => {
   const [params, setParams] = useSearchParams();
   const state = useMemo(() => parseCompareState(params), [params]);
   const { toast } = useToast();
-  const [filter, setFilter] = useState(() => readWorkspace().filter);
+  const client = useQueryClient();
+  const filter = state.filter ?? readWorkspace().filter;
   const [editing, setEditing] = useState(false);
   const navigate = useNavigate();
   const basket = useComparisonBasket();
-  const { entries: basketEntries, applyComparison } = basket;
+  const { applyComparison } = basket;
   const activatedRuns = useRef('');
   const selectedRuns = useMemo(
     () =>
-      state.runs.map((run) => ({
+      (state.selected ?? state.runs).map((run) => ({
         ...run,
         entry:
           basket.entries.find((entry) => entry.url === run.url) ??
           readWorkspace().runs.find((item) => item.url === run.url)?.entry,
       })),
-    [state.runs, basket.entries],
+    [state.selected, state.runs, basket.entries],
   );
+  const activeRuns = state.runs.map((run) => ({
+    ...run,
+    entry: selectedRuns.find((item) => item.url === run.url)?.entry,
+  }));
+  const groupQuery = useQuery({
+    queryKey: ['diagnostics', 'comparison-groups', state.selected ?? state.runs],
+    queryFn: () => loadComparisonGroups(client, state.selected ?? state.runs),
+    enabled: selectedRuns.length > 1,
+    staleTime: 10 * 60_000,
+    retry: false,
+  });
+  const comparisonGroups = useMemo(() => groupQuery.data ?? [], [groupQuery.data]);
+  const comparisonId = comparisonGroupId(state.runs);
+
+  useEffect(() => {
+    if (
+      state.selected ||
+      comparisonGroups.length < 2 ||
+      comparisonGroups.some((group) => !group.plots.size)
+    )
+      return;
+    const first = comparisonGroups[0];
+    setParams(compareSearch({ ...state, runs: first.runs, selected: state.runs }), {
+      replace: true,
+    });
+  }, [comparisonGroups, state, setParams]);
 
   useEffect(() => saveWorkspace({ filter }), [filter]);
 
@@ -100,29 +130,49 @@ export const ComparePage = () => {
     }
     // An explicit URL owns this comparison; never import other local runs into it.
     saveWorkspace({ runs: selectedRuns });
-    const signature = JSON.stringify(state.runs);
+    const signature = JSON.stringify(state.selected ?? state.runs);
     if (activatedRuns.current === signature) return;
     activatedRuns.current = signature;
     const entries = selectedRuns.flatMap((run) => (run.entry ? [run.entry] : []));
     const kinds = new Set(entries.map(groupKey));
-    applyComparison(
-      basketEntries.filter((entry) => kinds.has(groupKey(entry))).map((entry) => entry.url),
-      state.runs.map((run) => run.url),
+    const applied = applyComparison(
+      basket.entries.filter((entry) => kinds.has(groupKey(entry))).map((entry) => entry.url),
+      selectedRuns.map((run) => run.url),
       entries,
     );
-  }, [state.runs, selectedRuns, basketEntries, applyComparison]);
+    if (!applied)
+      toast({
+        title: 'Could not sync selected runs to the comparison tray',
+        variant: 'destructive',
+      });
+  }, [state.runs, state.selected, selectedRuns, basket.entries, applyComparison, toast]);
 
-  const applyRuns = (runs: CompareRun[], additions: BasketEntry[]) => {
+  const applyRuns = (runs: CompareRun[], additions: BasketEntry[], selections?: CompareRun[]) => {
     if (
       !basket.applyComparison(
         state.runs.map((run) => run.url),
-        runs.map((run) => run.url),
+        (state.runs.length ? runs : (selections ?? runs)).map((run) => run.url),
         additions,
       )
     )
       return 'The comparison tray is full for this diagnostic kind. Remove staged runs or choose fewer runs.';
     setEditing(false);
-    navigate(`${COMPARE_PATH}?${compareSearch({ ...state, runs })}`);
+    const selected = state.runs.length
+      ? [
+          ...selectedRuns.filter(
+            (run) =>
+              !state.runs.some((active) => active.url === run.url && active.label === run.label),
+          ),
+          ...runs,
+        ]
+      : (selections ?? runs);
+    if (!state.runs.length) {
+      for (const entry of basket.entries) {
+        if (!selected.some((run) => run.url === entry.url))
+          selected.push({ url: entry.url, label: entryLabel(entry) });
+      }
+    }
+    navigate(`${COMPARE_PATH}?${compareSearch({ ...state, runs, selected })}`);
   };
 
   const query = useQuery({
@@ -130,7 +180,6 @@ export const ComparePage = () => {
     queryFn: () => compareRuns(state.runs, state.set),
     enabled: state.runs.length > 0 && state.runs.length <= MAX_COMPARED_RUNS,
     staleTime: 10 * 60_000,
-    placeholderData: keepPreviousData,
   });
 
   const update = useCallback(
@@ -225,11 +274,21 @@ export const ComparePage = () => {
 
   return (
     <Shell>
+      <Link
+        to="/diagnostics"
+        className="inline-flex items-center gap-1 rounded text-sm text-slate-600 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+        Back to Diagnostics
+      </Link>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-semibold text-slate-950">Compare diagnostics</h1>
+          <p className="mt-1 text-xs text-slate-500" aria-live="polite">
+            {state.runs.length} active runs · {selectedRuns.length} selected runs
+          </p>
           <div className="mt-1 flex flex-wrap gap-1.5">
-            {selectedRuns.map((run) => (
+            {activeRuns.map((run) => (
               <Badge
                 key={`${run.url}|${run.label}`}
                 variant="secondary"
@@ -251,11 +310,14 @@ export const ComparePage = () => {
             </DialogTrigger>
             <DialogContent
               overlayClassName="motion-reduce:animate-none"
-              className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-6xl overflow-y-auto motion-reduce:animate-none"
-              aria-describedby={undefined}
+              className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto motion-reduce:animate-none"
             >
               <DialogHeader>
                 <DialogTitle>Edit diagnostic runs</DialogTitle>
+                <DialogDescription>
+                  Changes affect only active runs after Apply changes. Other selected runs stay in
+                  Diagnostics.
+                </DialogDescription>
               </DialogHeader>
               <RunEditor
                 initialRuns={state.runs}
@@ -271,6 +333,70 @@ export const ComparePage = () => {
           </Button>
         </div>
       </header>
+      {comparisonGroups.length > 1 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span id="comparison-group-label" className="text-sm font-medium">
+            Comparison Group
+          </span>
+          <Select
+            value={comparisonGroups.some((group) => group.id === comparisonId) ? comparisonId : ''}
+            onValueChange={(id) => {
+              const group = comparisonGroups.find((item) => item.id === id);
+              if (group) {
+                const detail =
+                  group.details.find((item) => item.name === state.set) ?? group.details[0];
+                const variables =
+                  detail?.groups
+                    .map((variable) => ({
+                      ...variable,
+                      plots: variable.plots.filter((plot) =>
+                        group.plots.has(JSON.stringify([detail.name, plot.key])),
+                      ),
+                    }))
+                    .filter((variable) => variable.plots.length) ?? [];
+                const variable =
+                  variables.find(
+                    (item) => item.id === activeGroup?.id || item.title === activeGroup?.title,
+                  ) ?? variables[0];
+                setParams(
+                  compareSearch({
+                    ...state,
+                    runs: group.runs,
+                    selected: state.selected ?? state.runs,
+                    set: detail?.name ?? state.set,
+                    plot: variable
+                      ? pickPlot(variable, activePlot?.season, activePlot?.region).key
+                      : state.plot,
+                  }),
+                );
+              }
+            }}
+          >
+            <SelectTrigger aria-labelledby="comparison-group-label" className="w-full sm:w-96">
+              <SelectValue placeholder="Current comparison" />
+            </SelectTrigger>
+            <SelectContent>
+              {comparisonGroups.map((group, index) => (
+                <SelectItem key={group.id} value={group.id}>
+                  {group.title}
+                  {comparisonGroups.filter((item) => item.title === group.title).length > 1
+                    ? ` · Group ${index + 1}`
+                    : ''}{' '}
+                  ({group.runs.length} runs){!group.plots.size ? ' · No plots' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+      {groupQuery.isError ? (
+        <p role="status" className="text-sm text-amber-800">
+          Could not check comparison groups. Your active comparison is unchanged.{' '}
+          <Button variant="outline" size="sm" onClick={() => void groupQuery.refetch()}>
+            Retry groups
+          </Button>
+        </p>
+      ) : null}
 
       {state.runs.length > MAX_COMPARED_RUNS ? (
         <Notice>
@@ -312,7 +438,8 @@ export const ComparePage = () => {
           {data.sets.length === 0 ? (
             <p className="text-sm text-slate-500">
               These runs have no plots in common. Compare runs of the same kind, for example
-              model-vs-observations runs with each other. Use Edit runs to change your selection.
+              model-vs-observations runs with each other. Switch Comparison Group, edit active runs,
+              or use Back to Diagnostics to add runs.
             </p>
           ) : (
             <>
@@ -343,7 +470,7 @@ export const ComparePage = () => {
                     />
                     <Input
                       value={filter}
-                      onChange={(event) => setFilter(event.target.value)}
+                      onChange={(event) => update({ filter: event.target.value })}
                       placeholder="Filter variables"
                       aria-label="Filter variables"
                       className="pl-8"
