@@ -100,7 +100,12 @@ export const ComparisonBar = () => {
         setRetryable(failure.retryable);
         return;
       }
-      navigate(comparePath(runs));
+      navigate(
+        comparePath(
+          runs,
+          entries.map((entry) => ({ url: entry.url, label: entryLabel(entry) })),
+        ),
+      );
     } catch {
       if (mounted.current && currentSignature.current === startedSignature) {
         setProblem('Could not check run compatibility. Check your connection and try again.');

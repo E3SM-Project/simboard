@@ -37,6 +37,7 @@ style.textContent =
 document.head.append(style);
 let latest = '';
 let compares = 0;
+let validations = 0;
 let comparisonDelay = 0;
 let comparisonFailures = 0;
 const discoveryLogs: unknown[][] = [];
@@ -275,6 +276,9 @@ api.defaults.adapter = async (config) => {
   } else if (endpoint === '/diagnostics/compare') {
     compares++;
     const body = JSON.parse(config.data);
+    if (body.runs.length > 1) validations++;
+    const family = body.runs[0]?.url.includes('/group-ocean') ? 'ocean' : 'atmosphere';
+    const grouped = body.runs.every((item: { url: string }) => item.url.includes('/group-'));
     if (comparisonDelay) await new Promise((resolve) => setTimeout(resolve, comparisonDelay));
     if (comparisonFailures > 0) {
       comparisonFailures--;
@@ -284,7 +288,11 @@ api.defaults.adapter = async (config) => {
     const incompatible = body.runs.some((item: { url: string }) =>
       item.url.includes('/incompatible/'),
     );
-    const sets = ['lat_lon', 'polar'].map((name) => ({
+    const sets = (
+      body.runs.some((item: { url: string }) => item.url.includes('/group-missing'))
+        ? ['lat_lon']
+        : ['lat_lon', 'polar']
+    ).map((name) => ({
       name,
       title: name === 'lat_lon' ? 'Latitude / longitude' : 'Polar',
       plotCount: 1,
@@ -316,7 +324,9 @@ api.defaults.adapter = async (config) => {
           title: variable === 'temperature' ? 'Temperature' : 'Precipitation',
           reference: 'Observations',
           plots: ['ANN', 'DJF'].map((season) => ({
-            key: `${variable}/${season}`,
+            key: grouped
+              ? `${body.set === 'polar' ? family : body.runs[0].url}/${variable}/${season}`
+              : `${variable}/${season}`,
             season,
             region: 'global',
             singlePanel: !composite,
@@ -652,6 +662,7 @@ async function testWorkspace() {
   const shared = latest;
   localStorage.clear();
   render(shared);
+  await new Promise((resolve) => setTimeout(resolve, 50));
   await waitFor(() => document.querySelectorAll('figure').length === 1, 'reload without basket');
   check(latest.includes(encodeURIComponent(url('beta'))), 'Full underlying run URL retained');
   localStorage.clear();
@@ -868,8 +879,16 @@ async function testAnalysisFilters() {
     'select beta climatology',
   );
   await waitFor(
-    () => document.body.textContent?.includes('Selected runs (2/'),
+    () => JSON.parse(localStorage.getItem('simboard.diagnostics-workspace')!).runs.length === 2,
     'mixed selections retained',
+  );
+  check(
+    document.body.textContent?.includes('Run added to E3SM Diags'),
+    'Other-category addition names its group',
+  );
+  check(
+    !document.querySelector('[aria-label="Selected runs"]')?.textContent?.includes('case.beta'),
+    'Other category stays hidden in selections',
   );
   check(
     analysisTab('Time Series')?.disabled &&
@@ -895,7 +914,7 @@ async function testAnalysisFilters() {
   );
   check(analysisTab('Time Series')?.disabled, 'Fallback disables unavailable analysis');
   check(
-    document.body.textContent?.includes('Selected runs (2/'),
+    document.body.textContent?.includes('Selected runs (1/'),
     'Automatic fallback never removes selections',
   );
   click(button('case.metadata · 4 runs'), 'return to combined run');
@@ -915,11 +934,15 @@ async function testAnalysisFilters() {
   );
   click(button('Compare'), 'compare whole runs after filtering');
   await waitFor(
-    () => document.querySelectorAll('figure').length === 2,
+    () => document.querySelectorAll('figure').length === 1,
     'one comparison panel per selected run',
   );
   const sharedRuns = parseCompareState(new URLSearchParams(latest.split('?')[1])).runs;
-  check(sharedRuns.length === 2, 'No analysis-specific URL duplication');
+  check(sharedRuns.length === 1, 'Default comparison uses current category only');
+  check(
+    parseCompareState(new URLSearchParams(latest.split('?')[1])).selected?.length === 2,
+    'Other categories remain selected in shared URL',
+  );
   check(
     sharedRuns[0].url === `${base}/metadata/mpas_analysis/ts_0001-0500_climo_0001-0050/`,
     'Full MPAS run URL unchanged',
@@ -1743,7 +1766,7 @@ async function testCompatibilityValidation() {
   render('/diagnostics');
   await waitFor(() => button('case.alpha · 2 runs'), 'compatibility setup');
   check(button('Compare')?.disabled, 'Compare disabled without a run');
-  const before = compares;
+  const before = validations;
   click(
     document.querySelector<HTMLButtonElement>(
       '#available-case-diagnostics button[aria-label^="Add E3SM"]',
@@ -1772,7 +1795,7 @@ async function testCompatibilityValidation() {
     () => document.body.textContent?.includes('Selected runs (2/'),
     'two supported selections',
   );
-  check(compares === before, 'Selection does not validate compatibility');
+  check(validations === before, 'Selection does not validate compatibility');
   comparisonDelay = 100;
   const compare = button('Compare')!;
   click(compare, 'validate on Compare');
@@ -1794,7 +1817,10 @@ async function testCompatibilityValidation() {
     'Compatible runs navigate to viewer',
   );
   await new Promise((resolve) => setTimeout(resolve, 20));
-  check(compares === before + 1, 'Duplicate clicks and viewer reuse do not duplicate validation');
+  check(
+    validations === before + 1,
+    'Duplicate clicks and viewer reuse do not duplicate validation',
+  );
   comparisonDelay = 0;
 
   localStorage.clear();
@@ -1920,7 +1946,7 @@ async function testTrayCompatibility() {
     () => button('Compare') && document.querySelector('h1')?.textContent === 'Case alpha',
     'tray compatible setup',
   );
-  const before = compares;
+  const before = validations;
   comparisonDelay = 100;
   const compareButton = button('Compare')!;
   click(compareButton, 'tray compatibility check');
@@ -1934,7 +1960,10 @@ async function testTrayCompatibility() {
     () => document.querySelectorAll('figure').length === 2,
     'Tray opens every selected compatible run',
   );
-  check(compares === before + 1, 'Tray duplicate clicks and viewer reuse make one request');
+  check(
+    validations === before + 1,
+    'Tray duplicate clicks and viewer reuse make one validation request',
+  );
   comparisonDelay = 0;
 
   stage(['tray-one', 'unreadable']);
@@ -2086,12 +2115,12 @@ async function testExampleRetryAndGroupSwitch() {
     'new staged group selected',
   );
   check(
-    document.querySelector(`[aria-label="Selected runs"] a[href="${url('manual-group-switch')}"]`),
-    'Group switch retains manually added URL',
+    !document.querySelector(`[aria-label="Selected runs"] a[href="${url('manual-group-switch')}"]`),
+    'Group switch hides other-category manual URL',
   );
   check(
-    document.body.textContent?.includes('Selected runs (2/'),
-    'Group switch retains manual and new indexed run',
+    document.body.textContent?.includes('Selected runs (1/'),
+    'Group switch shows only current-category selections',
   );
   check(
     !document.querySelector('[role="alert"]') && !button('Retry comparison'),
@@ -2294,6 +2323,172 @@ async function testDenseBrowser() {
   click(button('Cancel'), 'close large editor');
 }
 
+async function testComparisonGroups() {
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  localStorage.setItem(
+    'simboard.diagnostics-workspace',
+    JSON.stringify({
+      search: 'analysis',
+      caseId: 'metadata',
+      analysis: 'climatology',
+      tool: 'e3sm_diags',
+    }),
+  );
+  const selected = [
+    { url: url('group-atmosphere-one'), label: 'Atmosphere one' },
+    { url: url('group-atmosphere-two'), label: 'Atmosphere two' },
+    { url: url('group-ocean-one'), label: 'Ocean one' },
+  ];
+  render(
+    `/diagnostics/compare?${compareSearch({
+      runs: selected.slice(0, 2),
+      selected,
+      set: 'polar',
+      plot: 'atmosphere/temperature/DJF',
+      view: 'diff',
+      filter: 'Temperature',
+    })}`,
+  );
+  await waitFor(
+    () => document.querySelector('[aria-labelledby="comparison-group-label"]'),
+    'actual plot groups',
+  );
+  check(
+    document.body.textContent?.includes('2 active runs · 3 selected runs'),
+    'Active and selected counts differ',
+  );
+  const chooseGroup = async (text: string) => {
+    const trigger = document.querySelector<HTMLElement>(
+      '[aria-labelledby="comparison-group-label"]',
+    )!;
+    trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await waitFor(() => document.querySelector('[role="option"]'), 'group options');
+    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((item) =>
+      item.textContent?.includes(text),
+    )!;
+    option.focus();
+    option.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  };
+  await chooseGroup('(1 runs)');
+  await waitFor(
+    () => document.querySelector('figure')?.textContent?.includes('Ocean one'),
+    'ocean plots',
+  );
+  let state = parseCompareState(new URLSearchParams(latest.split('?')[1]));
+  check(state.selected?.length === 3 && state.runs.length === 1, 'Switch preserves selected URLs');
+  check(
+    state.set === 'polar' && state.view === 'diff' && state.filter === 'Temperature',
+    'Switch preserves unrelated viewer settings',
+  );
+  const shared = latest;
+  localStorage.clear();
+  render(shared);
+  await waitFor(
+    () => document.querySelector('figure')?.textContent?.includes('Ocean one'),
+    'direct shared group restored',
+  );
+  await waitFor(
+    () => document.querySelector('[aria-labelledby="comparison-group-label"]'),
+    'shared selections restore selector',
+  );
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  click(button('Edit runs'), 'compact group editor');
+  await waitFor(() => document.querySelector('[role="dialog"]'), 'compact editor open');
+  check(
+    !document.querySelector('[role="dialog"] [aria-label="Browse cases"]'),
+    'Editor omits case browser',
+  );
+  check(!document.querySelector('[role="dialog"] [role="tablist"]'), 'Editor omits setup tabs');
+  click(button('Cancel'), 'cancel compact editor');
+  await waitFor(() => !document.querySelector('[role="dialog"]'), 'compact editor closed');
+  check(latest === shared, 'Cancel preserves shared group URL');
+  await chooseGroup('(2 runs)');
+  await waitFor(
+    () => document.querySelectorAll('figure').length === 2,
+    'shared nondefault category groups',
+  );
+  state = parseCompareState(new URLSearchParams(latest.split('?')[1]));
+  check(state.runs.length === 2, 'Runs sharing only nondefault category remain together');
+  check(state.plot === 'atmosphere/temperature/DJF', 'Group switch keeps variable and season');
+  click(button('Edit runs'), 'edit active group with inactive selections');
+  await waitFor(() => document.querySelector('[role="dialog"]'), 'active group editor');
+  click(document.querySelector('[role="dialog"] details summary'), 'edit active label');
+  input(
+    document.querySelector<HTMLInputElement>('input[aria-label="Run 1 label"]')!,
+    'Renamed atmosphere',
+  );
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  click(button('Apply changes'), 'apply active group label');
+  await waitFor(() => !document.querySelector('[role="dialog"]'), 'active group label applied');
+  state = parseCompareState(new URLSearchParams(latest.split('?')[1]));
+  check(
+    state.selected?.length === 3 && state.selected.some((item) => item.label === 'Ocean one'),
+    'Apply retains inactive group',
+  );
+  check(state.runs[0].label === 'Renamed atmosphere', 'Apply updates active label');
+  click(link('Back to Diagnostics'), 'return from direct share');
+  await waitFor(
+    () => selectedSummary()?.textContent?.includes('Selected runs (3/'),
+    'shared selections return to setup',
+  );
+  check(latest === '/diagnostics', 'Back targets setup, not browser history');
+  check(
+    JSON.parse(localStorage.getItem('simboard.diagnostics-workspace')!).runs.length === 3,
+    'Setup keeps all shared selections',
+  );
+  input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'analysis');
+  await waitFor(() => button('case.metadata · 4 runs'), 'setup search for return-state test');
+  click(button('case.metadata · 4 runs'), 'set active setup case');
+  click(toolButton('E3SM Diags'), 'set setup tool filter');
+  click(analysisTab('Climatology'), 'set setup analysis filter');
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  render(shared);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await waitFor(() => link('Back to Diagnostics'), 'viewer before setup-state return');
+  click(link('Back to Diagnostics'), 'restore setup state');
+  await waitFor(() => document.getElementById('diagnostic-case-search'), 'setup state restored');
+  check(
+    (document.getElementById('diagnostic-case-search') as HTMLInputElement).value === 'analysis',
+    'Back preserves search',
+  );
+  await waitFor(
+    () => toolButton('E3SM Diags')?.getAttribute('aria-pressed') === 'true',
+    'Back preserves tool filter',
+  );
+  check(
+    analysisTab('Climatology')?.getAttribute('aria-selected') === 'true',
+    'Back preserves analysis filter',
+  );
+  check(
+    document.querySelector('#available-case-diagnostics')?.getAttribute('aria-label') ===
+      'Diagnostics for case.metadata',
+    'Back preserves active case',
+  );
+  render(
+    `/diagnostics/compare?${compareSearch({ runs: selected, set: 'polar', plot: null, view: 'test' })}`,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await waitFor(
+    () => parseCompareState(new URLSearchParams(latest.split('?')[1])).runs.length === 2,
+    'Mixed URL defaults to first compatible group',
+  );
+  const missing = { url: url('group-missing'), label: 'Missing category' };
+  render(
+    `/diagnostics/compare?${compareSearch({ runs: selected.slice(0, 2), selected: [...selected.slice(0, 2), missing], set: 'polar', plot: null, view: 'test' })}`,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await waitFor(
+    () => document.querySelector('[aria-labelledby="comparison-group-label"]'),
+    'missing-category selector',
+  );
+  await chooseGroup('(1 runs)');
+  await waitFor(
+    () => parseCompareState(new URLSearchParams(latest.split('?')[1])).set === 'lat_lon',
+    'Switch resolves missing category in URL',
+  );
+}
+
 testWorkspace()
   .then(testAnalysisFilters)
   .then(testToolFilters)
@@ -2305,6 +2500,7 @@ testWorkspace()
   .then(testExampleRetryAndGroupSwitch)
   .then(testSelectionScrollStability)
   .then(testDenseBrowser)
+  .then(testComparisonGroups)
   .then(() => {
     const output = document.createElement('output');
     output.id = 'test-result';
