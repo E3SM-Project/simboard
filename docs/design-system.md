@@ -13,18 +13,18 @@ SimBoard UI conventions for the React, Tailwind CSS, and shadcn/ui frontend. Sou
 
 Tokens are defined in `frontend/src/index.css` (CSS variables), mapped to utilities in `frontend/tailwind.config.js`, and configured for shadcn in `frontend/components.json`. SimBoard has a light theme only; do not add `dark:` variants.
 
-- **Color:** Use semantic utilities (`text-foreground`, `text-muted-foreground`, `bg-background`, `bg-muted`, `border-border`) for neutral UI. State colors are Tailwind tints: `red` for errors, `amber` for warnings, `sky` or `blue` for info. Use `ExecutionStatusBadge` (`components/shared/`) for execution status. Text links use `text-blue-600 hover:underline`.
+- **Color:** Use semantic utilities (`text-foreground`, `text-muted-foreground`, `bg-background`, `bg-muted`, `border-border`) for neutral UI. State colors are Tailwind tints, not tokens: `green` for success, `red` for errors, `amber` for warnings and in-progress states, `sky` or `blue` for info. Use `ExecutionStatusBadge` (`components/shared/`, built on `Badge`) for execution status. Text links use `text-blue-600 hover:underline`.
 - **Typography:** `text-sm` for body and table text; `text-xs text-muted-foreground` for secondary metadata, help text, and counts. Identifiers (execution IDs, hashes, paths) use `font-mono text-xs`. One `h1` per page, then `h2` for sections.
 - **Radius and elevation:** Controls use `rounded-md`; cards and panels use `rounded-xl` or `rounded-2xl`; pills use `rounded-full`. Surfaces use `border` plus at most `shadow-sm`.
 
 ## Components
 
-| Layer      | Location                 | Use                                                                                       |
-| ---------- | ------------------------ | ----------------------------------------------------------------------------------------- |
-| Primitives | `components/ui/`         | shadcn/Radix building blocks. Compose them; do not fork them for one feature.             |
-| Shared     | `components/shared/`     | Cross-feature UI such as `ExecutionStatusBadge` and `MarkdownContent`.                    |
-| Layout     | `components/layout/`     | App shell: `NavBar`, `MobileMenu`.                                                        |
-| Feature    | `features/*/components/` | Feature-specific UI. Promote to `components/shared/` only when a second feature needs it. |
+| Layer      | Location                 | Use                                                                                           |
+| ---------- | ------------------------ | --------------------------------------------------------------------------------------------- |
+| Primitives | `components/ui/`         | shadcn/Radix building blocks. Compose them; do not fork them for one feature.                 |
+| Shared     | `components/shared/`     | Cross-feature UI built from primitives, such as `ExecutionStatusBadge` and `MarkdownContent`. |
+| Layout     | `components/layout/`     | App shell: `NavBar`, `MobileMenu`.                                                            |
+| Feature    | `features/*/components/` | Feature-specific UI. Promote to `components/shared/` only when a second feature needs it.     |
 
 SimBoard-specific primitives:
 

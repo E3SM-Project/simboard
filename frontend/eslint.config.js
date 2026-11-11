@@ -131,6 +131,10 @@ export default [
               allow: ['feature', 'ui', 'shared', 'lib', 'types', 'api'],
             },
             {
+              from: 'shared',
+              allow: ['ui', 'lib', 'types'],
+            },
+            {
               from: 'ui',
               allow: ['lib', 'types'],
             },

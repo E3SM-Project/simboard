@@ -926,3 +926,20 @@ test('run date sorting uses end/start fallback and keeps missing or invalid date
   );
   assert.deepEqual(sortCaseExecutions([], { key: 'run', direction: 'asc' }), []);
 });
+
+test('execution status badge maps statuses to shared tones with a readable fallback', async () => {
+  const { ExecutionStatusBadge } = await server.ssrLoadModule(
+    '/src/components/shared/ExecutionStatusBadge.tsx',
+  );
+  const render = (status) => renderToStaticMarkup(createElement(ExecutionStatusBadge, { status }));
+
+  const running = render('RUNNING');
+  assert.match(running, /^<div class="[^"]*bg-amber-50[^"]*"/);
+  assert.match(running, /aria-hidden="true"/);
+  assert.match(running, />Running<\/div>$/);
+
+  const fallback = render('archived');
+  assert.match(fallback, /bg-muted text-muted-foreground/);
+  assert.match(fallback, />Archived<\/div>$/);
+  assert.doesNotMatch(fallback, /<svg/);
+});
