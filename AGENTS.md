@@ -138,6 +138,7 @@ docker compose -f docker-compose.local.yml up --build
 | Developer onboarding | `docs/developer/index.md` |
 | Backend details | `backend/README.md` |
 | Frontend architecture | `frontend/README.md` |
+| Frontend design system | `docs/design-system.md` |
 | CI/CD & deployment | `docs/cicd/DEPLOYMENT.md` |
 | Python tooling config | `backend/pyproject.toml` |
 | Pre-commit hooks | `.pre-commit-config.yaml` |
