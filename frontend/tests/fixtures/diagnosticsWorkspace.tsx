@@ -1422,6 +1422,7 @@ async function testViewer() {
     document.querySelector('[aria-labelledby="plot-set-label"]')?.textContent === 'Polar',
     'Category restored from URL',
   );
+  check(document.getElementById('plot-set-label')?.textContent === 'Plot set', 'Plot set label');
   click(button('Copy link'), 'copy comparison link');
   await waitFor(() => copiedLink === window.location.href, 'copy uses full address');
   const original = latest;
@@ -1501,6 +1502,10 @@ async function testViewer() {
   variableButton.focus();
   variableButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
   await waitFor(() => latest.includes('precipitation'), 'variable keyboard stepping');
+  check(
+    document.querySelector('aside')?.textContent?.includes('j/k or ↑/↓ to change variable'),
+    'Variable shortcuts have a visible hint',
+  );
   const restored = latest;
   localStorage.setItem(
     'simboard.diagnostics-comparison',
@@ -2444,8 +2449,12 @@ async function testComparisonGroups() {
     'actual plot groups',
   );
   check(
-    document.body.textContent?.includes('2 active runs · 3 selected runs'),
-    'Active and selected counts differ',
+    document.body.textContent?.includes('2 compared · 3 selected'),
+    'Compared and selected counts differ',
+  );
+  check(
+    document.querySelector('[aria-label="About comparison group"]'),
+    'Comparison group is explained',
   );
   const chooseGroup = async (text: string) => {
     const trigger = document.querySelector<HTMLElement>(

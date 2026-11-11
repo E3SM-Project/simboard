@@ -76,7 +76,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
     if (!basket.add(toEntry(run, caseId, caseName, location.pathname))) {
       toast({
         title: `Compare up to ${MAX_RUNS_PER_GROUP} runs of one kind at a time`,
-        description: 'Remove one from the comparison tray first.',
+        description: 'Remove a run from your selection first.',
         variant: 'destructive',
       });
     }

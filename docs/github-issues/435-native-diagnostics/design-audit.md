@@ -52,6 +52,6 @@ New patterns the design system does not cover. Each decision lists the docs and 
     | Grouping by diagnostic kind   | Comparison Group      | **Comparison group**, with an `Info` tooltip on why groups cannot mix |
     | Plot set picker               | Diagnostic category   | **Plot set** (matches e3sm_diags "set" and the API's `sets`)          |
 
-  - [ ] Apply the terms in `ComparePage.tsx`, `RunEditor.tsx`, `ComparisonBar.tsx`, `DiagnosticsRunsCard.tsx`, and their tests.
-  - [ ] Show a hint under the variable list ("`j`/`k` or ↑/↓ to change variable", `text-xs text-muted-foreground`, keys in `<kbd>`) and set `aria-keyshortcuts` on the list.
+  - [x] Apply the terms in `ComparePage.tsx`, `RunEditor.tsx`, `DiagnosticsRunsCard.tsx`, and their tests. `ComparisonBar.tsx` already used them.
+  - [x] Show a hint under the variable list ("`j`/`k` or ↑/↓ to change variable", `text-xs text-muted-foreground`, keys in `<kbd>`). No `aria-keyshortcuts`: the listener is on `window`, not the list, and the visible hint is announced.
   - [x] Add to `docs/design-system.md`: every keyboard shortcut has a visible hint and is ignored while focus is in an input or overlay. The guard at `ComparePage.tsx:235-244` already does the latter.

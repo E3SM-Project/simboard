@@ -203,7 +203,7 @@ export const RunEditor = ({
       const title =
         RUN_GROUPS.find((group) => group.key === selectedRunGroup(run))?.title ??
         'another comparison group';
-      setSelectionNotice(`Run added to ${title}. Switch Comparison group to review it.`);
+      setSelectionNotice(`Run added to ${title}. Switch comparison group to review it.`);
     }
     setManual({ url: '', label: '' });
   };
@@ -338,7 +338,7 @@ export const RunEditor = ({
       <fieldset disabled={checking} className="min-w-0 space-y-3">
         {onCancel ? (
           <p className="text-sm text-muted-foreground">
-            Edit active runs here. Use Back to Diagnostics to browse cases and add runs.
+            Edit compared runs here. Use Back to Diagnostics to browse cases and add runs.
           </p>
         ) : (
           browser
@@ -367,7 +367,7 @@ export const RunEditor = ({
               }}
             >
               <SelectTrigger aria-label="Comparison group" className="h-8 w-full text-xs sm:w-72">
-                <SelectValue placeholder="Staged diagnostic group" />
+                <SelectValue placeholder="Comparison group" />
               </SelectTrigger>
               <SelectContent>
                 {trayGroups.map((key) => (

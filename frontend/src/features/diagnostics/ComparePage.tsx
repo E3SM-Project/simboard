@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Copy, ExternalLink, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, ExternalLink, Info, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { compareRuns } from '@/features/diagnostics/api';
 import {
   type BasketEntry,
@@ -56,6 +57,8 @@ import { cn } from '@/lib/utils';
 
 /** Dashed block for empty and no-match states. */
 const EMPTY_STATE = 'rounded-xl border border-dashed p-6 text-sm text-muted-foreground';
+/** Keyboard key in a shortcut hint. */
+const KBD = 'rounded border bg-muted-subtle px-1 font-mono text-[0.6875rem] text-foreground';
 
 const PANEL_LABELS: Record<PanelView, string> = {
   test: 'Run',
@@ -148,7 +151,7 @@ export const ComparePage = () => {
     );
     if (!applied)
       toast({
-        title: 'Could not sync selected runs to the comparison tray',
+        title: 'Could not update your selection',
         variant: 'destructive',
       });
   }, [state.runs, state.selected, selectedRuns, basket.entries, applyComparison, toast]);
@@ -161,7 +164,7 @@ export const ComparePage = () => {
         additions,
       )
     )
-      return 'The comparison tray is full for this diagnostic kind. Remove staged runs or choose fewer runs.';
+      return 'Your selection is full for this diagnostic kind. Remove selected runs or choose fewer runs.';
     setEditing(false);
     const selected = state.runs.length
       ? [
@@ -290,7 +293,7 @@ export const ComparePage = () => {
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-semibold tracking-tight">Compare diagnostics</h1>
           <p className="mt-1 text-xs text-muted-foreground" aria-live="polite">
-            {state.runs.length} active runs · {selectedRuns.length} selected runs
+            {state.runs.length} compared · {selectedRuns.length} selected
           </p>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {activeRuns.map((run) => (
@@ -320,8 +323,8 @@ export const ComparePage = () => {
               <DialogHeader>
                 <DialogTitle>Edit diagnostic runs</DialogTitle>
                 <DialogDescription>
-                  Changes affect only active runs after Apply changes. Other selected runs stay in
-                  Diagnostics.
+                  Apply changes updates only compared runs. Other selected runs stay in your
+                  selection.
                 </DialogDescription>
               </DialogHeader>
               <RunEditor
@@ -341,8 +344,27 @@ export const ComparePage = () => {
       {comparisonGroups.length > 1 ? (
         <div className="flex flex-wrap items-center gap-2">
           <span id="comparison-group-label" className="text-sm font-medium">
-            Comparison Group
+            Comparison group
           </span>
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="-ml-1 h-8 w-8 text-muted-foreground"
+                  aria-label="About comparison group"
+                >
+                  <Info className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-64">
+                Selected runs are grouped by the plots they share. Only runs in the same group can
+                be compared side by side.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Select
             value={comparisonGroups.some((group) => group.id === comparisonId) ? comparisonId : ''}
             onValueChange={(id) => {
@@ -396,7 +418,7 @@ export const ComparePage = () => {
       ) : null}
       {groupQuery.isError ? (
         <Alert variant="warning" className="flex flex-wrap items-center gap-2">
-          <p>Could not check comparison groups. Your active comparison is unchanged.</p>
+          <p>Could not check comparison groups. Your current comparison is unchanged.</p>
           <Button variant="outline" size="sm" onClick={() => void groupQuery.refetch()}>
             Retry groups
           </Button>
@@ -443,14 +465,14 @@ export const ComparePage = () => {
           {data.sets.length === 0 ? (
             <p className={EMPTY_STATE}>
               These runs have no plots in common. Compare runs of the same kind, for example
-              model-vs-observations runs with each other. Switch Comparison Group, edit active runs,
-              or use Back to Diagnostics to add runs.
+              model-vs-observations runs with each other. Switch comparison group, edit runs, or use
+              Back to Diagnostics to add runs.
             </p>
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
                 <span id="plot-set-label" className="text-sm font-medium">
-                  Diagnostic category
+                  Plot set
                 </span>
                 <Select value={detail?.name} onValueChange={(set) => update({ set, plot: null })}>
                   <SelectTrigger aria-labelledby="plot-set-label" className="w-full sm:w-80">
@@ -524,6 +546,12 @@ export const ComparePage = () => {
                       </li>
                     ))}
                   </ul>
+                  {visible.length > 1 ? (
+                    <p className="text-xs text-muted-foreground">
+                      <kbd className={KBD}>j</kbd>/<kbd className={KBD}>k</kbd> or{' '}
+                      <kbd className={KBD}>↑</kbd>/<kbd className={KBD}>↓</kbd> to change variable
+                    </p>
+                  ) : null}
                 </aside>
 
                 {detail && activeGroup && activePlot ? (
