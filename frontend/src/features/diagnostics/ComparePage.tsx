@@ -514,21 +514,12 @@ export const ComparePage = () => {
                           className={cn(
                             'w-full rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                             group.id === activeGroup?.id
-                              ? 'bg-primary text-primary-foreground'
+                              ? 'bg-muted text-foreground ring-1 ring-inset ring-border'
                               : 'text-foreground hover:bg-muted',
                           )}
                         >
                           <span className="font-medium">{group.title}</span>{' '}
-                          <span
-                            className={cn(
-                              'text-xs',
-                              group.id === activeGroup?.id
-                                ? 'text-primary-foreground/70'
-                                : 'text-muted-foreground',
-                            )}
-                          >
-                            {group.reference}
-                          </span>
+                          <span className="text-xs text-muted-foreground">{group.reference}</span>
                         </button>
                       </li>
                     ))}
@@ -635,7 +626,7 @@ const Choice = ({ label, options, value, onChange, format = (v) => v }: ChoicePr
     <div
       role="radiogroup"
       aria-label={label}
-      className="inline-flex max-w-full flex-wrap rounded-md border border-border p-0.5"
+      className="inline-flex max-w-full flex-wrap gap-0.5 rounded-lg bg-muted p-1"
       onKeyDown={(event) => {
         const delta = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
         if (!delta && event.key !== 'Home' && event.key !== 'End') return;
@@ -659,10 +650,10 @@ const Choice = ({ label, options, value, onChange, format = (v) => v }: ChoicePr
           tabIndex={option === (value ?? options[0]) ? 0 : -1}
           onClick={() => onChange(option)}
           className={cn(
-            'rounded px-2.5 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            'rounded-md px-2.5 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             option === value
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:bg-muted',
+              ? 'bg-background text-foreground shadow'
+              : 'text-muted-foreground hover:text-foreground',
           )}
         >
           {format(option)}

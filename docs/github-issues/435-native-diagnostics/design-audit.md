@@ -19,7 +19,7 @@ Existing conventions cover these; no UX decision needed.
 - [x] **11. Elevation.** `ComparisonBar.tsx` uses a custom shadow, `backdrop-blur`, and translucent white. Use `border-t bg-card shadow-sm`.
 - [x] **12. Selection limit.** Add stays enabled when a group is full, then shows a destructive toast or inline error. Disable unselected rows at the limit and explain why.
 - [x] **13. Comparison actions.** Compare buttons omit the count, and the tray says "Clear all". Use `Compare (N)` and "Clear selection".
-- [ ] **14. Toggle styles.** Variable list and season/region/panel choices use an inverted dark fill; the tool filter uses a muted track; analysis uses `Tabs`. Pick one style, preferably the muted-track style of the tool filter.
+- [x] **14. Toggle styles.** Variable list and season/region/panel choices use an inverted dark fill; the tool filter uses a muted track; analysis uses `Tabs`. Pick one style, preferably the muted-track style of the tool filter.
 - [ ] **15. Accessibility.** Headings carry `aria-live` (`RunEditor.tsx`); controls have both `aria-label` and `aria-labelledby` (`DiagnosticRunList.tsx`); tray `aria-controls` targets an element absent while collapsed; empty `role="group"` anchor spans; low-contrast search icon in `ComparePage.tsx`.
 - [ ] **16. Hidden selections.** Tool and analysis filters can hide added runs without telling the user.
 
