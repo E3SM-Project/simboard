@@ -161,5 +161,4 @@ These exist in the code but are not conventions. Do not copy them into new work.
 - The Upload page uses native form controls instead of shadcn primitives. Tracked in #452.
 - Page container widths and `h1` sizes vary per page. Tracked in #452.
 - Error, warning, and info notices are written as inline `div`s with repeated classes instead of a shared primitive.
-- Text links mix `text-blue-600` and `text-blue-700`.
 - Some files are unused: `App.css`, `features/compare/ComparePage.css`, `components/examples/`, `components/ui/multi-select.tsx`, and several `features/upload/components/` files.

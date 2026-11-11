@@ -1413,7 +1413,7 @@ export const CaseDetailsPage = ({
                                   <TableCell className="align-top">
                                     <button
                                       type="button"
-                                      className="whitespace-nowrap rounded-sm font-medium text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      className="whitespace-nowrap rounded-sm font-medium text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                       onClick={() => toggleGroupExpansion(group.key, !isOpen)}
                                       aria-expanded={isOpen}
                                       aria-controls={groupPanelId}
