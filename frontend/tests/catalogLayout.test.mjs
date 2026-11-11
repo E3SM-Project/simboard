@@ -720,6 +720,29 @@ test('cases table exposes sort state and labels its filters', async () => {
   }
 });
 
+test('cases table shows the default latest-run sort on a sortable header', async () => {
+  const { CasesPage } = await server.ssrLoadModule('/src/features/catalog/CasesPage.tsx');
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const client = new QueryClient();
+  client.setQueryDefaults(['cases', 'page'], {
+    initialData: { items: [], total: 0, page: 1, pageSize: 25 },
+  });
+
+  try {
+    const html = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(MemoryRouter, { initialEntries: ['/cases'] }, createElement(CasesPage)),
+      ),
+    );
+
+    assert.match(html, /<th[^>]*aria-sort="descending"[^>]*><button[^>]*>Latest completed run<svg/);
+  } finally {
+    client.clear();
+  }
+});
+
 for (const latestExecution of [
   { runEndDate: '2026-09-02T12:00:00Z', runStartDate: '2026-09-01T12:00:00Z' },
   { runEndDate: null, runStartDate: '2026-09-01T12:00:00Z' },

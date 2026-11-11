@@ -678,6 +678,8 @@ export const CasesPage = () => {
       {
         id: 'latestRun',
         header: 'Latest completed run',
+        accessorFn: (caseRecord) => getLatestExecution(caseRecord)?.runEndDate ?? null,
+        sortDescFirst: true,
         cell: ({ row }) => {
           const latestExecution = getLatestExecution(row.original);
           const completedRun = latestExecution
