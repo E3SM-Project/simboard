@@ -11,7 +11,7 @@ SimBoard UI conventions for the React, Tailwind CSS, and shadcn/ui frontend. Sou
 
 ## Tokens
 
-Tokens are defined in `frontend/src/index.css` (CSS variables), mapped to utilities in `frontend/tailwind.config.js`, and configured for shadcn in `frontend/components.json`.
+Tokens are defined in `frontend/src/index.css` (CSS variables), mapped to utilities in `frontend/tailwind.config.js`, and configured for shadcn in `frontend/components.json`. SimBoard has a light theme only; do not add `dark:` variants.
 
 - **Color:** Use semantic utilities (`text-foreground`, `text-muted-foreground`, `bg-background`, `bg-muted`, `border-border`) for neutral UI. State colors are Tailwind tints: `red` for errors, `amber` for warnings, `sky` or `blue` for info. Use `ExecutionStatusBadge` (`components/shared/`) for execution status. Text links use `text-blue-600 hover:underline`.
 - **Typography:** `text-sm` for body and table text; `text-xs text-muted-foreground` for secondary metadata, help text, and counts. Identifiers (execution IDs, hashes, paths) use `font-mono text-xs`. One `h1` per page, then `h2` for sections.
