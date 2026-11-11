@@ -7,7 +7,7 @@ SimBoard UI conventions for the React, Tailwind CSS, and shadcn/ui frontend. Sou
 - **Data first.** Pages exist to find, inspect, and compare simulation metadata. Favor dense, scannable tables and label/value grids over decoration.
 - **Neutral identity.** shadcn `new-york` style on the `neutral` base color. Color signals state (status, errors, warnings, info), not branding.
 - **Progressive disclosure.** Show common controls first; put secondary filters, details, and history behind collapsibles, expandable rows, popovers, and dialogs.
-- **Explicit state.** Every data view handles loading, refreshing, empty, and error states, and keeps previously loaded data visible when a refresh fails.
+- **Explicit, independent state.** Every data view handles loading, refreshing, empty, and error states in its own area, so one slow or failed request never blanks the rest of the page.
 
 ## Tokens
 
@@ -99,10 +99,17 @@ Canonical: execution selection in `features/catalog/CaseDetailsPage.tsx` and `fe
 
 ## UI states
 
+### Loading
+
+- Use a page-level loader only while the page's own record loads (for example, the case on Case details). Otherwise render the page shell (heading, filters, toolbars) immediately.
+- Each table or section with its own API request loads independently and shows its loading state inside its own container.
+- Refetching after a sort, filter, or page change keeps the current rows, headers, and controls visible, with an inline indicator inside the table container. Keep previous query data while the new data loads.
+- Canonical: `features/home/components/ProductionCasesTable.tsx` and the "Refreshing cases" bar in `features/catalog/CasesPage.tsx`.
+
 | State                          | Pattern                                                                                                                |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| Initial load                   | `LoadingState kind="page"` or `kind="section"`.                                                                        |
-| Background refresh             | `LoadingState kind="inline"` above the content, which stays visible.                                                   |
+| Initial load                   | Page record: `LoadingState kind="page"`. Table or section: `LoadingState kind="section"` in its own area.              |
+| Background refresh             | `LoadingState kind="inline"` inside the table or section container; existing content stays visible.                    |
 | Refresh failed, data available | `Alert variant="error"` above the content ("Could not refresh … Showing previously loaded …") with `Retry`.            |
 | Load failed, no data           | `Alert variant="error"` in place of the content with `Retry`.                                                          |
 | No data or no matching results | Table: one full-width empty row. Panel: a dashed-border block with a message and, when filters apply, "Reset filters". |
@@ -126,5 +133,6 @@ These exist in the code but are not conventions. Do not copy them into new work:
 - Native form controls on the Upload page.
 - Inline state-color classes instead of `Alert`.
 - `text-blue-700` on link-styled controls.
+- Whole-page loaders that wait for one section's data: Home (catalog overview), Cases (case list), and Case details (executions). The Case details executions table also lacks an in-table refresh indicator.
 
 The full list, including accessibility gaps and open design decisions, is tracked in [#452](https://github.com/E3SM-Project/simboard/issues/452). Rationale is in the [design review](github-issues/451-design-system/design-review.md).
