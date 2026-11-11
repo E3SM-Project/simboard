@@ -991,3 +991,44 @@ test('cases empty state offers reset only when filters cause it', async () => {
     client.clear();
   }
 });
+
+test('upload form uses labeled primitives and marks required fields', async () => {
+  const { UploadPage } = await server.ssrLoadModule('/src/features/upload/UploadPage.tsx');
+  const { Alert } = await server.ssrLoadModule('/src/components/ui/alert.tsx');
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const client = new QueryClient();
+
+  try {
+    const html = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(UploadPage, { machines: [{ id: 'm1', name: 'chrysalis' }] }),
+        ),
+      ),
+    );
+
+    assert.doesNotMatch(html, /<select(?![^>]*aria-hidden="true")/);
+    assert.match(html, /<label[^>]*for="upload-machine"/);
+    const machineTrigger = html.match(/<button[^>]*id="upload-machine"[^>]*>/)?.[0] ?? '';
+    assert.match(machineTrigger, /role="combobox"/);
+    assert.match(machineTrigger, /aria-required="true"/);
+    assert.match(html, /<label[^>]*for="upload-hpc-username"/);
+    assert.match(html, /<input[^>]*id="upload-hpc-username"/);
+    assert.match(html, /<label[^>]*for="upload-archive"/);
+    assert.match(
+      html.match(/<input[^>]*id="upload-archive"[^>]*>/)?.[0] ?? '',
+      /aria-required="true"/,
+    );
+    assert.equal(html.match(/<span class="sr-only">\(required\)<\/span>/g)?.length, 2);
+    assert.match(html, /role="status"[^>]*bg-sky-50/);
+  } finally {
+    client.clear();
+  }
+
+  const success = renderToStaticMarkup(createElement(Alert, { variant: 'success' }, 'Done'));
+  assert.match(success, /role="status"[^>]*bg-green-50/);
+});

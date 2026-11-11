@@ -4,6 +4,17 @@ import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { Alert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   ArchiveUploadValidationDetail,
   ArchiveUploadValidationError,
@@ -30,6 +41,7 @@ const SUPPORTED_ARCHIVE_EXTENSIONS = ['.tar.gz', '.tgz', '.zip'];
 const FILE_INPUT_ACCEPT = '.tar.gz,.tgz,.zip,application/gzip,application/zip';
 const EXECUTION_ID_PATTERN = /^\d+\.\d+-\d+$/;
 const ARCHIVE_LEVEL_VALIDATION_LABEL = 'Archive-level validation';
+const UPLOAD_STATUS_ICONS = { success: CheckCircle, error: AlertTriangle, info: Info } as const;
 
 const hasSupportedArchiveExtension = (filename: string): boolean => {
   const normalized = filename.toLowerCase();
@@ -155,9 +167,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
   const [archiveFile, setArchiveFile] = useState<File | null>(null);
   const [archiveFileError, setArchiveFileError] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null);
-  const [createdExecutions, setCreatedExecutions] = useState<IngestionUploadExecutionSummary[]>(
-    [],
-  );
+  const [createdExecutions, setCreatedExecutions] = useState<IngestionUploadExecutionSummary[]>([]);
   const [validationErrors, setValidationErrors] = useState<ArchiveUploadValidationError[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [fileInputKey, setFileInputKey] = useState(0);
@@ -324,7 +334,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
   };
 
   return (
-    <div className="w-full min-h-[calc(100vh-64px)] bg-gray-50">
+    <div className="w-full min-h-[calc(100vh-64px)] bg-muted-subtle">
       <div className="max-w-4xl mx-auto px-4 md:px-6 py-8">
         <header className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight">Upload a Case</h1>
@@ -336,7 +346,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
           <p className="mt-1 text-sm text-muted-foreground">
             A case archive contains one or more execution directories. A single execution directory
             may also be uploaded when packaged as
-            <code className="ml-1 rounded bg-gray-100 px-1 py-0.5 text-xs">
+            <code className="ml-1 rounded bg-muted px-1 py-0.5 text-xs">
               &lt;execution_id&gt;/...
             </code>
             .
@@ -344,19 +354,19 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
         </header>
 
         <div className="space-y-6">
-          <section className="rounded-xl border bg-white p-6 shadow-sm">
-            <div className="flex items-start gap-3 rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <section className="rounded-xl border bg-card p-6 shadow-sm">
+            <Alert variant="info" className="flex items-start gap-3 p-4">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="space-y-2">
                 <p>
                   <span className="font-medium">Automatic HPC ingestion:</span> current performance
-                  archives are scanned regularly, and historical archives are scanned daily. Schedules
-                  and date coverage vary by site. Targeted E3SM v3 historical data is ingested from
-                  Chrysalis archives.
+                  archives are scanned regularly, and historical archives are scanned daily.
+                  Schedules and date coverage vary by site. Targeted E3SM v3 historical data is
+                  ingested from Chrysalis archives.
                 </p>
                 <p>
                   <a
-                    className="font-medium underline underline-offset-2 hover:text-blue-600"
+                    className="font-medium underline underline-offset-2"
                     href="https://simboard.readthedocs.io/en/latest/user/ingestion-coverage/"
                     target="_blank"
                     rel="noreferrer"
@@ -367,9 +377,9 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                 </p>
                 <p>
                   Supported archive types:{' '}
-                  <code className="rounded bg-blue-100 px-1 py-0.5 text-xs">.tar.gz</code>,{' '}
-                  <code className="rounded bg-blue-100 px-1 py-0.5 text-xs">.tgz</code>, and{' '}
-                  <code className="rounded bg-blue-100 px-1 py-0.5 text-xs">.zip</code>.
+                  <code className="rounded bg-sky-100 px-1 py-0.5 text-xs">.tar.gz</code>,{' '}
+                  <code className="rounded bg-sky-100 px-1 py-0.5 text-xs">.tgz</code>, and{' '}
+                  <code className="rounded bg-sky-100 px-1 py-0.5 text-xs">.zip</code>.
                 </p>
                 <p>
                   Maximum upload size: <span className="font-medium">50 MB</span>. The backend
@@ -383,37 +393,37 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                 <p>
                   You can upload either a case archive containing one or more execution directories,
                   or a single execution packaged directly as{' '}
-                  <code className="rounded bg-blue-100 px-1 py-0.5 text-xs">
+                  <code className="rounded bg-sky-100 px-1 py-0.5 text-xs">
                     &lt;execution_id&gt;/...
                   </code>
                   .
                 </p>
               </div>
-            </div>
+            </Alert>
 
             <div className="mt-6 grid gap-5 md:grid-cols-2">
-              <div>
-                <label className="text-sm font-medium">
-                  Machine <span className="text-red-500">*</span>
-                </label>
-                <select
-                  className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3"
-                  value={selectedMachineId}
-                  onChange={(event) => setSelectedMachineId(event.target.value)}
-                >
-                  <option value="">Select a machine...</option>
-                  {machines.map((machine) => (
-                    <option key={machine.id} value={machine.id}>
-                      {machine.name}
-                    </option>
-                  ))}
-                </select>
+              <div className="space-y-1">
+                <Label htmlFor="upload-machine">
+                  Machine <RequiredMark />
+                </Label>
+                <Select value={selectedMachineId} onValueChange={setSelectedMachineId}>
+                  <SelectTrigger id="upload-machine" aria-required="true">
+                    <SelectValue placeholder="Select a machine…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {machines.map((machine) => (
+                      <SelectItem key={machine.id} value={machine.id}>
+                        {machine.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div>
-                <label className="text-sm font-medium">HPC Username</label>
-                <input
-                  className="mt-1 h-10 w-full rounded-md border border-gray-300 px-3"
+              <div className="space-y-1">
+                <Label htmlFor="upload-hpc-username">HPC Username</Label>
+                <Input
+                  id="upload-hpc-username"
                   value={hpcUsername}
                   onChange={(event) => setHpcUsername(event.target.value)}
                   placeholder="Optional provenance username"
@@ -422,29 +432,33 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
               </div>
             </div>
 
-            <div className="mt-5">
-              <label className="text-sm font-medium">
-                Performance Archive <span className="text-red-500">*</span>
-              </label>
-              <input
+            <div className="mt-5 space-y-1">
+              <Label htmlFor="upload-archive">
+                Performance Archive <RequiredMark />
+              </Label>
+              <Input
                 key={fileInputKey}
+                id="upload-archive"
                 accept={FILE_INPUT_ACCEPT}
-                className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-gray-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white"
+                aria-required="true"
+                aria-invalid={archiveFileError ? true : undefined}
+                aria-describedby={archiveFileError ? 'upload-archive-error' : undefined}
+                className="cursor-pointer"
                 onChange={handleArchiveChange}
                 type="file"
               />
 
-              <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-3 text-xs text-gray-600">
+              <div className="mt-3 rounded-md border border-border bg-muted-subtle p-3 text-xs text-muted-foreground">
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
-                    <p className="font-medium text-gray-700">Required root files</p>
+                    <p className="font-medium text-foreground">Required root files</p>
                     <p className="mt-1">
                       <code>e3sm_timing..*..*</code>, <code>CaseStatus..*.gz</code>,{' '}
                       <code>GIT_DESCRIBE..*.gz</code>
                     </p>
                   </div>
                   <div>
-                    <p className="font-medium text-gray-700">
+                    <p className="font-medium text-foreground">
                       Required <code>casedocs/</code> files
                     </p>
                     <p className="mt-1">
@@ -456,30 +470,35 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
               </div>
 
               {archiveFile ? (
-                <div className="mt-3 flex items-start gap-2 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+                <Alert variant="success" className="mt-3 flex items-start gap-2">
                   <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>
                     Selected <span className="font-medium">{archiveFile.name}</span> (
                     {(archiveFile.size / (1024 * 1024)).toFixed(2)} MB)
                   </span>
-                </div>
+                </Alert>
               ) : null}
 
               {archiveFileError ? (
-                <p className="mt-2 text-sm text-red-600">{archiveFileError}</p>
+                <p id="upload-archive-error" className="mt-2 text-sm text-destructive">
+                  {archiveFileError}
+                </p>
               ) : null}
             </div>
 
             {validationErrors.length > 0 ? (
-              <div
-                className="mt-5 rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800"
+              <Alert
+                variant="error"
+                role="group"
+                aria-labelledby="upload-validation-heading"
+                className="mt-5 p-4 text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 ref={validationPanelRef}
                 tabIndex={-1}
               >
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div>
-                    <p className="font-medium">
+                    <p id="upload-validation-heading" className="font-medium">
                       {validationExecutionCount} execution
                       {validationExecutionCount === 1 ? '' : 's'} failed validation. No executions
                       were ingested.
@@ -494,7 +513,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                         ({ executionDir, displayExecutionDir, errors }) => (
                           <div
                             key={executionDir}
-                            className="rounded-md border border-red-200 bg-white/70 p-3"
+                            className="rounded-md border border-red-200 bg-card/70 p-3"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <p className="font-medium text-red-900">{displayExecutionDir}</p>
@@ -530,62 +549,31 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                     </div>
                   </div>
                 </div>
-              </div>
+              </Alert>
             ) : null}
 
             <div className="mt-6 flex justify-end gap-3">
-              <button
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700"
-                onClick={resetFileSelection}
-                type="button"
-              >
+              <Button type="button" variant="outline" onClick={resetFileSelection}>
                 Clear file
-              </button>
-              <button
-                className="rounded-md bg-gray-900 px-5 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={isUploading}
-                onClick={handleUpload}
-                type="button"
-              >
-                {isUploading ? 'Uploading archive...' : 'Upload archive'}
-              </button>
+              </Button>
+              <Button type="button" disabled={isUploading} onClick={handleUpload}>
+                {isUploading ? 'Uploading archive…' : 'Upload archive'}
+              </Button>
             </div>
 
             {uploadStatus && validationErrors.length === 0 ? (
-              <div
-                className={`mt-5 rounded-md border p-4 text-sm ${
-                  uploadStatus.tone === 'success'
-                    ? 'border-green-200 bg-green-50 text-green-800'
-                    : uploadStatus.tone === 'error'
-                      ? 'border-red-200 bg-red-50 text-red-800'
-                      : 'border-blue-200 bg-blue-50 text-blue-900'
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  {uploadStatus.tone === 'success' ? (
-                    <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                  ) : uploadStatus.tone === 'error' ? (
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  ) : (
-                    <Info className="mt-0.5 h-4 w-4 shrink-0" />
-                  )}
-                  <div>
-                    <p className="font-medium">{uploadStatus.title}</p>
-                    <p className="mt-1">{uploadStatus.description}</p>
-                  </div>
-                </div>
-              </div>
+              <UploadStatusAlert status={uploadStatus} />
             ) : null}
 
             {createdExecutions.length > 0 ? (
-              <div className="mt-5 rounded-md border border-gray-200 bg-white text-sm">
-                <div className="flex items-center justify-between gap-4 border-b border-gray-200 bg-gray-50/60 px-4 py-3">
+              <div className="mt-5 rounded-md border border-border bg-card text-sm">
+                <div className="flex items-center justify-between gap-4 border-b border-border bg-muted-subtle/60 px-4 py-3">
                   <div>
-                    <p className="font-medium text-gray-900">
+                    <p className="font-medium text-foreground">
                       Created executions ({createdExecutions.length})
                     </p>
                     {createdCaseSummary ? (
-                      <p className="mt-1 text-sm text-gray-700" title={createdCaseSummary.name}>
+                      <p className="mt-1 text-sm text-foreground" title={createdCaseSummary.name}>
                         Case: {createdCaseSummary.name}
                       </p>
                     ) : null}
@@ -605,16 +593,16 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                 </div>
 
                 <div className="max-h-96 overflow-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50 text-xs text-gray-600">
+                  <table className="min-w-full divide-y divide-border">
+                    <thead className="bg-muted-subtle text-xs text-muted-foreground">
                       <tr>
                         <th className="px-4 py-3 text-left font-medium">Execution ID</th>
                         <th className="px-4 py-3 text-right font-medium">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-200 bg-white">
+                    <tbody className="divide-y divide-border bg-card">
                       {createdExecutions.map((execution) => (
-                        <tr className="hover:bg-gray-50" key={execution.id}>
+                        <tr className="hover:bg-muted-subtle" key={execution.id}>
                           <td className="px-4 py-4">
                             <Link
                               className="block truncate font-medium text-blue-600 hover:underline"
@@ -665,7 +653,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
             ) : null}
           </section>
 
-          <section className="rounded-xl border bg-white p-6 shadow-sm">
+          <section className="rounded-xl border bg-card p-6 shadow-sm">
             <h2 className="text-lg font-semibold">Archive Layout</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               The uploader is intended for packaged E3SM performance archives from systems such as
@@ -674,9 +662,9 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
               under <code>casedocs/</code> in the expected locations.
             </p>
 
-            <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-4">
+            <div className="mt-4 rounded-md border border-border bg-muted-subtle p-4">
               <h3 className="text-sm font-medium">Example</h3>
-              <pre className="mt-2 overflow-x-auto text-xs text-gray-700">
+              <pre className="mt-2 overflow-x-auto text-xs text-foreground">
                 {`qa/
 └── performance_archive/
     └── v3.LR.historical_0121/
@@ -692,18 +680,17 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                 ├── env_build.xml.001.gz
                 └── env_run.xml.001.gz`}
               </pre>
-              <p className="mt-2 text-xs text-gray-500">
+              <p className="mt-2 text-xs text-muted-foreground">
                 A full case archive includes the case directory above. A single-execution archive
                 can start directly at
-                <code className="mx-1 rounded bg-gray-100 px-1 py-0.5">1081156.251218-200923/</code>
-                .
+                <code className="mx-1 rounded bg-muted px-1 py-0.5">1081156.251218-200923/</code>.
               </p>
             </div>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div>
                 <h3 className="text-sm font-medium">Required root files</h3>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700">
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-foreground">
                   <li>
                     <code>e3sm_timing..*..*</code>
                   </li>
@@ -718,7 +705,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
 
               <div>
                 <h3 className="text-sm font-medium">Required casedocs files</h3>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700">
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-foreground">
                   <li>
                     <code>README.case..*.gz</code>
                   </li>
@@ -738,5 +725,28 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
         </div>
       </div>
     </div>
+  );
+};
+
+const RequiredMark = () => (
+  <>
+    <span className="text-destructive" aria-hidden="true">
+      *
+    </span>
+    <span className="sr-only">(required)</span>
+  </>
+);
+
+const UploadStatusAlert = ({ status }: { status: UploadStatus }) => {
+  const Icon = UPLOAD_STATUS_ICONS[status.tone];
+
+  return (
+    <Alert variant={status.tone} className="mt-5 flex items-start gap-2 p-4">
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+      <div>
+        <p className="font-medium">{status.title}</p>
+        <p className="mt-1">{status.description}</p>
+      </div>
+    </Alert>
   );
 };

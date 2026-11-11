@@ -7,6 +7,7 @@ const alertVariants = cva('rounded-md border p-3 text-sm', {
   variants: {
     variant: {
       error: 'border-red-200 bg-red-50 text-red-700',
+      success: 'border-green-200 bg-green-50 text-green-800',
       warning: 'border-amber-200 bg-amber-50 text-amber-900',
       info: 'border-sky-200 bg-sky-50 text-sky-950',
     },
@@ -18,7 +19,7 @@ const alertVariants = cva('rounded-md border p-3 text-sm', {
 
 type AlertProps = React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants>;
 
-/** Inline notice for errors, warnings, and contextual info. Errors are announced assertively. */
+/** Inline notice for errors, warnings, success, and contextual info. Errors are announced assertively. */
 const Alert = React.forwardRef<HTMLDivElement, AlertProps>(
   ({ className, variant, ...props }, ref) => (
     <div
