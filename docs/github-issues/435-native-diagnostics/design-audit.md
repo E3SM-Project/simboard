@@ -7,16 +7,16 @@ Audit of the native diagnostics UI against [Frontend Design System](../../design
 Existing conventions cover these; no UX decision needed.
 
 - [x] **1. Raw neutral colors.** 61 `no-restricted-syntax` lint errors (`slate-*`, `bg-white`) in `ComparePage.tsx`, `components/RunEditor.tsx`, `components/ComparisonBar.tsx`, `components/DiagnosticRunList.tsx`, and `components/DiagnosticsRunsCard.tsx`. Use semantic tokens. Blocks CI.
-- [ ] **2. Page width tiers.** `ComparePage.tsx` uses `max-w-[1600px]`; `ComparisonBar.tsx` uses `max-w-[1440px]`. Use the workspace tier, `max-w-screen-2xl`.
-- [ ] **3. Heading scale.** `h1` is `text-xl`; the variable `h2` in `ComparePage.tsx` is `text-base`; the Case details Diagnostics card title is a `div`, so that section has no `h2`. Use `text-2xl font-semibold tracking-tight` for `h1` and `text-lg font-semibold` for `h2`.
-- [ ] **4. Back control.** `ComparePage.tsx` uses a text link. Use an outline back button.
+- [x] **2. Page width tiers.** `ComparePage.tsx` uses `max-w-[1600px]`; `ComparisonBar.tsx` uses `max-w-[1440px]`. Use the workspace tier, `max-w-screen-2xl`.
+- [x] **3. Heading scale.** `h1` is `text-xl`; the variable `h2` in `ComparePage.tsx` is `text-base`; the Case details Diagnostics card title is a `div`, so that section has no `h2`. Use `text-2xl font-semibold tracking-tight` for `h1` and `text-lg font-semibold` for `h2`.
+- [x] **4. Back control.** `ComparePage.tsx` uses a text link. Use an outline back button.
 - [ ] **5. Notices.** A local `Notice` component, red error text, and amber status paragraphs repeat state colors; one Retry button sits inside a `<p>`. Use `Alert`.
 - [ ] **6. Loading states.** Compare load is plain text; refetch only dims content; the Diagnostics card shows loading only in its header; case discovery uses plain text. Use `LoadingState` (`section` for first load, `inline` for refresh).
 - [ ] **7. Empty and no-match states.** "No plots in common", "No supported runs", and "No variables match this filter" are plain paragraphs with no reset. Use a dashed-border block and offer "Clear filter".
 - [ ] **8. Text links.** Run labels, source directory links, "View in Diagnostics", and "Open original image" are not `text-blue-600 hover:underline`.
 - [ ] **9. Identifiers.** `diagnosticIdentifier` output is not `font-mono text-xs`.
-- [ ] **10. Panel radius.** Plot figures and RunEditor panels use `rounded-lg`. Panels use `rounded-xl`.
-- [ ] **11. Elevation.** `ComparisonBar.tsx` uses a custom shadow, `backdrop-blur`, and translucent white. Use `border-t bg-card shadow-sm`.
+- [x] **10. Panel radius.** Plot figures and RunEditor panels use `rounded-lg`. Panels use `rounded-xl`.
+- [x] **11. Elevation.** `ComparisonBar.tsx` uses a custom shadow, `backdrop-blur`, and translucent white. Use `border-t bg-card shadow-sm`.
 - [ ] **12. Selection limit.** Add stays enabled when a group is full, then shows a destructive toast or inline error. Disable unselected rows at the limit and explain why.
 - [ ] **13. Comparison actions.** Compare buttons omit the count, and the tray says "Clear all". Use `Compare (N)` and "Clear selection".
 - [ ] **14. Toggle styles.** Variable list and season/region/panel choices use an inverted dark fill; the tool filter uses a muted track; analysis uses `Tabs`. Pick one style, preferably the muted-track style of the tool filter.

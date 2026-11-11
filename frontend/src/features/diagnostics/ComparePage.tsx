@@ -259,7 +259,7 @@ export const ComparePage = () => {
     return (
       <Shell>
         <header>
-          <h1 className="text-xl font-semibold text-foreground">Compare diagnostics</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Compare diagnostics</h1>
         </header>
         <div className="rounded-xl border bg-card p-3 sm:p-4">
           <RunEditor initialRuns={[]} onApply={applyRuns} />
@@ -274,16 +274,15 @@ export const ComparePage = () => {
 
   return (
     <Shell>
-      <Link
-        to="/diagnostics"
-        className="inline-flex items-center gap-1 rounded text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-        Back to Diagnostics
-      </Link>
+      <Button asChild variant="outline" size="sm" className="w-fit">
+        <Link to="/diagnostics">
+          <ChevronLeft className="mr-1 h-4 w-4" aria-hidden="true" />
+          Back to Diagnostics
+        </Link>
+      </Button>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold text-foreground">Compare diagnostics</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Compare diagnostics</h1>
           <p className="mt-1 text-xs text-muted-foreground" aria-live="polite">
             {state.runs.length} active runs · {selectedRuns.length} selected runs
           </p>
@@ -529,7 +528,7 @@ export const ComparePage = () => {
                         >
                           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                         </Button>
-                        <h2 className="min-w-0 break-words text-base font-semibold text-foreground">
+                        <h2 className="min-w-0 break-words text-lg font-semibold text-foreground">
                           {activeGroup.title}{' '}
                           <span className="font-normal text-muted-foreground">
                             vs{' '}
@@ -598,7 +597,7 @@ const Notice = ({ children }: { children: React.ReactNode }) => (
 );
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
-  <div className="mx-auto w-full max-w-[1600px] space-y-4 px-4 py-6 sm:px-6">{children}</div>
+  <div className="mx-auto w-full max-w-screen-2xl space-y-4 px-4 py-6 sm:px-6">{children}</div>
 );
 
 interface ChoiceProps {
@@ -698,7 +697,7 @@ const Plots = ({ data, detail, plot, view }: PlotsProps) => {
       {cells.map(({ run, src, ref }) => (
         <figure
           key={`${run.url}|${run.label}`}
-          className="overflow-hidden rounded-lg border border-border bg-card"
+          className="overflow-hidden rounded-xl border border-border bg-card"
         >
           <figcaption className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5 text-xs">
             <span className="min-w-0 break-words font-medium text-foreground" title={run.url}>
@@ -737,7 +736,7 @@ const Plots = ({ data, detail, plot, view }: PlotsProps) => {
         ? references.map((cell) => (
             <figure
               key={`${cell.ref}|${cell.src}`}
-              className="overflow-hidden rounded-lg border border-dashed border-border bg-muted-subtle"
+              className="overflow-hidden rounded-xl border border-dashed border-border bg-muted-subtle"
             >
               <figcaption className="border-b border-border px-3 py-1.5 text-xs font-medium text-muted-foreground">
                 Reference · {cell.ref} · {displayLabel(cell.run)}

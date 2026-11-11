@@ -272,7 +272,7 @@ export const RunEditor = ({
       </TabsContent>
       <TabsContent value="url" className="space-y-4">
         <form
-          className="space-y-3 rounded-lg border p-3"
+          className="space-y-3 rounded-xl border p-3"
           onSubmit={(event) => {
             event.preventDefault();
             add(manual);
@@ -300,7 +300,7 @@ export const RunEditor = ({
             Add run
           </Button>
         </form>
-        <details className="rounded-lg border p-3">
+        <details className="rounded-xl border p-3">
           <summary className="cursor-pointer text-sm font-medium">IICE example comparisons</summary>
           <ul className="mt-3 space-y-2">
             {EXAMPLES.map((example) => (
@@ -604,7 +604,7 @@ const CaseBrowser = ({
     <div className="grid min-w-0 gap-3 md:h-[min(70dvh,36rem)] md:grid-cols-[minmax(14rem,1fr)_minmax(0,2.5fr)]">
       <section
         aria-label="Browse cases"
-        className="flex h-[32rem] min-h-0 min-w-0 flex-col rounded-lg border md:h-auto"
+        className="flex h-[32rem] min-h-0 min-w-0 flex-col rounded-xl border md:h-auto"
       >
         <div className="space-y-2 border-b p-3">
           <div className="flex items-center gap-2">
@@ -756,7 +756,7 @@ const CaseBrowser = ({
       </section>
       <section
         id="available-case-diagnostics"
-        className="flex h-[32rem] min-h-0 min-w-0 flex-col rounded-lg border md:h-auto"
+        className="flex h-[32rem] min-h-0 min-w-0 flex-col rounded-xl border md:h-auto"
         aria-label={selected ? `Diagnostics for ${selected.record.name}` : 'Available diagnostics'}
       >
         <header className="space-y-1 border-b p-3">

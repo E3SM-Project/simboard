@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { getCaseDiagnosticsRuns } from '@/features/diagnostics/api';
 import {
@@ -96,9 +96,9 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
               className="flex w-full items-center gap-3 rounded-xl p-4 text-left hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <div className="min-w-0 flex-1">
-                <CardTitle className="text-base">
+                <h2 className="text-lg font-semibold text-foreground">
                   Diagnostics{query.isSuccess ? ` (${runs.length})` : ''}
-                </CardTitle>
+                </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {query.isLoading
                     ? 'Reading the diagnostics archive…'

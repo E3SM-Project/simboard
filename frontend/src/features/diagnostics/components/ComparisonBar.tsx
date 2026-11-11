@@ -124,9 +124,9 @@ export const ComparisonBar = () => {
       ref={barRef}
       role="region"
       aria-label="Diagnostics comparison"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card shadow-sm"
     >
-      <div className="mx-auto flex max-h-[45vh] max-w-[1440px] flex-col gap-3 overflow-y-auto px-4 py-3 md:px-6">
+      <div className="mx-auto flex max-h-[45vh] max-w-screen-2xl flex-col gap-3 overflow-y-auto px-4 py-3 md:px-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold text-foreground">Diagnostics</h2>
@@ -217,7 +217,7 @@ export const ComparisonBar = () => {
             {groups.map(([key, group]) => (
               <div
                 key={key}
-                className="flex flex-col gap-2 rounded-lg border border-border bg-muted-subtle p-2.5 lg:flex-row lg:items-center lg:justify-between"
+                className="flex flex-col gap-2 rounded-xl border border-border bg-muted-subtle p-2.5 lg:flex-row lg:items-center lg:justify-between"
               >
                 <div className="min-w-0 space-y-1.5">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
