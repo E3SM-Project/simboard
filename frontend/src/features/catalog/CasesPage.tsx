@@ -1172,7 +1172,22 @@ export const CasesPage = () => {
                     colSpan={columns.length}
                     className="py-10 text-center text-muted-foreground"
                   >
-                    No cases match the current filters.
+                    {hasActiveFilters ? (
+                      <>
+                        <p>No cases match the current filters.</p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mt-4"
+                          onClick={clearAllFilters}
+                        >
+                          Reset filters
+                        </Button>
+                      </>
+                    ) : (
+                      'No cases yet.'
+                    )}
                   </TableCell>
                 </TableRow>
               )}

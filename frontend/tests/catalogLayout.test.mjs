@@ -962,3 +962,32 @@ test('sortable table head exposes sort state on the header and its button', asyn
   assert.doesNotMatch(unsorted, /aria-sort/);
   assert.match(unsorted, /aria-label="Sort by Run dates, currently not sorted"/);
 });
+
+test('cases empty state offers reset only when filters cause it', async () => {
+  const { CasesPage } = await server.ssrLoadModule('/src/features/catalog/CasesPage.tsx');
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const client = new QueryClient();
+  client.setQueryDefaults(['cases', 'page'], {
+    initialData: { items: [], total: 0, page: 1, pageSize: 25 },
+  });
+  const render = (url) =>
+    renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(MemoryRouter, { initialEntries: [url] }, createElement(CasesPage)),
+      ),
+    );
+
+  try {
+    const filtered = render('/cases?search=missing');
+    assert.match(filtered, /No cases match the current filters\./);
+    assert.match(filtered, />Reset filters<\/button>/);
+
+    const unfiltered = render('/cases');
+    assert.match(unfiltered, /No cases yet\./);
+    assert.doesNotMatch(unfiltered, /Reset filters/);
+  } finally {
+    client.clear();
+  }
+});
