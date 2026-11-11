@@ -1,4 +1,5 @@
 import { ArrowRight, FolderOpen, Upload } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Alert } from '@/components/ui/alert';
@@ -15,6 +16,7 @@ import {
 import { TableCellText } from '@/components/ui/table-cell-text';
 import { useCatalogOverview } from '@/lib/catalog/hooks/useCatalogOverview';
 import { caseDetailsPath } from '@/lib/catalog/urls';
+import { cn } from '@/lib/utils';
 import type { Machine, Site } from '@/types/index';
 
 import { ProductionCasesTable } from './components/ProductionCasesTable';
@@ -36,7 +38,46 @@ interface InfrastructureTableProps {
   rows: InfrastructureRow[];
 }
 
+interface OverviewSectionProps {
+  children: ReactNode;
+  className?: string;
+  errorMessage: string;
+  hasData: boolean;
+  isLoading: boolean;
+  isError: boolean;
+  loadingLabel: string;
+  onRetry: () => void;
+}
+
 const CURRENTLY_SUPPORTED_SITE_NAMES = new Set(['NERSC', 'LCRC']);
+
+const OverviewSection = ({
+  children,
+  className,
+  errorMessage,
+  hasData,
+  isLoading,
+  isError,
+  loadingLabel,
+  onRetry,
+}: OverviewSectionProps) => {
+  if (isLoading) {
+    return <LoadingState className={className} kind="section" label={loadingLabel} />;
+  }
+
+  if (isError && !hasData) {
+    return (
+      <Alert variant="error" className={cn('rounded-xl p-6 text-center', className)}>
+        <p>{errorMessage}</p>
+        <Button className="mt-3" size="sm" type="button" variant="outline" onClick={onRetry}>
+          Retry
+        </Button>
+      </Alert>
+    );
+  }
+
+  return <>{children}</>;
+};
 
 const InfrastructureTable = ({
   emptyMessage,
@@ -155,26 +196,16 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
     },
   ];
 
-  if (isLoading) {
-    return <LoadingState kind="page" label="Loading catalog overview" />;
-  }
-
-  if (error && !overview) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center px-6">
-        <div className="space-y-3 text-center">
-          <p className="text-red-600">Could not load catalog overview.</p>
-          <Button type="button" variant="outline" onClick={() => void refetch()}>
-            Retry
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  const overviewSectionProps = {
+    hasData: overview != null,
+    isLoading,
+    isError: error != null,
+    onRetry: () => void refetch(),
+  };
 
   return (
     <main className="min-h-[70vh] bg-card px-4 py-10">
-      {error ? (
+      {error && overview ? (
         <Alert
           variant="error"
           className="mx-auto mb-4 flex w-full max-w-7xl items-center justify-between gap-3"
@@ -250,57 +281,63 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             <Link to="/cases">Browse Recent Cases</Link>
           </Button>
         </div>
-        <div className="rounded-xl border border-muted bg-card p-4 shadow-sm md:p-6">
-          <Table className="min-w-[1100px] table-fixed">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[32%] min-w-[320px]">Case Name</TableHead>
-                <TableHead>Last Execution</TableHead>
-                <TableHead>Details</TableHead>
-                <TableHead>Case Group</TableHead>
-                <TableHead>Machine</TableHead>
-                <TableHead>HPC Username</TableHead>
-                <TableHead>Executions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recentCases.map((caseRecord) => (
-                <TableRow key={caseRecord.id}>
-                  <TableCell className="align-top">
-                    <TableCellText value={caseRecord.name} lines={1} />
-                  </TableCell>
-                  <TableCell>
-                    {caseRecord.lastExecution
-                      ? new Date(caseRecord.lastExecution).toLocaleDateString()
-                      : '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Button asChild variant="outline" size="sm" className="h-8 gap-1 px-2">
-                      <Link
-                        to={caseDetailsPath({
-                          machineName: caseRecord.machineName,
-                          hpcUsername: caseRecord.hpcUsername,
-                          caseName: caseRecord.name,
-                        })}
-                      >
-                        Open
-                        <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </TableCell>
-                  <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
-                  <TableCell className="align-top">
-                    <TableCellText value={caseRecord.machineSummary} lines={1} />
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <TableCellText value={caseRecord.hpcUsernameSummary} lines={1} />
-                  </TableCell>
-                  <TableCell>{caseRecord.executionCount}</TableCell>
+        <OverviewSection
+          errorMessage="Could not load recent cases."
+          loadingLabel="Loading recent cases"
+          {...overviewSectionProps}
+        >
+          <div className="rounded-xl border border-muted bg-card p-4 shadow-sm md:p-6">
+            <Table className="min-w-[1100px] table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[32%] min-w-[320px]">Case Name</TableHead>
+                  <TableHead>Last Execution</TableHead>
+                  <TableHead>Details</TableHead>
+                  <TableHead>Case Group</TableHead>
+                  <TableHead>Machine</TableHead>
+                  <TableHead>HPC Username</TableHead>
+                  <TableHead>Executions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {recentCases.map((caseRecord) => (
+                  <TableRow key={caseRecord.id}>
+                    <TableCell className="align-top">
+                      <TableCellText value={caseRecord.name} lines={1} />
+                    </TableCell>
+                    <TableCell>
+                      {caseRecord.lastExecution
+                        ? new Date(caseRecord.lastExecution).toLocaleDateString()
+                        : '—'}
+                    </TableCell>
+                    <TableCell>
+                      <Button asChild variant="outline" size="sm" className="h-8 gap-1 px-2">
+                        <Link
+                          to={caseDetailsPath({
+                            machineName: caseRecord.machineName,
+                            hpcUsername: caseRecord.hpcUsername,
+                            caseName: caseRecord.name,
+                          })}
+                        >
+                          Open
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </TableCell>
+                    <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
+                    <TableCell className="align-top">
+                      <TableCellText value={caseRecord.machineSummary} lines={1} />
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <TableCellText value={caseRecord.hpcUsernameSummary} lines={1} />
+                    </TableCell>
+                    <TableCell>{caseRecord.executionCount}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </OverviewSection>
       </section>
       <section className="mx-auto mt-10 w-full max-w-7xl space-y-4">
         <div className="space-y-1">
@@ -338,48 +375,42 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             Computing facilities and systems represented in the SimBoard catalog.
           </p>
         </div>
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <h3 className="text-lg font-semibold">Currently Supported</h3>
-            <p className="text-sm text-muted-foreground">
-              NERSC and LCRC sites and machines with active SimBoard support.
-            </p>
+        <OverviewSection
+          errorMessage="Could not load machine case counts."
+          loadingLabel="Loading sites and machines"
+          {...overviewSectionProps}
+        >
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold">Currently Supported</h3>
+              <p className="text-sm text-muted-foreground">
+                NERSC and LCRC sites and machines with active SimBoard support.
+              </p>
+            </div>
+            <InfrastructureTable
+              emptyMessage="No currently supported sites or machines are available."
+              machineCaseCounts={machineCaseCounts}
+              rows={currentlySupportedInfrastructureRows}
+            />
           </div>
-          <InfrastructureTable
-            emptyMessage="No currently supported sites or machines are available."
-            machineCaseCounts={machineCaseCounts}
-            rows={currentlySupportedInfrastructureRows}
-          />
-        </div>
-        <div className="space-y-4">
-          <div className="space-y-1">
-            <h3 className="text-lg font-semibold">Upcoming Support</h3>
-            <p className="text-sm text-muted-foreground">
-              Additional sites and machines planned for future SimBoard support.
-            </p>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold">Upcoming Support</h3>
+              <p className="text-sm text-muted-foreground">
+                Additional sites and machines planned for future SimBoard support.
+              </p>
+            </div>
+            <InfrastructureTable
+              emptyMessage="No upcoming sites or machines are listed."
+              machineCaseCounts={machineCaseCounts}
+              rows={upcomingInfrastructureRows}
+            />
           </div>
-          <InfrastructureTable
-            emptyMessage="No upcoming sites or machines are listed."
-            machineCaseCounts={machineCaseCounts}
-            rows={upcomingInfrastructureRows}
-          />
-        </div>
+        </OverviewSection>
       </section>
       <section className="mx-auto mt-10 w-full max-w-7xl rounded-xl border border-muted p-6">
         <h2 className="text-2xl font-semibold text-foreground">Catalog at a glance</h2>
-        <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3">
-          <div>
-            <dt className="text-sm text-muted-foreground">Cases</dt>
-            <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
-              {totalCases}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-sm text-muted-foreground">Executions</dt>
-            <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
-              {overview?.totalExecutions ?? 0}
-            </dd>
-          </div>
+        <dl className="mt-4">
           <div>
             <dt className="text-sm text-muted-foreground">Compute systems</dt>
             <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
@@ -390,12 +421,33 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             </dd>
           </div>
         </dl>
-        <p className="mt-5 text-sm text-muted-foreground">
-          Last submission:{' '}
-          <span className="font-medium text-foreground">
-            {latestSubmission ? new Date(latestSubmission).toLocaleDateString() : 'N/A'}
-          </span>
-        </p>
+        <OverviewSection
+          className="mt-5"
+          errorMessage="Could not load catalog summary."
+          loadingLabel="Loading catalog summary"
+          {...overviewSectionProps}
+        >
+          <dl className="mt-5 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3">
+            <div>
+              <dt className="text-sm text-muted-foreground">Cases</dt>
+              <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+                {totalCases}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">Executions</dt>
+              <dd className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
+                {overview?.totalExecutions ?? 0}
+              </dd>
+            </div>
+          </dl>
+          <p className="mt-5 text-sm text-muted-foreground">
+            Last submission:{' '}
+            <span className="font-medium text-foreground">
+              {latestSubmission ? new Date(latestSubmission).toLocaleDateString() : 'N/A'}
+            </span>
+          </p>
+        </OverviewSection>
       </section>
 
       <footer className="mx-auto mt-12 w-full max-w-7xl border-t border-muted pt-6">

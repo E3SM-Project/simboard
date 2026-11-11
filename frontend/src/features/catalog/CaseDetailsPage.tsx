@@ -309,7 +309,12 @@ export const CaseDetailsPage = ({
   }>();
   const readableIdentity =
     machineName && hpcUsername && caseName ? { machineName, hpcUsername, caseName } : null;
-  const { data: fetchedCaseRecord, loading, error } = useReadableCase(readableIdentity);
+  const {
+    data: fetchedCaseRecord,
+    loading,
+    error,
+    refetch: refetchCase,
+  } = useReadableCase(readableIdentity);
   const caseId = fetchedCaseRecord?.id;
   const [dateSort, setDateSort] = useState<ExecutionDateSort>({
     key: 'simulation',
@@ -320,6 +325,7 @@ export const CaseDetailsPage = ({
     error: executionsError,
     fetchNextPage,
     hasNextPage,
+    isFetching: executionsFetching,
     isLoading: executionsLoading,
     isFetchingNextPage,
     refetch: refetchExecutions,
@@ -643,31 +649,25 @@ export const CaseDetailsPage = ({
     );
   }
 
-  if (
-    loading ||
-    (executionsLoading && allExecutions.length === 0) ||
-    (caseRecord != null && caseRecord.id !== caseId)
-  ) {
+  if (loading || (fetchedCaseRecord != null && caseRecord?.id !== fetchedCaseRecord.id)) {
     return <LoadingState kind="page" label="Loading case details" />;
   }
 
   if (error) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-red-600">Error: {error}</div>
-      </div>
-    );
-  }
-
-  if (executionsError && allExecutions.length === 0) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center px-6">
-        <div className="space-y-3 text-center">
-          <p className="text-red-600">Could not load case executions: {executionsError}</p>
-          <Button type="button" variant="outline" onClick={() => void refetchExecutions()}>
+      <div className="mx-auto w-full max-w-7xl px-6 py-8">
+        <Alert variant="error" role="group" className="rounded-xl p-6 text-center">
+          <p>Could not load case: {error}</p>
+          <Button
+            className="mt-3"
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() => void refetchCase()}
+          >
             Retry
           </Button>
-        </div>
+        </Alert>
       </div>
     );
   }
@@ -724,6 +724,7 @@ export const CaseDetailsPage = ({
   }, new Map<string, CaseArtifactValue>());
   const artifactValues = Array.from(artifactValuesByKey.values());
   const isCompareButtonDisabled = caseSelectedExecutionCount < 2;
+  const hasExecutionMetadata = allExecutions.length > 0;
   const filteredExecutionCount = filteredFlatExecutions.length;
   const activeExecutionCount =
     viewMode === 'grouped' ? filteredExecutionGroups.length : filteredExecutionCount;
@@ -1230,183 +1231,207 @@ export const CaseDetailsPage = ({
           </div>
 
           <div className="border-t border-border px-5 py-4">
-            <div className={useScrollableGroupsPanel ? 'lg:max-h-[70vh] lg:overflow-y-auto' : ''}>
-              <div className="space-y-4">
-                {(viewMode === 'grouped'
-                  ? filteredExecutionGroups.length
-                  : filteredFlatExecutions.length) === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border bg-muted-subtle/40 px-6 py-10 text-center">
-                    <p className="text-sm font-medium text-foreground">
-                      {viewMode === 'grouped'
-                        ? 'No Case Hash groups match these filters.'
-                        : 'No executions match these filters.'}
-                    </p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Try a different filter or reset current filters.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="mt-4"
-                      onClick={resetGroupFilters}
-                    >
-                      Reset filters
-                    </Button>
-                  </div>
-                ) : viewMode === 'flat' ? (
-                  <CaseExecutionsTable
-                    executions={filteredFlatExecutions}
-                    {...executionTableProps}
-                  />
-                ) : (
-                  <div className="overflow-hidden rounded-xl border border-border bg-background">
-                    <div className="max-h-[42rem] overflow-auto">
-                      <Table className="min-w-[640px] table-fixed">
-                        <colgroup>
-                          <col style={{ width: '38%' }} />
-                          <col style={{ width: '14%' }} />
-                          <col style={{ width: '30%' }} />
-                          <col style={{ width: '18%' }} />
-                        </colgroup>
-                        <TableHeader className="sticky top-0 z-10 bg-muted-subtle">
-                          <TableRow className="hover:bg-muted-subtle">
-                            <TableHead className="bg-muted-subtle">
-                              <div className="flex items-center gap-1.5">
-                                <span>Case Hash group</span>
-                                <TooltipProvider delayDuration={150}>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
+            {hasExecutionMetadata && executionsFetching && !isFetchingNextPage ? (
+              <LoadingState
+                className="mb-3 justify-start"
+                kind="inline"
+                label="Refreshing executions"
+              />
+            ) : null}
+            {!hasExecutionMetadata && executionsLoading ? (
+              <LoadingState kind="section" label="Loading executions" />
+            ) : !hasExecutionMetadata && executionsError ? (
+              <Alert variant="error" className="rounded-xl p-6 text-center">
+                <p>Could not load case executions: {executionsError}</p>
+                <Button
+                  className="mt-3"
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  onClick={() => void refetchExecutions()}
+                >
+                  Retry
+                </Button>
+              </Alert>
+            ) : (
+              <div className={useScrollableGroupsPanel ? 'lg:max-h-[70vh] lg:overflow-y-auto' : ''}>
+                <div className="space-y-4">
+                  {(viewMode === 'grouped'
+                    ? filteredExecutionGroups.length
+                    : filteredFlatExecutions.length) === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border bg-muted-subtle/40 px-6 py-10 text-center">
+                      <p className="text-sm font-medium text-foreground">
+                        {viewMode === 'grouped'
+                          ? 'No Case Hash groups match these filters.'
+                          : 'No executions match these filters.'}
+                      </p>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Try a different filter or reset current filters.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-4"
+                        onClick={resetGroupFilters}
+                      >
+                        Reset filters
+                      </Button>
+                    </div>
+                  ) : viewMode === 'flat' ? (
+                    <CaseExecutionsTable
+                      executions={filteredFlatExecutions}
+                      {...executionTableProps}
+                    />
+                  ) : (
+                    <div className="overflow-hidden rounded-xl border border-border bg-background">
+                      <div className="max-h-[42rem] overflow-auto">
+                        <Table className="min-w-[640px] table-fixed">
+                          <colgroup>
+                            <col style={{ width: '38%' }} />
+                            <col style={{ width: '14%' }} />
+                            <col style={{ width: '30%' }} />
+                            <col style={{ width: '18%' }} />
+                          </colgroup>
+                          <TableHeader className="sticky top-0 z-10 bg-muted-subtle">
+                            <TableRow className="hover:bg-muted-subtle">
+                              <TableHead className="bg-muted-subtle">
+                                <div className="flex items-center gap-1.5">
+                                  <span>Case Hash group</span>
+                                  <TooltipProvider delayDuration={150}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <button
+                                          type="button"
+                                          className="text-muted-foreground transition-colors hover:text-foreground"
+                                          aria-label="Explain case hash grouping"
+                                        >
+                                          <Info className="h-3.5 w-3.5" />
+                                        </button>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs text-xs leading-5">
+                                        {CASE_HASH_GROUPING_TOOLTIP}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </div>
+                              </TableHead>
+                              <TableHead className="w-24 bg-muted-subtle">Executions</TableHead>
+                              <TableHead className="bg-muted-subtle">
+                                Simulation period range
+                              </TableHead>
+                              <TableHead className="bg-muted-subtle">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredExecutionGroups.map((group) => {
+                              const isOpen = expandedGroupKeys.includes(group.key);
+                              const groupPanelId = `case-hash-group-panel-${group.key}`;
+                              const fullGroup =
+                                executionGroups.find((candidate) => candidate.key === group.key) ??
+                                group;
+                              const groupSimulationWindow = formatGroupExecutionWindow(
+                                fullGroup.executions.map(({ summary }) => summary),
+                              );
+
+                              return (
+                                <Fragment key={group.key}>
+                                  <TableRow
+                                    className="bg-card hover:bg-muted-subtle/80"
+                                    data-case-hash-baseline={
+                                      group.key === baselineGroup?.key ? 'true' : undefined
+                                    }
+                                  >
+                                    <TableCell className="align-top">
                                       <button
                                         type="button"
-                                        className="text-muted-foreground transition-colors hover:text-foreground"
-                                        aria-label="Explain case hash grouping"
+                                        className="flex w-full items-start gap-3 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                        onClick={() => toggleGroupExpansion(group.key, !isOpen)}
+                                        aria-expanded={isOpen}
+                                        aria-controls={groupPanelId}
                                       >
-                                        <Info className="h-3.5 w-3.5" />
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="max-w-xs text-xs leading-5">
-                                      {CASE_HASH_GROUPING_TOOLTIP}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              </div>
-                            </TableHead>
-                            <TableHead className="w-24 bg-muted-subtle">Executions</TableHead>
-                            <TableHead className="bg-muted-subtle">
-                              Simulation period range
-                            </TableHead>
-                            <TableHead className="bg-muted-subtle">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredExecutionGroups.map((group) => {
-                            const isOpen = expandedGroupKeys.includes(group.key);
-                            const groupPanelId = `case-hash-group-panel-${group.key}`;
-                            const fullGroup =
-                              executionGroups.find((candidate) => candidate.key === group.key) ??
-                              group;
-                            const groupSimulationWindow = formatGroupExecutionWindow(
-                              fullGroup.executions.map(({ summary }) => summary),
-                            );
-
-                            return (
-                              <Fragment key={group.key}>
-                                <TableRow
-                                  className="bg-card hover:bg-muted-subtle/80"
-                                  data-case-hash-baseline={
-                                    group.key === baselineGroup?.key ? 'true' : undefined
-                                  }
-                                >
-                                  <TableCell className="align-top">
-                                    <button
-                                      type="button"
-                                      className="flex w-full items-start gap-3 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                                      onClick={() => toggleGroupExpansion(group.key, !isOpen)}
-                                      aria-expanded={isOpen}
-                                      aria-controls={groupPanelId}
-                                    >
-                                      <ChevronDown
-                                        className={`mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
-                                          isOpen ? '' : '-rotate-90'
-                                        }`}
-                                      />
-                                      <div className="min-w-0 space-y-1">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <span
-                                            className="truncate font-mono text-xs font-semibold text-foreground sm:text-sm"
-                                            title={group.caseHash ?? MISSING_CASE_HASH_LABEL}
-                                          >
-                                            {group.isFallback
-                                              ? MISSING_CASE_HASH_LABEL
-                                              : formatCaseHashLabel(group.caseHash, 22)}
-                                          </span>
-                                          {group.key === baselineGroup?.key ? (
-                                            <Badge
-                                              variant="secondary"
-                                              className="text-xs font-normal"
-                                              title="Comparison baseline for displayed groups, not an original or authoritative configuration."
+                                        <ChevronDown
+                                          className={`mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                                            isOpen ? '' : '-rotate-90'
+                                          }`}
+                                        />
+                                        <div className="min-w-0 space-y-1">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <span
+                                              className="truncate font-mono text-xs font-semibold text-foreground sm:text-sm"
+                                              title={group.caseHash ?? MISSING_CASE_HASH_LABEL}
                                             >
-                                              Baseline
-                                            </Badge>
-                                          ) : null}
+                                              {group.isFallback
+                                                ? MISSING_CASE_HASH_LABEL
+                                                : formatCaseHashLabel(group.caseHash, 22)}
+                                            </span>
+                                            {group.key === baselineGroup?.key ? (
+                                              <Badge
+                                                variant="secondary"
+                                                className="text-xs font-normal"
+                                                title="Comparison baseline for displayed groups, not an original or authoritative configuration."
+                                              >
+                                                Baseline
+                                              </Badge>
+                                            ) : null}
+                                          </div>
                                         </div>
-                                      </div>
-                                    </button>
-                                    <div className="ml-7">
-                                      <CaseHashConfigurationDifferences
-                                        differences={
-                                          configurationDifferences.get(group.caseHash) ?? []
-                                        }
-                                      />
-                                    </div>
-                                  </TableCell>
-                                  <TableCell className="align-top">
-                                    {fullGroup.executions.length}
-                                  </TableCell>
-                                  <TableCell className="whitespace-nowrap align-top">
-                                    {groupSimulationWindow}
-                                  </TableCell>
-                                  <TableCell className="align-top">
-                                    <button
-                                      type="button"
-                                      className="whitespace-nowrap rounded-sm font-medium text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                      onClick={() => toggleGroupExpansion(group.key, !isOpen)}
-                                      aria-expanded={isOpen}
-                                      aria-controls={groupPanelId}
-                                    >
-                                      {isOpen ? 'Hide executions' : 'View executions'}
-                                    </button>
-                                  </TableCell>
-                                </TableRow>
-                                {isOpen ? (
-                                  <TableRow className="bg-muted-subtle/50 hover:bg-muted-subtle/50">
-                                    <TableCell colSpan={4} className="p-0">
-                                      <div
-                                        id={groupPanelId}
-                                        className="border-t border-border px-4 py-3"
-                                      >
-                                        <CaseExecutionsTable
-                                          executions={group.executions}
-                                          {...executionTableProps}
+                                      </button>
+                                      <div className="ml-7">
+                                        <CaseHashConfigurationDifferences
+                                          differences={
+                                            configurationDifferences.get(group.caseHash) ?? []
+                                          }
                                         />
                                       </div>
                                     </TableCell>
+                                    <TableCell className="align-top">
+                                      {fullGroup.executions.length}
+                                    </TableCell>
+                                    <TableCell className="whitespace-nowrap align-top">
+                                      {groupSimulationWindow}
+                                    </TableCell>
+                                    <TableCell className="align-top">
+                                      <button
+                                        type="button"
+                                        className="whitespace-nowrap rounded-sm font-medium text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                        onClick={() => toggleGroupExpansion(group.key, !isOpen)}
+                                        aria-expanded={isOpen}
+                                        aria-controls={groupPanelId}
+                                      >
+                                        {isOpen ? 'Hide executions' : 'View executions'}
+                                      </button>
+                                    </TableCell>
                                   </TableRow>
-                                ) : null}
-                              </Fragment>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
+                                  {isOpen ? (
+                                    <TableRow className="bg-muted-subtle/50 hover:bg-muted-subtle/50">
+                                      <TableCell colSpan={4} className="p-0">
+                                        <div
+                                          id={groupPanelId}
+                                          className="border-t border-border px-4 py-3"
+                                        >
+                                          <CaseExecutionsTable
+                                            executions={group.executions}
+                                            {...executionTableProps}
+                                          />
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ) : null}
+                                </Fragment>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {executionsError ? (
+          {hasExecutionMetadata && executionsError ? (
             <Alert
               variant="error"
               className="flex items-center justify-between gap-3 rounded-none border-x-0 border-b-0 px-5 py-4"

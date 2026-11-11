@@ -15,7 +15,7 @@ Run `make backend-run` and `make frontend-run`.
 Manual feedback:
 
 - Applying filters and sorting columns in the case details page causes the table to rerender entirely, showing the loading data right behind it. -- it should be load icon within the table keeping the component visible as it refreshes with new data. This most likely applies to all other tables
-  - Documented in `docs/design-system.md` (UI states > Loading); remaining pages listed under Known deviations.
+  - Documented in `docs/design-system.md` (UI states > Loading); applied to Home, Cases, and Case details in #454.
 
 ## Case details
 
@@ -39,7 +39,7 @@ Block API requests in DevTools, or stop the backend after the page loads, then r
 
 Manual feedback: Loading should be for the individual components or tables, rather than the entire page, to provide a smoother user experience.
 
-- Documented in `docs/design-system.md` (UI states > Loading); remaining pages listed under Known deviations.
+- Documented in `docs/design-system.md` (UI states > Loading); applied to Home, Cases, and Case details in #454.
 
 ## Visual regressions
 
