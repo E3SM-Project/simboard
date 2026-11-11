@@ -41,7 +41,7 @@ import {
   periodGroups,
   RUN_GROUPS,
 } from '@/features/diagnostics/discoveryState';
-import type { CaseDiagnosticsOut } from '@/features/diagnostics/types';
+import type { CaseDiagnosticsOut, DiagnosticsRunOut } from '@/features/diagnostics/types';
 import { readWorkspace, saveWorkspace } from '@/features/diagnostics/workspaceState';
 import { caseDetailsPath } from '@/lib/catalog/urls';
 import { cn } from '@/lib/utils';
@@ -268,6 +268,10 @@ export const RunEditor = ({
       <TabsContent value="browse" className="space-y-3">
         <CaseBrowser
           isAdded={(url) => runs.some((run) => run.url === url)}
+          isFull={(candidate) =>
+            runs.filter((run) => selectedRunGroup(run) === groupKey(candidate)).length >=
+            MAX_COMPARED_RUNS
+          }
           onAdd={(entry) => add({ url: entry.url, label: entryLabel(entry), entry })}
           onRemove={(url) => changeRuns(runs.filter((run) => run.url !== url))}
         />
@@ -482,7 +486,7 @@ export const RunEditor = ({
               ) : onCancel ? (
                 'Apply changes'
               ) : (
-                'Compare'
+                `Compare (${visibleRuns.length})`
               )}
             </Button>
           </div>
@@ -499,10 +503,12 @@ interface DiscoveredCase {
 
 const CaseBrowser = ({
   isAdded,
+  isFull,
   onAdd,
   onRemove,
 }: {
   isAdded: (url: string) => boolean;
+  isFull: (run: DiagnosticsRunOut) => boolean;
   onAdd: (entry: BasketEntry) => void;
   onRemove: (url: string) => void;
 }) => {
@@ -770,6 +776,7 @@ const CaseBrowser = ({
               sources={selected.diagnostics.sources}
               id={`browser-${selected.record.id}`}
               isAdded={isAdded}
+              isFull={isFull}
               analysis={analysis}
               onAnalysisChange={setAnalysis}
               tool={tool}

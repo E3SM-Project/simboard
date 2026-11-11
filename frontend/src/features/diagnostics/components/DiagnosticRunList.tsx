@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { MAX_COMPARED_RUNS } from '@/features/diagnostics/compareState';
 import {
   type DiagnosticAnalysis,
   diagnosticClimatologyPeriod,
@@ -35,6 +36,8 @@ export interface DiagnosticRunListProps {
   sources: DiagnosticsSourceOut[];
   id: string;
   isAdded: (url: string) => boolean;
+  /** True when the run's comparison group is at its selection limit. */
+  isFull?: (run: DiagnosticsRunOut) => boolean;
   onAdd: (run: DiagnosticsRunOut) => void;
   onRemove: (url: string) => void;
   analysis?: DiagnosticAnalysis;
@@ -227,12 +230,14 @@ export const DiagnosticRunList = ({
 const DiagnosticRunRow = ({
   run,
   isAdded,
+  isFull,
   onAdd,
   onRemove,
-}: Pick<DiagnosticRunListProps, 'isAdded' | 'onAdd' | 'onRemove'> & {
+}: Pick<DiagnosticRunListProps, 'isAdded' | 'isFull' | 'onAdd' | 'onRemove'> & {
   run: DiagnosticsRunOut;
 }) => {
   const selected = isAdded(run.url);
+  const full = !selected && Boolean(isFull?.(run));
   const title = diagnosticTitle(run);
   const identifier = diagnosticIdentifier(run);
   const tool = run.tool === 'e3sm_diags' ? 'E3SM Diags' : 'MPAS-Analysis';
@@ -277,6 +282,12 @@ const DiagnosticRunRow = ({
           className="h-7 w-[4.5rem] px-2 text-xs"
           aria-pressed={selected}
           aria-label={`${selected ? 'Remove' : 'Add'} ${label}`}
+          disabled={full}
+          title={
+            full
+              ? `Compare up to ${MAX_COMPARED_RUNS} runs of one kind. Remove one first.`
+              : undefined
+          }
           onClick={() => (selected ? onRemove(run.url) : onAdd(run))}
         >
           {selected ? (

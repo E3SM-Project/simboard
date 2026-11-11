@@ -411,6 +411,11 @@ const button = (text: string) =>
   [...document.querySelectorAll<HTMLButtonElement>('button')].find(
     (item) => item.textContent?.trim() === text,
   );
+/** The primary Compare action, whose label carries the selected run count. */
+const compareAction = () =>
+  [...document.querySelectorAll<HTMLButtonElement>('button')].find((item) =>
+    /^Compare \(\d+\)$/.test(item.textContent?.trim() ?? ''),
+  );
 const analysisTab = (text: string) =>
   [
     ...document.querySelectorAll<HTMLButtonElement>(
@@ -560,6 +565,37 @@ async function testWorkspace() {
     document.querySelectorAll('a[aria-label^="Open "]').length === 4,
     'Resource shortcut does not leave runs hidden by a filter',
   );
+  localStorage.setItem(
+    'simboard.diagnostics-comparison',
+    JSON.stringify(
+      Array.from({ length: 12 }, (_, index) => ({
+        url: url(`full-${index}`),
+        caseId: `full-${index}`,
+        caseName: `Full ${index}`,
+        tool: 'e3sm_diags',
+        comparison: 'model_vs_obs',
+        period: '0001-0050',
+      })),
+    ),
+  );
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  render('/case/alpha');
+  await waitFor(
+    () =>
+      document.querySelector('button[aria-label^="Add E3SM"]') &&
+      compareAction()?.textContent?.trim() === 'Compare (12)',
+    'runs with a full comparison group',
+  );
+  check(
+    document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]')?.disabled &&
+      document
+        .querySelector('button[aria-label^="Add E3SM"]')
+        ?.getAttribute('title')
+        ?.startsWith('Compare up to 12 runs'),
+    'Add is disabled with a reason when the group is full',
+  );
+  localStorage.removeItem('simboard.diagnostics-comparison');
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
   render('/case/alpha');
   await waitFor(
     () =>
@@ -616,7 +652,7 @@ async function testWorkspace() {
     document.getElementById('comparison-tray-selections')?.textContent?.includes('case.alpha'),
     'Cross-case selection retained',
   );
-  click(button('Compare'), 'compare from tray');
+  click(compareAction(), 'compare from tray');
   await waitFor(() => document.querySelectorAll('figure').length === 2, 'populated comparison');
   check(
     !document.querySelector('[aria-label="Diagnostics comparison"]'),
@@ -731,7 +767,7 @@ async function testWorkspace() {
         .length === 2,
     'Added states survive case changes',
   );
-  click(button('Compare'), 'same case comparison');
+  click(compareAction(), 'same case comparison');
   await waitFor(
     () => document.querySelectorAll('figure').length === 3,
     'multi-case and multi-period plots',
@@ -771,7 +807,7 @@ async function testWorkspace() {
     () => document.body.textContent?.includes('Selected runs (1/'),
     'manual run selected',
   );
-  click(button('Compare'), 'manual comparison');
+  click(compareAction(), 'manual comparison');
   await waitFor(() => document.querySelector('figure'), 'manual plots');
   check(
     document.querySelector('figure')?.textContent?.includes('External run'),
@@ -932,7 +968,7 @@ async function testAnalysisFilters() {
     document.documentElement.scrollWidth <= window.innerWidth + 1,
     'Analysis filters have no horizontal overflow',
   );
-  click(button('Compare'), 'compare whole runs after filtering');
+  click(compareAction(), 'compare whole runs after filtering');
   await waitFor(
     () => document.querySelectorAll('figure').length === 1,
     'one comparison panel per selected run',
@@ -1656,7 +1692,7 @@ async function testUnifiedSelections() {
     'Selected entries follow discovery panels',
   );
   check(
-    getComputedStyle(button('Compare')!.closest('footer')!).position === 'sticky',
+    getComputedStyle(compareAction()!.closest('footer')!).position === 'sticky',
     'Compare remains in sticky footer',
   );
   check(
@@ -1770,7 +1806,7 @@ async function testCompatibilityValidation() {
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
   render('/diagnostics');
   await waitFor(() => button('case.alpha · 2 runs'), 'compatibility setup');
-  check(button('Compare')?.disabled, 'Compare disabled without a run');
+  check(compareAction()?.disabled, 'Compare disabled without a run');
   const before = validations;
   click(
     document.querySelector<HTMLButtonElement>(
@@ -1782,7 +1818,7 @@ async function testCompatibilityValidation() {
     () => document.body.textContent?.includes('Selected runs (1/'),
     'minimum selection',
   );
-  check(!button('Compare')?.disabled, 'Compare enabled at API minimum of one run');
+  check(!compareAction()?.disabled, 'Compare enabled at API minimum of one run');
   click(button('case.beta · 2 runs'), 'select second case for validation');
   await waitFor(
     () =>
@@ -1802,7 +1838,7 @@ async function testCompatibilityValidation() {
   );
   check(validations === before, 'Selection does not validate compatibility');
   comparisonDelay = 100;
-  const compare = button('Compare')!;
+  const compare = compareAction()!;
   click(compare, 'validate on Compare');
   compare.click();
   await waitFor(
@@ -1842,9 +1878,9 @@ async function testCompatibilityValidation() {
     'incompatible selection accepted',
   );
   const beforeIncompatible = compares;
-  check(!button('Compare')?.disabled, 'Supported selection remains comparable until checked');
+  check(!compareAction()?.disabled, 'Supported selection remains comparable until checked');
   check(!document.querySelector('[role="alert"]'), 'No compatibility warning during selection');
-  click(button('Compare'), 'check incompatible plots');
+  click(compareAction(), 'check incompatible plots');
   await waitFor(
     () =>
       document.querySelector('[role="alert"]')?.textContent ===
@@ -1878,7 +1914,7 @@ async function testCompatibilityValidation() {
     'network run selected',
   );
   comparisonFailures = 1;
-  click(button('Compare'), 'trigger network validation failure');
+  click(compareAction(), 'trigger network validation failure');
   await waitFor(() => button('Retry comparison'), 'Actionable validation retry');
   check(
     document
@@ -1911,7 +1947,7 @@ async function testCompatibilityValidation() {
     'abandoned run selected',
   );
   comparisonDelay = 100;
-  click(button('Compare'), 'start abandoned validation');
+  click(compareAction(), 'start abandoned validation');
   await waitFor(
     () => document.querySelector('button[aria-busy="true"]'),
     'abandoned request pending',
@@ -1948,12 +1984,12 @@ async function testTrayCompatibility() {
   };
   stage(['tray-one', 'tray-two']);
   await waitFor(
-    () => button('Compare') && document.querySelector('h1')?.textContent === 'Case alpha',
+    () => compareAction() && document.querySelector('h1')?.textContent === 'Case alpha',
     'tray compatible setup',
   );
   const before = validations;
   comparisonDelay = 100;
-  const compareButton = button('Compare')!;
+  const compareButton = compareAction()!;
   click(compareButton, 'tray compatibility check');
   compareButton.click();
   await waitFor(
@@ -1973,10 +2009,10 @@ async function testTrayCompatibility() {
 
   stage(['tray-one', 'unreadable']);
   await waitFor(
-    () => button('Compare') && document.querySelector('h1')?.textContent === 'Case alpha',
+    () => compareAction() && document.querySelector('h1')?.textContent === 'Case alpha',
     'tray unreadable setup',
   );
-  click(button('Compare'), 'tray unreadable validation');
+  click(compareAction(), 'tray unreadable validation');
   await waitFor(() => button('Retry comparison'), 'tray archive failure retry');
   check(
     latest === '/case/alpha' && !document.querySelector('figure'),
@@ -1992,8 +2028,8 @@ async function testTrayCompatibility() {
   );
 
   stage(['tray-one', 'incompatible']);
-  await waitFor(() => button('Compare'), 'tray incompatible setup');
-  click(button('Compare'), 'tray no-common-plots validation');
+  await waitFor(() => compareAction(), 'tray incompatible setup');
+  click(compareAction(), 'tray no-common-plots validation');
   await waitFor(
     () =>
       document.querySelector('[role="alert"]')?.textContent ===
@@ -2004,9 +2040,9 @@ async function testTrayCompatibility() {
   check(!button('Retry comparison'), 'Incompatibility does not offer network retry');
 
   stage(['tray-network-one', 'tray-network-two']);
-  await waitFor(() => button('Compare'), 'tray network setup');
+  await waitFor(() => compareAction(), 'tray network setup');
   comparisonFailures = 1;
-  click(button('Compare'), 'tray network error');
+  click(compareAction(), 'tray network error');
   await waitFor(() => button('Retry comparison'), 'tray network retry available');
   click(button('Retry comparison'), 'tray retry network');
   await waitFor(
@@ -2016,11 +2052,11 @@ async function testTrayCompatibility() {
 
   stage(['tray-abandon-one', 'tray-abandon-two']);
   await waitFor(
-    () => button('Compare') && document.querySelector('h1')?.textContent === 'Case alpha',
+    () => compareAction() && document.querySelector('h1')?.textContent === 'Case alpha',
     'tray abandoned setup',
   );
   comparisonDelay = 100;
-  click(button('Compare'), 'start tray validation before leaving');
+  click(compareAction(), 'start tray validation before leaving');
   await waitFor(() => document.querySelector('button[aria-busy="true"]'), 'tray request pending');
   click(link('Beta case'), 'leave case during tray validation');
   await waitFor(
@@ -2102,7 +2138,7 @@ async function testExampleRetryAndGroupSwitch() {
     'manual and staged runs selected',
   );
   comparisonFailures = 1;
-  click(button('Compare'), 'fail check before changing group');
+  click(compareAction(), 'fail check before changing group');
   await waitFor(() => button('Retry comparison'), 'group switch starts with retry error');
   await expandSelections();
   const beforeSwitch = compares;
@@ -2294,7 +2330,7 @@ async function testDenseBrowser() {
   }
   caseScroll.scrollTop = caseScroll.scrollHeight;
   runScroll.scrollTop = runScroll.scrollHeight;
-  const compare = button('Compare')!;
+  const compare = compareAction()!;
   check(
     compare.getBoundingClientRect().top >= 0 &&
       compare.getBoundingClientRect().bottom <= window.innerHeight,

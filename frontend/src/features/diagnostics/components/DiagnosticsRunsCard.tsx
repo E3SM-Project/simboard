@@ -154,6 +154,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
               sources={sources}
               id={id}
               isAdded={basket.has}
+              isFull={(run) => basket.countIn(run) >= MAX_RUNS_PER_GROUP}
               onAdd={add}
               onRemove={basket.remove}
             />

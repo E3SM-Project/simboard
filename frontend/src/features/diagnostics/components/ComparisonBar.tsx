@@ -183,7 +183,7 @@ export const ComparisonBar = () => {
                   <span role="status">Checking compatibility…</span>
                 </>
               ) : (
-                'Compare'
+                `Compare (${active[1].length})`
               )}
             </Button>
           </div>
@@ -208,7 +208,7 @@ export const ComparisonBar = () => {
                 Compare runs of the same kind, across cases or time ranges.
               </p>
               <Button variant="ghost" size="sm" disabled={checking} onClick={clear}>
-                Clear all
+                Clear selection
               </Button>
             </div>
             {groups.map(([key, group]) => (
