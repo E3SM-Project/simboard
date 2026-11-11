@@ -1,6 +1,7 @@
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/loading-state';
 import {
@@ -37,7 +38,7 @@ export const ProductionCasesTable = () => {
 
   if (error && cases.length === 0) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center text-sm text-red-700">
+      <Alert variant="error" className="rounded-xl p-6 text-center">
         <p>Could not load production cases.</p>
         <Button
           className="mt-3"
@@ -48,19 +49,19 @@ export const ProductionCasesTable = () => {
         >
           Retry
         </Button>
-      </div>
+      </Alert>
     );
   }
 
   return (
     <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
       {error ? (
-        <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <Alert variant="error" className="mb-3 flex items-center justify-between gap-3">
           <span>Could not refresh production cases. Showing previously loaded data.</span>
           <Button size="sm" type="button" variant="outline" onClick={() => void refetch()}>
             Retry
           </Button>
-        </div>
+        </Alert>
       ) : null}
       {isFetching ? (
         <LoadingState

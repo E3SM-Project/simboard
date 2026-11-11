@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 
 import { ExecutionStatusBadge } from '@/components/shared/ExecutionStatusBadge';
 import { MarkdownContent } from '@/components/shared/MarkdownContent';
+import { Alert } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1581,15 +1582,15 @@ export const ExecutionDetailsView = ({
                     </div>
                   )}
                   {isEditing && summaryErrorMessage ? (
-                    <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                    <Alert variant="error">
                       <div className="flex items-start gap-2">
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                         <div>
                           <p className="font-medium">Save blocked</p>
-                          <p className="mt-1 text-red-700">{summaryErrorMessage}</p>
+                          <p className="mt-1">{summaryErrorMessage}</p>
                         </div>
                       </div>
-                    </div>
+                    </Alert>
                   ) : null}
                 </CardContent>
               </Card>

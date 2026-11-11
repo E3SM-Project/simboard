@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TableCellText } from '@/components/ui/table-cell-text';
@@ -656,12 +657,9 @@ export const CompareWorkspace = ({
       <div className="flex min-h-0 flex-col gap-4" data-case-comparison>
         {contextNotice}
         {selectedExecutionIds.length < 2 ? (
-          <p
-            className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
-            role="status"
-          >
+          <Alert variant="warning">
             Select at least two executions using Edit executions to compare.
-          </p>
+          </Alert>
         ) : null}
         {selectedExecutionIds.length >= 2 && selectedExecutions.length < 2 ? (
           <p className="text-sm text-slate-600" role="status">

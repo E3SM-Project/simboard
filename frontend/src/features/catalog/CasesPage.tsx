@@ -14,6 +14,7 @@ import {
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
+import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -890,12 +891,12 @@ export const CasesPage = () => {
   return (
     <div className="mx-auto w-full max-w-[1480px] space-y-6 px-6 py-8">
       {error ? (
-        <div className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <Alert variant="error" className="flex items-center justify-between gap-3">
           <span>Could not refresh cases. Showing previously loaded results.</span>
           <Button size="sm" type="button" variant="outline" onClick={() => void refetchCases()}>
             Retry
           </Button>
-        </div>
+        </Alert>
       ) : null}
       <div className="overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/70 to-slate-100/80 shadow-sm">
         <div className="space-y-5 p-5 sm:p-6">

@@ -1,6 +1,7 @@
 import { ArrowRight, FolderOpen, Upload } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/loading-state';
 import {
@@ -174,12 +175,15 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
   return (
     <main className="min-h-[70vh] bg-white px-4 py-10">
       {error ? (
-        <div className="mx-auto mb-4 flex w-full max-w-7xl items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <Alert
+          variant="error"
+          className="mx-auto mb-4 flex w-full max-w-7xl items-center justify-between gap-3"
+        >
           <span>Could not refresh catalog overview. Showing previously loaded data.</span>
           <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
             Retry
           </Button>
-        </div>
+        </Alert>
       ) : null}
 
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-6 rounded-2xl border border-muted bg-white p-6 shadow-sm md:flex-row md:items-start md:justify-between md:p-8">

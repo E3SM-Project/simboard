@@ -7,6 +7,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -358,14 +359,14 @@ const SummaryPanelBody = ({
       )}
 
       {summaryError && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <Alert variant="error" className="px-4 py-3">
           <div>{summaryError}</div>
           {summaryLastDurationMs !== null && (
             <div className="mt-1 text-xs text-red-600/80">
               Latest attempt ran for {formatSummaryRuntime(summaryLastDurationMs)}.
             </div>
           )}
-        </div>
+        </Alert>
       )}
 
       {summaryLoading && !summary && (
@@ -411,10 +412,10 @@ const SummaryPanelBody = ({
           </div>
 
           {summaryFallbackUsed && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <Alert variant="warning" className="px-4 py-3">
               AI generation did not complete for this attempt. Showing metadata-based summary
               instead.
-            </div>
+            </Alert>
           )}
 
           <div>

@@ -22,10 +22,8 @@ SimBoard UI conventions for the React, Tailwind CSS, and shadcn/ui frontend. Sou
 
 - Use semantic token utilities for neutral UI: `text-foreground`, `text-muted-foreground`, `bg-background`, `bg-muted`, `border-border`, `ring-ring`.
 - Use `primary` for the main action and `destructive` for destructive actions (through `Button` variants).
-- State colors use Tailwind palette tints, paired as a light background, matching border, and dark text:
-  - Error: `red` (for example, `border-red-200 bg-red-50 text-red-700`).
-  - Warning: `amber`.
-  - Info or active context: `sky` or `blue`.
+- State colors use Tailwind palette tints (light background, matching border, dark text): `red` for errors, `amber` for warnings, `sky` or `blue` for info and active context.
+  - Notices: use `Alert` (`components/ui/alert.tsx`) with `variant="error" | "warning" | "info"` instead of repeating the classes.
   - Execution status: defined once in `components/shared/ExecutionStatusBadge.tsx`. Use that component instead of restyling statuses.
 - In-app text links use `text-blue-600 hover:underline`.
 
@@ -40,7 +38,7 @@ SimBoard UI conventions for the React, Tailwind CSS, and shadcn/ui frontend. Sou
 ### Spacing, radius, and elevation
 
 - Use the Tailwind spacing scale. Page sections stack with `space-y-6`; form fields with `space-y-1` or `space-y-2`.
-- Radius: controls use `rounded-md` (from `--radius`); cards, panels, and notices use `rounded-xl` or `rounded-2xl`; pills use `rounded-full`.
+- Radius: controls and notices use `rounded-md` (from `--radius`); cards and panels use `rounded-xl` or `rounded-2xl`; pills use `rounded-full`.
 - Elevation: surfaces use `border` plus at most `shadow-sm`. Stronger shadows are for overlays only (provided by the primitives).
 
 ## Components
@@ -55,6 +53,7 @@ SimBoard UI conventions for the React, Tailwind CSS, and shadcn/ui frontend. Sou
 Commonly used SimBoard-specific primitives:
 
 - `LoadingState` (`components/ui/loading-state.tsx`): loading and refresh indicator with `page`, `section`, and `inline` kinds. Announces via `role="status"`.
+- `Alert` (`components/ui/alert.tsx`): inline error, warning, or info notice. Errors use `role="alert"`; others use `role="status"`. Pass layout classes (flex, padding, radius) through `className`.
 - `TableCellText` (`components/ui/table-cell-text.tsx`): truncates cell text to 1–3 lines, shows the full value by `title` or tooltip, and renders `—` for empty values.
 - `Button` variants: `default` for the primary action, `outline` for secondary actions, `ghost` for low-emphasis and icon actions, `destructive` for deletes, `link` for inline text actions. Use `size="sm"` in toolbars and tables.
 - Override primitive classes with `className` and `cn()` (`lib/utils.ts`) only for layout or sizing, not to restyle the variant.
@@ -132,8 +131,8 @@ Every dialog has a `DialogTitle` and `DialogDescription`, and returns focus to i
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
 | Initial page load              | `LoadingState kind="page"` or `kind="section"`.                                                                               |
 | Background refresh             | `LoadingState kind="inline"` above the content, which stays visible.                                                          |
-| Refresh failed, data available | Error notice above the content: "Could not refresh … Showing previously loaded …" with a `Retry` button.                      |
-| Load failed, no data           | Error notice in place of the content with a `Retry` button.                                                                   |
+| Refresh failed, data available | `Alert variant="error"` above the content: "Could not refresh … Showing previously loaded …" with a `Retry` button.           |
+| Load failed, no data           | `Alert variant="error"` in place of the content with a `Retry` button.                                                        |
 | No data or no matching results | Table: a full-width empty row. Panel: a dashed-border block with a message and, when filters apply, a "Reset filters" action. |
 | Transient result               | `toast` from `hooks/use-toast.ts` (for example, link copied or upload failed). Use `variant: 'destructive'` for failures.     |
 | Pending action                 | Disable the button and change its label (`Saving…`, `Loading more…`).                                                         |
@@ -160,5 +159,5 @@ These exist in the code but are not conventions. Do not copy them into new work.
 - `.dark` tokens exist but dark mode is not supported (no toggle, many `bg-white` surfaces). Tracked in #452.
 - The Upload page uses native form controls instead of shadcn primitives. Tracked in #452.
 - Page container widths and `h1` sizes vary per page. Tracked in #452.
-- Error, warning, and info notices are written as inline `div`s with repeated classes instead of a shared primitive.
+- Upload's validation and result panels and the compare-route notice panels still inline their state colors instead of using `Alert`.
 - Some files are unused: `App.css`, `features/compare/ComparePage.css`, `components/examples/`, `components/ui/multi-select.tsx`, and several `features/upload/components/` files.

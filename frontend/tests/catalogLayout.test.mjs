@@ -667,6 +667,20 @@ test('Case Group stays visible without opening or counting as an advanced filter
   }
 });
 
+test('alert announces errors assertively and lets layout classes override defaults', async () => {
+  const { Alert } = await server.ssrLoadModule('/src/components/ui/alert.tsx');
+  const render = (props) => renderToStaticMarkup(createElement(Alert, props, 'Notice'));
+
+  const error = render({ variant: 'error', className: 'rounded-none p-6' });
+  assert.match(error, /role="alert"/);
+  assert.match(error, /bg-red-50/);
+  assert.match(error, /rounded-none/);
+  assert.doesNotMatch(error, /rounded-md|p-3/);
+
+  assert.match(render({ variant: 'warning' }), /role="status"[^>]*bg-amber-50/);
+  assert.match(render({}), /role="status"[^>]*bg-sky-50/);
+});
+
 test('cases table exposes sort state and labels its filters', async () => {
   const { CasesPage } = await server.ssrLoadModule('/src/features/catalog/CasesPage.tsx');
   const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
