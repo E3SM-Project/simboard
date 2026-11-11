@@ -45,7 +45,6 @@ Use `Button size="sm"` in toolbars and tables. Override primitive classes with `
   | Form / prose | `max-w-4xl`        | Upload, About                         |
   | Detail       | `max-w-7xl`        | Home, Case details, Execution details |
   | Workspace    | `max-w-screen-2xl` | Cases; the `NavBar` container         |
-  | Comparison   | `max-w-[1800px]`   | Compare (wide execution grid)         |
 
 - Detail pages start with an outline back button, the `h1`, and right-aligned page actions. See `features/catalog/CaseDetailsPage.tsx`.
 - Group page content in bordered sections or `Card`s, each with an `h2`.
@@ -79,7 +78,7 @@ Canonical: execution selection in `features/catalog/CaseDetailsPage.tsx` and `fe
 - Select rows with labeled `Checkbox`es. Disable unselected rows at the selection limit (`MAX_CASE_EXECUTIONS` in `lib/catalog/executionDiscovery.ts`).
 - Show a live selection count, a "Clear selection" action, and a primary action with the count (`Compare (N)`).
 - Tell users when selected items are hidden by filters.
-- Comparison opens in a large `Dialog` that focuses its title on open and returns focus to the trigger on close.
+- Comparison opens in a large `Dialog` (up to 1600px wide) that focuses its title on open and returns focus to the trigger on close.
 - Comparison grids keep field labels sticky on the left and execution headers sticky on top (`features/compare/ComparePage.tsx`).
 
 ## Metadata presentation
