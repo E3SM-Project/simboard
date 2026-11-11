@@ -176,6 +176,7 @@ async function run() {
   if (!new URLSearchParams(location.search).has('capture')) {
     await checkHomepage();
     await checkCasesFilters();
+    await checkSectionLoading();
   }
   for (const role of ['anonymous', 'editor', 'loading-admin', 'admin']) {
     const user =
@@ -882,6 +883,13 @@ async function run() {
   check(
     document.querySelector('table')?.tBodies[0].rows.length === 3,
     'Rows stay visible while sort data loads',
+  );
+  await waitFor(
+    () =>
+      [...document.querySelectorAll('[role="status"]')].some(
+        (element) => element.textContent === 'Refreshing executions',
+      ),
+    'executions refresh indicator',
   );
   check(document.activeElement === pendingSortButton, 'Sort header keeps keyboard focus');
   check(!compare.disabled, 'Comparison selection stays available while sorting');
@@ -2175,6 +2183,158 @@ async function checkCasesFilters() {
   await waitFor(() => document.getElementById('filter-url')?.textContent === '');
   check(filters[0].textContent?.includes('All case groups'), 'Clear all resets Case Group');
   check(more.getAttribute('aria-expanded') === 'false', 'Clear all collapses advanced filters');
+}
+
+async function checkSectionLoading() {
+  const originalAdapter = api.defaults.adapter;
+  let gatedUrl = '';
+  let failRequest = () => {};
+  const findText = (selector: string, text: string) =>
+    [...document.querySelectorAll(selector)].find((element) => element.textContent?.includes(text));
+  const gateRequest = (url: string) => {
+    gatedUrl = url;
+    const gate = new Promise<void>((resolve) => {
+      failRequest = resolve;
+    });
+    api.defaults.adapter = async (config) => {
+      if (config.url !== gatedUrl) return originalAdapter!(config);
+      await gate;
+      throw new Error('Request failed');
+    };
+  };
+  const pageDefaults = { items: [], total: 100, page: 2, pageSize: 25 };
+
+  try {
+    client.removeQueries({ queryKey: ['catalog', 'overview'] });
+    gateRequest('/cases/overview');
+    root.render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter key="home-loading">
+          <HomePage machines={[]} sites={[]} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => findText('[role="status"]', 'Loading recent cases'), 'Home loader');
+    check(
+      findText('[role="status"]', 'Loading sites and machines') &&
+        findText('[role="status"]', 'Loading catalog summary'),
+      'Each overview section shows its own loader',
+    );
+    check(findText('dt', 'Compute systems'), 'Compute systems render while the overview loads');
+    check(
+      document.querySelector('h1')?.textContent === 'Explore E3SM Simulations',
+      'Home hero renders while the overview loads',
+    );
+    check(findText('h2', 'Recent Cases'), 'Home section headings render while loading');
+    failRequest();
+    await waitFor(
+      () => findText('[role="alert"]', 'Could not load recent cases.'),
+      'Home overview error',
+    );
+    check(findText('[role="alert"] button', 'Retry'), 'Home overview error offers Retry');
+    check(findText('h2', 'Common Workflows'), 'Home stays usable after an overview error');
+    client.removeQueries({ queryKey: ['catalog', 'overview'] });
+
+    client.setQueryDefaults(['cases', 'page'], { initialData: undefined });
+    client.removeQueries({ queryKey: ['cases', 'page'] });
+    gateRequest('/cases');
+    root.render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter key="cases-loading" initialEntries={['/cases']}>
+          <CasesPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => findText('[role="status"]', 'Loading cases'), 'Cases loader');
+    check(document.querySelector('h1')?.textContent === 'Cases', 'Cases heading renders');
+    check(document.querySelector('#cases-search'), 'Cases filters render while loading');
+    failRequest();
+    await waitFor(() => findText('[role="alert"]', 'Could not load cases.'), 'Cases error');
+    check(findText('[role="alert"] button', 'Retry'), 'Cases error offers Retry');
+    check(document.querySelector('#cases-search'), 'Cases filters stay usable after an error');
+    client.removeQueries({ queryKey: ['cases', 'page'] });
+    client.setQueryDefaults(['cases', 'page'], { initialData: pageDefaults });
+
+    const loadingRecord = { ...record, id: 'loading-case', name: 'loading.case' };
+    client.setQueryDefaults(catalogQueryKeys.executions.case(loadingRecord.id), {
+      initialData: undefined,
+    });
+    gateRequest('/executions');
+    const executionsAdapter = api.defaults.adapter!;
+    api.defaults.adapter = async (config) =>
+      config.url === '/cases/resolve'
+        ? { config, status: 200, statusText: 'OK', headers: {}, data: loadingRecord }
+        : executionsAdapter(config);
+    let sawCaseNotFound = false;
+    const notFoundObserver = new MutationObserver((records) => {
+      sawCaseNotFound ||= records.some((mutation) =>
+        [...mutation.addedNodes].some((node) => node.textContent?.includes('Case not found')),
+      );
+    });
+    notFoundObserver.observe(document.body, { childList: true, subtree: true });
+    root.render(
+      <QueryClientProvider client={client}>
+        <AuthContext.Provider
+          value={{
+            user: null,
+            loading: false,
+            isAuthenticated: false,
+            loginWithGithub: () => {},
+            logout: async () => {},
+            refreshUser: async () => true,
+          }}
+        >
+          <MemoryRouter
+            key="executions-loading"
+            initialEntries={[`/cases/chrysalis/test.user/${loadingRecord.name}`]}
+          >
+            <Routes>
+              <Route path="/cases/:machine/:hpcUsername/:caseName" element={<FixtureCasePage />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthContext.Provider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => findText('[role="status"]', 'Loading executions'), 'executions loader');
+    check(
+      findText('span', `Showing ${executions.length} of ${executions.length} executions`),
+      'Executions toolbar count uses case summaries',
+    );
+    notFoundObserver.disconnect();
+    check(!sawCaseNotFound, 'Case details never shows "Case not found" while mounting');
+    check(
+      document.querySelector('h1')?.textContent === loadingRecord.name,
+      'Case record renders while executions load',
+    );
+    check(findText('h2', 'Executions'), 'Executions heading renders while loading');
+    failRequest();
+    await waitFor(
+      () => findText('[role="alert"]', 'Could not load case executions'),
+      'executions error',
+    );
+    check(
+      !findText('[role="alert"]', 'Could not load more execution metadata'),
+      'Executions error is shown once',
+    );
+    check(
+      findText('span', `Showing ${executions.length} of ${executions.length} executions`),
+      'Executions toolbar count stays consistent after an error',
+    );
+    api.defaults.adapter = originalAdapter;
+    (findText('[role="alert"] button', 'Retry') as HTMLButtonElement).click();
+    await waitFor(
+      () => document.querySelector('table')?.tBodies[0].rows.length === executions.length,
+      'executions after Retry',
+    );
+  } finally {
+    api.defaults.adapter = originalAdapter;
+    client.setQueryDefaults(['cases', 'page'], { initialData: pageDefaults });
+    client.removeQueries({ queryKey: catalogQueryKeys.executions.case('loading-case') });
+    client.removeQueries({
+      queryKey: catalogQueryKeys.cases.readableDetail('chrysalis', 'test.user', 'loading.case'),
+    });
+    requests.length = 0;
+  }
 }
 
 run()

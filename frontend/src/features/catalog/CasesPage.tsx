@@ -870,21 +870,11 @@ export const CasesPage = () => {
     );
   };
 
-  if (loading) {
-    return <LoadingState kind="page" label="Loading cases" />;
-  }
-
-  if (error && cases.length === 0) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-red-600">Error: {error}</div>
-      </div>
-    );
-  }
+  const hasCasePage = casePage != null;
 
   return (
     <div className="mx-auto w-full max-w-screen-2xl space-y-6 px-6 py-8">
-      {error ? (
+      {error && hasCasePage ? (
         <Alert variant="error" className="flex items-center justify-between gap-3">
           <span>Could not refresh cases. Showing previously loaded results.</span>
           <Button size="sm" type="button" variant="outline" onClick={() => void refetchCases()}>
@@ -905,17 +895,19 @@ export const CasesPage = () => {
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-card/75 px-4 py-3 text-sm text-muted-foreground shadow-sm shadow-border/20">
-              <span className="font-medium text-foreground">{casePage?.total ?? 0} cases</span>
-              <span className="px-2 text-muted-foreground">·</span>
-              <span>{visibleRunCount} runs on this page</span>
-              {activeFilterPills.length > 0 && (
-                <>
-                  <span className="px-2 text-muted-foreground">·</span>
-                  <span>{activeFilterPills.length} active filters</span>
-                </>
-              )}
-            </div>
+            {hasCasePage ? (
+              <div className="rounded-xl border border-border bg-card/75 px-4 py-3 text-sm text-muted-foreground shadow-sm shadow-border/20">
+                <span className="font-medium text-foreground">{casePage.total} cases</span>
+                <span className="px-2 text-muted-foreground">·</span>
+                <span>{visibleRunCount} runs on this page</span>
+                {activeFilterPills.length > 0 && (
+                  <>
+                    <span className="px-2 text-muted-foreground">·</span>
+                    <span>{activeFilterPills.length} active filters</span>
+                  </>
+                )}
+              </div>
+            ) : null}
           </div>
 
           <Collapsible open={showAdvancedFilters} onOpenChange={setShowAdvancedFilters}>
@@ -1106,123 +1098,144 @@ export const CasesPage = () => {
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-        {isFetching ? (
-          <div className="border-b border-border bg-muted-subtle px-4 py-2">
-            <LoadingState kind="inline" label="Refreshing cases" />
-          </div>
-        ) : null}
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => {
-                    const headerContent = header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext());
-                    const { header: label } = header.column.columnDef;
+        {loading ? (
+          <LoadingState className="rounded-none border-0" kind="section" label="Loading cases" />
+        ) : error && !hasCasePage ? (
+          <Alert variant="error" className="rounded-none border-0 p-6 text-center">
+            <p>Could not load cases.</p>
+            <Button
+              className="mt-3"
+              size="sm"
+              type="button"
+              variant="outline"
+              onClick={() => void refetchCases()}
+            >
+              Retry
+            </Button>
+          </Alert>
+        ) : (
+          <>
+            {isFetching ? (
+              <div className="border-b border-border bg-muted-subtle px-4 py-2">
+                <LoadingState kind="inline" label="Refreshing cases" />
+              </div>
+            ) : null}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => {
+                        const headerContent = header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext());
+                        const { header: label } = header.column.columnDef;
 
-                    return header.column.getCanSort() && typeof label === 'string' ? (
-                      <SortableTableHead
-                        key={header.id}
-                        label={label}
-                        direction={header.column.getIsSorted()}
-                        onSort={() => header.column.toggleSorting()}
-                      />
-                    ) : (
-                      <TableHead key={header.id}>{headerContent}</TableHead>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows.length > 0 ? (
-                table.getRowModel().rows.map((row) => {
-                  const isExpanded = expandedCaseId === row.original.id;
+                        return header.column.getCanSort() && typeof label === 'string' ? (
+                          <SortableTableHead
+                            key={header.id}
+                            label={label}
+                            direction={header.column.getIsSorted()}
+                            onSort={() => header.column.toggleSorting()}
+                          />
+                        ) : (
+                          <TableHead key={header.id}>{headerContent}</TableHead>
+                        );
+                      })}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows.length > 0 ? (
+                    table.getRowModel().rows.map((row) => {
+                      const isExpanded = expandedCaseId === row.original.id;
 
-                  return (
-                    <Fragment key={row.id}>
-                      <TableRow
-                        className="cursor-pointer hover:bg-muted/40"
-                        onClick={() =>
-                          setExpandedCaseId((current) =>
-                            current === row.original.id ? null : row.original.id,
-                          )
-                        }
+                      return (
+                        <Fragment key={row.id}>
+                          <TableRow
+                            className="cursor-pointer hover:bg-muted/40"
+                            onClick={() =>
+                              setExpandedCaseId((current) =>
+                                current === row.original.id ? null : row.original.id,
+                              )
+                            }
+                          >
+                            {row.getVisibleCells().map((cell) => (
+                              <TableCell key={cell.id} className="align-top">
+                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                          {isExpanded && (
+                            <TableRow className="bg-muted-subtle/40 hover:bg-muted-subtle/40">
+                              <TableCell colSpan={columns.length} className="p-0">
+                                {renderExpandedContent(row.original)}
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
+                      );
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        colSpan={columns.length}
+                        className="py-10 text-center text-muted-foreground"
                       >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id} className="align-top">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                      {isExpanded && (
-                        <TableRow className="bg-muted-subtle/40 hover:bg-muted-subtle/40">
-                          <TableCell colSpan={columns.length} className="p-0">
-                            {renderExpandedContent(row.original)}
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </Fragment>
-                  );
-                })
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="py-10 text-center text-muted-foreground"
-                  >
-                    {hasActiveFilters ? (
-                      <>
-                        <p>No cases match the current filters.</p>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="mt-4"
-                          onClick={clearAllFilters}
-                        >
-                          Reset filters
-                        </Button>
-                      </>
-                    ) : (
-                      'No cases yet.'
-                    )}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                        {hasActiveFilters ? (
+                          <>
+                            <p>No cases match the current filters.</p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="mt-4"
+                              onClick={clearAllFilters}
+                            >
+                              Reset filters
+                            </Button>
+                          </>
+                        ) : (
+                          'No cases yet.'
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="flex flex-col gap-3 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
-        <div>
-          Showing {table.getRowModel().rows.length} of {casePage?.total ?? 0} filtered cases
+      {hasCasePage ? (
+        <div className="flex flex-col gap-3 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
+          <div>
+            Showing {table.getRowModel().rows.length} of {casePage.total} filtered cases
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              Previous
+            </Button>
+            <span>
+              Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount() || 1}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              Next
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Previous
-          </Button>
-          <span>
-            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount() || 1}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next
-          </Button>
-        </div>
-      </div>
+      ) : null}
     </div>
   );
 };
