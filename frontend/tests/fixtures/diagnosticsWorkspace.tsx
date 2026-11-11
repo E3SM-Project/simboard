@@ -593,6 +593,34 @@ async function testWorkspace() {
         ?.startsWith('Compare up to 12 runs'),
     'Add is disabled with a reason when the group is full',
   );
+  const fullGroup = JSON.parse(localStorage.getItem('simboard.diagnostics-comparison')!);
+  localStorage.setItem(
+    'simboard.diagnostics-comparison',
+    JSON.stringify([
+      {
+        url: `${base}/other/mpas_analysis/ts_0001-0050_climo_0001-0050/`,
+        caseId: 'other',
+        caseName: 'Other MPAS',
+        tool: 'mpas_analysis',
+        comparison: 'model_vs_obs',
+        period: '0001-0050',
+      },
+      ...fullGroup,
+    ]),
+  );
+  localStorage.removeItem('simboard.diagnostics-workspace');
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  render('/diagnostics');
+  await waitFor(
+    () => document.querySelector('#available-case-diagnostics button[aria-label^="Add E3SM"]'),
+    'workspace runs while another group is selected',
+  );
+  check(
+    document.querySelector<HTMLButtonElement>(
+      '#available-case-diagnostics button[aria-label^="Add E3SM"]',
+    )?.disabled,
+    'Workspace Add counts staged runs outside the selected group',
+  );
   localStorage.removeItem('simboard.diagnostics-comparison');
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
   render('/case/alpha');
