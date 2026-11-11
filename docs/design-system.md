@@ -5,7 +5,7 @@ SimBoard UI conventions for the React, Tailwind CSS, and shadcn/ui frontend. Sou
 ## Principles
 
 - **Data first.** Pages exist to find, inspect, and compare simulation metadata. Favor dense, scannable tables and label/value grids over decoration.
-- **Neutral identity.** shadcn `new-york` style on the `neutral` base color. Color signals state (status, errors, warnings, info), not branding.
+- **Neutral identity.** shadcn `new-york` style on the `slate` base color. Color signals state (status, errors, warnings, info), not branding. [#456](https://github.com/E3SM-Project/simboard/issues/456) tracks an E3SM-inspired palette.
 - **Progressive disclosure.** Show common controls first; put secondary filters, details, and history behind collapsibles, expandable rows, popovers, and dialogs.
 - **Explicit, independent state.** Every data view handles loading, refreshing, empty, and error states in its own area, so one slow or failed request never blanks the rest of the page.
 
