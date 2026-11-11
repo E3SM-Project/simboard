@@ -728,7 +728,8 @@ export const CaseDetailsPage = ({
   const filteredExecutionCount = filteredFlatExecutions.length;
   const activeExecutionCount =
     viewMode === 'grouped' ? filteredExecutionGroups.length : filteredExecutionCount;
-  const totalExecutionCount = viewMode === 'grouped' ? executionGroups.length : executionTotal;
+  const totalExecutionCount =
+    viewMode === 'grouped' ? executionGroups.length : caseRecord.executions.length;
   const showingFallbackOnlyGroup =
     viewMode === 'grouped' &&
     filteredExecutionGroups.length === 1 &&

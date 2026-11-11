@@ -2296,6 +2296,10 @@ async function checkSectionLoading() {
       </QueryClientProvider>,
     );
     await waitFor(() => findText('[role="status"]', 'Loading executions'), 'executions loader');
+    check(
+      findText('span', `Showing ${executions.length} of ${executions.length} executions`),
+      'Executions toolbar count uses case summaries',
+    );
     notFoundObserver.disconnect();
     check(!sawCaseNotFound, 'Case details never shows "Case not found" while mounting');
     check(
@@ -2311,6 +2315,10 @@ async function checkSectionLoading() {
     check(
       !findText('[role="alert"]', 'Could not load more execution metadata'),
       'Executions error is shown once',
+    );
+    check(
+      findText('span', `Showing ${executions.length} of ${executions.length} executions`),
+      'Executions toolbar count stays consistent after an error',
     );
     api.defaults.adapter = originalAdapter;
     (findText('[role="alert"] button', 'Retry') as HTMLButtonElement).click();
