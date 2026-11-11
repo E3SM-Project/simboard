@@ -261,7 +261,7 @@ const renderResourceLink = (link: ExternalLinkOut) => (
     href={link.url}
     target="_blank"
     rel="noreferrer"
-    className="group inline-flex max-w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+    className="group inline-flex max-w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     aria-label={`${link.label || link.url} (${RESOURCE_KIND_DESCRIPTIONS[link.kind]})`}
   >
     <div className="min-w-0">
@@ -277,7 +277,7 @@ const renderResourceLink = (link: ExternalLinkOut) => (
         </Badge>
       </div>
     </div>
-    <div className="flex shrink-0 items-center gap-1 text-slate-400 transition-colors group-hover:text-slate-600 group-focus-visible:text-slate-600">
+    <div className="flex shrink-0 items-center gap-1 text-muted-foreground transition-colors group-hover:text-foreground group-focus-visible:text-foreground">
       <ExternalLink className="h-3.5 w-3.5" />
       <span className="sr-only">Opens in a new tab</span>
     </div>
@@ -1180,7 +1180,7 @@ export const CaseDetailsPage = ({
                   }
                 />
                 <div className="relative w-full sm:w-64">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     value={executionQuery}
                     onChange={(event) => setExecutionQuery(event.target.value)}
@@ -1279,7 +1279,7 @@ export const CaseDetailsPage = ({
                                     <TooltipTrigger asChild>
                                       <button
                                         type="button"
-                                        className="text-slate-400 transition-colors hover:text-slate-600"
+                                        className="text-muted-foreground transition-colors hover:text-foreground"
                                         aria-label="Explain case hash grouping"
                                       >
                                         <Info className="h-3.5 w-3.5" />

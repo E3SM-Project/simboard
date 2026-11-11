@@ -138,7 +138,7 @@ const SortHeader = ({
           <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
         )
       ) : (
-        <SlidersHorizontal className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+        <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
       )}
     </button>
   );
@@ -203,7 +203,7 @@ export const CaseArtifactsTable = ({
         <>
           <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative w-full sm:max-w-sm">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}

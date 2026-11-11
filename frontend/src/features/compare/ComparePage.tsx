@@ -1079,7 +1079,7 @@ export const CompareWorkspace = ({
                   >
                     <div className="flex items-start gap-3">
                       <GripVertical
-                        className="mt-0.5 h-4 w-4 shrink-0 cursor-grab text-slate-400"
+                        className="mt-0.5 h-4 w-4 shrink-0 cursor-grab text-muted-foreground"
                         aria-hidden="true"
                       />
                       <div className="min-w-0 flex-1">
@@ -1169,7 +1169,7 @@ export const CompareWorkspace = ({
               return (
                 <Fragment key={section.key}>
                   <button
-                    className={`flex w-full border-b border-slate-200 text-left transition focus:outline-none ${
+                    className={`flex w-full border-b border-slate-200 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
                       expandedSections[section.key]
                         ? 'bg-slate-100 text-slate-900'
                         : 'bg-slate-50 text-slate-700 hover:bg-slate-100'

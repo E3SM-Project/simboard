@@ -935,7 +935,7 @@ export const CasesPage = () => {
                       Search
                     </label>
                     <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         id="cases-search"
                         placeholder="Search case name…"
@@ -1096,7 +1096,7 @@ export const CasesPage = () => {
                   <button
                     type="button"
                     aria-label={`Remove ${filter.label} filter`}
-                    className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     onClick={() => removeFilter(filter.key)}
                   >
                     <X className="h-3.5 w-3.5" />
