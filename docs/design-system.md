@@ -154,7 +154,7 @@ Every dialog has a `DialogTitle` and `DialogDescription`, and returns focus to i
 
 ## Known deviations
 
-These exist in the code but are not conventions. Do not copy them into new work.
+These exist in the code but are not conventions. Do not copy them into new work. Proposed fixes are in the [design review](github-issues/451-design-system/design-review.md).
 
 - Neutral colors mix raw `slate-*` (catalog, compare), raw `gray-*` (upload), and semantic tokens. Prefer semantic tokens for new neutral UI until [#452](https://github.com/E3SM-Project/simboard/issues/452) decides the target.
 - `.dark` tokens exist but dark mode is not supported (no toggle, many `bg-white` surfaces). Tracked in #452.
