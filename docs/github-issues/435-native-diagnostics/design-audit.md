@@ -36,11 +36,11 @@ New patterns the design system does not cover. Each decision lists the docs and 
   - Keep the `document.body` padding. No layout shell exists to hold an in-flow spacer, and a spacer would need the same height measurement.
 - **D3. Discovery state storage.** Case browser search, selected case, page, and tool/analysis filters persist in `localStorage` (`workspaceState.ts`), not URL search params.
   - **Decision:** Keep `localStorage` and document it as an exception to the URL-state rule. The case browser is a resumable workspace, not a shareable view. `/diagnostics` and `/diagnostics/compare` share `ComparePage`, and the browser also runs inside the "Edit runs" dialog, so discovery params would pollute the shareable comparison URL. "Back to Diagnostics" relies on stored state to restore the user's place. Comparison view state (runs, set, plot, variable filter) stays in the URL.
-  - [ ] Stop persisting `page`. Restoring it as `initialPageParam` (`RunEditor.tsx:546`) loads page N without pages 1 to N−1, with no way back except changing the search. Restore from page 1 instead, and if the saved `caseId` is not loaded, show it pinned above the list.
+  - [x] Fix restore of a case picked after "Load more". The saved `page` was used as `initialPageParam`, so page N loaded without pages 1 to N−1. The browser now starts at page 1 and loads pages up to the saved one, keeping the list complete and the case selected.
 - **D4. Case browser paging.** "Load more cases" differs from the Previous/Next pagination convention.
   - **Decision:** Keep "Load more". Each API page of 10 cases is filtered on the client to cases with supported runs, so Previous/Next would often show empty or short pages.
   - [x] Add to `docs/design-system.md`: use Previous/Next for server-filtered results and "Load more" when results are filtered on the client after fetching.
-  - [ ] Show progress next to the button, for example "Checked 30 of 212 cases · 4 with diagnostics", so users know how far the search has gone.
+  - [x] Show progress next to the button, for example "Checked 30 of 212 cases · 4 with diagnostics", so users know how far the search has gone.
 - **D5. Vocabulary and shortcuts.** UI text mixes "tray", "active runs", "selected runs", "staged", "Comparison Group", and "Diagnostic category". `j`/`k` and arrow-key variable stepping is not discoverable.
   - **Decision:** Use one term per concept in UI text. Code names (`tray`, `basket`, `staged`) may stay.
 

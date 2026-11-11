@@ -528,6 +528,8 @@ const CaseBrowser = ({
   const [page, setPage] = useState(saved.page);
   const [analysis, setAnalysis] = useState(saved.analysis);
   const [tool, setTool] = useState(saved.tool);
+  // The saved case may be on a later page; reload pages up to it so the list stays complete.
+  const [restoreTo, setRestoreTo] = useState(saved.page);
   useEffect(
     () => saveWorkspace({ search, caseId, analysis, tool, page }),
     [search, caseId, analysis, tool, page],
@@ -538,12 +540,13 @@ const CaseBrowser = ({
       setDebounced(search.trim());
       setCaseId(null);
       setPage(1);
+      setRestoreTo(1);
     }, 300);
     return () => clearTimeout(timer);
   }, [search, debounced]);
   const query = useInfiniteQuery({
     queryKey: ['diagnostics', 'supported-cases', debounced],
-    initialPageParam: debounced === saved.search.trim() ? saved.page : 1,
+    initialPageParam: 1,
     queryFn: async ({ pageParam, signal }) => {
       const page = await listCases({
         search: debounced || undefined,
@@ -586,6 +589,7 @@ const CaseBrowser = ({
       return {
         cases,
         page: page.page,
+        total: page.total,
         nextPage: page.page * page.pageSize < page.total ? page.page + 1 : undefined,
       };
     },
@@ -593,11 +597,19 @@ const CaseBrowser = ({
     staleTime: 10 * 60_000,
     retry: false,
   });
+  const { fetchNextPage, hasNextPage, isError, isFetching } = query;
+  const loadedPages = query.data?.pages.length ?? 0;
+  const restoring = loadedPages > 0 && loadedPages < restoreTo && hasNextPage && !isError;
+  useEffect(() => {
+    if (restoring && !isFetching) void fetchNextPage();
+  }, [restoring, isFetching, fetchNextPage, loadedPages]);
   const checked = query.data?.pages.flatMap((page) => page.cases) ?? [];
+  const total = query.data?.pages[loadedPages - 1]?.total ?? 0;
   const supported = checked.filter((item) =>
     item.diagnostics?.sources.some((source) => source.runs.length),
   );
-  const selected = supported.find((item) => item.record.id === caseId) ?? supported[0];
+  const selected =
+    supported.find((item) => item.record.id === caseId) ?? (restoring ? undefined : supported[0]);
   const incomplete = checked.filter(
     (item) =>
       !item.diagnostics ||
@@ -755,7 +767,7 @@ const CaseBrowser = ({
           </ul>
         </div>
         {query.hasNextPage ? (
-          <div className="border-t p-2">
+          <div className="flex flex-wrap items-center gap-2 border-t p-2">
             <Button
               type="button"
               size="sm"
@@ -765,6 +777,9 @@ const CaseBrowser = ({
             >
               Load more cases
             </Button>
+            <p className="text-xs text-muted-foreground" aria-live="polite">
+              Checked {checked.length} of {total} cases · {supported.length} with diagnostics
+            </p>
           </div>
         ) : null}
       </section>

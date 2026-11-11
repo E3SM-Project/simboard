@@ -2326,6 +2326,10 @@ async function testDenseBrowser() {
     () => document.querySelector('[aria-label="Browse cases"] ul')?.children.length === 6,
     'first dense page',
   );
+  check(
+    document.body.textContent?.includes('Checked 6 of 18 cases · 6 with diagnostics'),
+    'Discovery progress shows checked and supported counts',
+  );
   click(button('Load more cases'), 'second dense page');
   await waitFor(
     () => document.querySelector('[aria-label="Browse cases"] ul')?.children.length === 12,
@@ -2415,6 +2419,30 @@ async function testDenseBrowser() {
     'Only compact comparison controls stay sticky',
   );
   click(button('Cancel'), 'close large editor');
+
+  render('/diagnostics');
+  await waitFor(
+    () => document.querySelector('[aria-label="Browse cases"] ul')?.children.length === 18,
+    'dense pages before restore',
+  );
+  const lastCase = () =>
+    document.querySelector<HTMLButtonElement>('[aria-label="Browse cases"] li:last-child button');
+  click(lastCase(), 'select case from third page');
+  await waitFor(() => lastCase()?.getAttribute('aria-pressed') === 'true', 'third-page case');
+  render('/case/raw-only');
+  await waitFor(
+    () => document.querySelector('h1')?.textContent === 'Case raw-only',
+    'leave dense browser',
+  );
+  client.clear();
+  render('/diagnostics');
+  await waitFor(
+    () =>
+      document.querySelector('[aria-label="Browse cases"] ul')?.children.length === 18 &&
+      lastCase()?.getAttribute('aria-pressed') === 'true',
+    'Restore reloads earlier pages and keeps the third-page case selected',
+  );
+  check(!button('Load more cases'), 'Restored discovery is complete');
 }
 
 async function testComparisonGroups() {
