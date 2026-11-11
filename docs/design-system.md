@@ -139,7 +139,7 @@ Apply these to new and changed UI.
 
 These exist in the code but are not conventions. Do not copy them into new work:
 
-- Blue-tinted highlight sections on About and in the Compare change summary. [#456](https://github.com/E3SM-Project/simboard/issues/456) will define an accent color for these.
+- A blue-tinted highlight section on About. [#456](https://github.com/E3SM-Project/simboard/issues/456) will define an accent color for it.
 - Whole-page loaders that wait for one section's data: Home (catalog overview), Cases (case list), and Case details (executions). Tracked in [#454](https://github.com/E3SM-Project/simboard/issues/454).
 
 Decisions and rationale are in the [design review](github-issues/451-design-system/design-review.md#decisions-452).
