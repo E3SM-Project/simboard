@@ -18,10 +18,11 @@ Implement SimBoard frontend behavior in the existing React, TypeScript, Vite, Ta
 ## Workflow
 
 1. Inspect the target feature, route file, API module, hooks, and nearby UI before editing.
-2. Reuse the current feature structure and boundary-safe import patterns.
-3. Match the touched area's data-fetching style instead of forcing a repo-wide abstraction change.
-4. Preserve app-level shared state flows when relevant, especially selection state threaded through `frontend/src/App.tsx` and `frontend/src/routes/routes.tsx`.
-5. Validate with `make frontend-lint` and `pnpm --dir frontend run type-check`.
+2. For UI changes, follow `docs/design-system.md`. Use the `ui-ux` skill first when the change needs a usability evaluation or a significant interaction design decision.
+3. Reuse the current feature structure and boundary-safe import patterns.
+4. Match the touched area's data-fetching style instead of forcing a repo-wide abstraction change.
+5. Preserve app-level shared state flows when relevant, especially selection state threaded through `frontend/src/App.tsx` and `frontend/src/routes/routes.tsx`.
+6. Validate with `make frontend-lint` and `pnpm --dir frontend run type-check`. For UI changes, also check design-system consistency, responsive layout, and keyboard access.
 
 ## Repo Rules
 
