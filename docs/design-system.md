@@ -31,6 +31,7 @@ SimBoard-specific primitives:
 - `LoadingState` (`components/ui/loading-state.tsx`): loading indicator with `page`, `section`, and `inline` kinds.
 - `Alert` (`components/ui/alert.tsx`): inline notice with `error`, `warning`, and `info` variants. Use it instead of repeating state-color classes. Errors use `role="alert"` and other variants `role="status"`; pass `role="group"` when the alert contains its own live regions or receives focus, to avoid duplicate announcements.
 - `TableCellText` (`components/ui/table-cell-text.tsx`): truncates cell text, exposes the full value, and renders `—` for empty values.
+- `SortableTableHead` (`components/ui/sortable-table-head.tsx`): sortable header cell with `aria-sort`, a direction icon, and a labeled sort button.
 
 Use `Button size="sm"` in toolbars and tables. Override primitive classes with `className` and `cn()` only for layout, spacing, or radius, not to restyle a variant.
 
@@ -47,7 +48,7 @@ Use `Button size="sm"` in toolbars and tables. Override primitive classes with `
 - Use `Table` primitives inside an `overflow-x-auto` container. Wide tables scroll horizontally instead of hiding columns; optional columns are user-controlled through column menus.
 - Use `TableCellText` for variable-length values, and `table-fixed` with column widths when columns need stable widths.
 - Use `@tanstack/react-table` for sorted or paginated tables (`features/catalog/CasesPage.tsx`). Simple read-only tables map rows directly.
-- Sortable headers: a `button` inside `TableHead`, with `aria-sort` and a direction icon. Canonical: `ExecutionSortHeader` in `features/catalog/components/CaseExecutionsTable.tsx`.
+- Use `SortableTableHead` for header-sorted tables. With TanStack, pass `column.getIsSorted()` and `column.toggleSorting()` (`features/catalog/CasesPage.tsx`).
 - Expandable rows: an icon `Button` with `aria-expanded` toggles a full-width detail row. See `features/catalog/CasesPage.tsx`.
 - Long tables use a sticky header inside a height-limited scroll area.
 - Pagination sits below the table: result count on the left, `Previous`/`Next` and the page number on the right.

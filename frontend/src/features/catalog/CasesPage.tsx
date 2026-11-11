@@ -1,16 +1,6 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import {
-  ArrowUpDown,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  Copy,
-  Info,
-  Search,
-  SlidersHorizontal,
-  X,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, Info, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
@@ -20,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { LoadingState } from '@/components/ui/loading-state';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import {
   Table,
   TableBody,
@@ -1120,33 +1111,20 @@ export const CasesPage = () => {
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
-                    const sorted = header.column.getIsSorted();
-                    const SortIcon =
-                      sorted === 'asc' ? ChevronUp : sorted === 'desc' ? ChevronDown : ArrowUpDown;
-                    const ariaSort = sorted
-                      ? sorted === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : undefined;
                     const headerContent = header.isPlaceholder
                       ? null
                       : flexRender(header.column.columnDef.header, header.getContext());
+                    const { header: label } = header.column.columnDef;
 
-                    return (
-                      <TableHead key={header.id} aria-sort={ariaSort}>
-                        {header.column.getCanSort() ? (
-                          <button
-                            type="button"
-                            className="inline-flex select-none items-center gap-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            onClick={header.column.getToggleSortingHandler()}
-                          >
-                            {headerContent}
-                            <SortIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                          </button>
-                        ) : (
-                          headerContent
-                        )}
-                      </TableHead>
+                    return header.column.getCanSort() && typeof label === 'string' ? (
+                      <SortableTableHead
+                        key={header.id}
+                        label={label}
+                        direction={header.column.getIsSorted()}
+                        onSort={() => header.column.toggleSorting()}
+                      />
+                    ) : (
+                      <TableHead key={header.id}>{headerContent}</TableHead>
                     );
                   })}
                 </TableRow>

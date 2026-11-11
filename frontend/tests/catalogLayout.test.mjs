@@ -943,3 +943,22 @@ test('execution status badge maps statuses to shared tones with a readable fallb
   assert.match(fallback, />Archived<\/div>$/);
   assert.doesNotMatch(fallback, /<svg/);
 });
+
+test('sortable table head exposes sort state on the header and its button', async () => {
+  const { SortableTableHead } = await server.ssrLoadModule(
+    '/src/components/ui/sortable-table-head.tsx',
+  );
+  const render = (direction) =>
+    renderToStaticMarkup(
+      createElement(SortableTableHead, { label: 'Run dates', direction, onSort: () => {} }),
+    );
+
+  const ascending = render('asc');
+  assert.match(ascending, /<th [^>]*aria-sort="ascending"/);
+  assert.match(ascending, /aria-label="Sort by Run dates, currently ascending"/);
+  assert.match(render('desc'), /<th [^>]*aria-sort="descending"/);
+
+  const unsorted = render(false);
+  assert.doesNotMatch(unsorted, /aria-sort/);
+  assert.match(unsorted, /aria-label="Sort by Run dates, currently not sorted"/);
+});

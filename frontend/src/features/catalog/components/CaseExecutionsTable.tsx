@@ -1,4 +1,4 @@
-import { ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import {
   Table,
   TableBody,
@@ -208,23 +209,10 @@ const ExecutionSortHeader = ({
   sortKey: ExecutionDateSort['key'];
   sort: ExecutionDateSort;
   onSort: (key: ExecutionDateSort['key']) => void;
-}) => {
-  const direction =
-    sort.key === sortKey ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none';
-  const Icon =
-    direction === 'none' ? ArrowUpDown : direction === 'ascending' ? ChevronUp : ChevronDown;
-
-  return (
-    <TableHead aria-sort={direction === 'none' ? undefined : direction}>
-      <button
-        type="button"
-        className="inline-flex items-center gap-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-        onClick={() => onSort(sortKey)}
-        aria-label={`Sort by ${label}, currently ${direction === 'none' ? 'not sorted' : direction}`}
-      >
-        {label}
-        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-      </button>
-    </TableHead>
-  );
-};
+}) => (
+  <SortableTableHead
+    label={label}
+    direction={sort.key === sortKey && sort.direction}
+    onSort={() => onSort(sortKey)}
+  />
+);

@@ -1,25 +1,12 @@
-import {
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
-  List,
-  Search,
-  SlidersHorizontal,
-} from 'lucide-react';
+import { ExternalLink, List, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import type { ArtifactKind } from '@/types/artifact';
 
 export interface CaseArtifactValue {
@@ -103,47 +90,6 @@ const sortArtifacts = (
   });
 };
 
-const SortHeader = ({
-  children,
-  sortKey,
-  activeSortKey,
-  sortDirection,
-  onSort,
-}: {
-  children: string;
-  sortKey: ArtifactSortKey;
-  activeSortKey: ArtifactSortKey;
-  sortDirection: SortDirection;
-  onSort: (sortKey: ArtifactSortKey) => void;
-}) => {
-  const isActive = activeSortKey === sortKey;
-  const directionLabel = !isActive
-    ? 'not sorted'
-    : sortDirection === 'asc'
-      ? 'ascending'
-      : 'descending';
-
-  return (
-    <button
-      type="button"
-      className="inline-flex items-center gap-1 rounded-sm text-left hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-      onClick={() => onSort(sortKey)}
-      aria-label={`Sort by ${children}, currently ${directionLabel}`}
-    >
-      {children}
-      {isActive ? (
-        sortDirection === 'asc' ? (
-          <ChevronUp className="h-3.5 w-3.5" aria-hidden="true" />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-        )
-      ) : (
-        <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-      )}
-    </button>
-  );
-};
-
 export const CaseArtifactsTable = ({
   artifacts,
   totalArtifactCount,
@@ -180,9 +126,6 @@ export const CaseArtifactsTable = ({
     setSortKey(nextSortKey);
     setSortDirection('asc');
   };
-
-  const getAriaSort = (headerSortKey: ArtifactSortKey) =>
-    sortKey === headerSortKey ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined;
 
   return (
     <details className="space-y-4" aria-labelledby="artifacts-heading">
@@ -242,45 +185,24 @@ export const CaseArtifactsTable = ({
               <Table className="min-w-[680px]">
                 <TableHeader className="bg-slate-50">
                   <TableRow className="hover:bg-slate-50">
-                    <TableHead
+                    <SortableTableHead
                       className="sticky top-0 z-10 w-40 bg-slate-50"
-                      aria-sort={getAriaSort('kind')}
-                    >
-                      <SortHeader
-                        activeSortKey={sortKey}
-                        onSort={handleSort}
-                        sortDirection={sortDirection}
-                        sortKey="kind"
-                      >
-                        Type
-                      </SortHeader>
-                    </TableHead>
-                    <TableHead
+                      label="Type"
+                      direction={sortKey === 'kind' && sortDirection}
+                      onSort={() => handleSort('kind')}
+                    />
+                    <SortableTableHead
                       className="sticky top-0 z-10 bg-slate-50"
-                      aria-sort={getAriaSort('artifact')}
-                    >
-                      <SortHeader
-                        activeSortKey={sortKey}
-                        onSort={handleSort}
-                        sortDirection={sortDirection}
-                        sortKey="artifact"
-                      >
-                        Artifact
-                      </SortHeader>
-                    </TableHead>
-                    <TableHead
+                      label="Artifact"
+                      direction={sortKey === 'artifact' && sortDirection}
+                      onSort={() => handleSort('artifact')}
+                    />
+                    <SortableTableHead
                       className="sticky top-0 z-10 w-48 bg-slate-50"
-                      aria-sort={getAriaSort('executions')}
-                    >
-                      <SortHeader
-                        activeSortKey={sortKey}
-                        onSort={handleSort}
-                        sortDirection={sortDirection}
-                        sortKey="executions"
-                      >
-                        Executions
-                      </SortHeader>
-                    </TableHead>
+                      label="Executions"
+                      direction={sortKey === 'executions' && sortDirection}
+                      onSort={() => handleSort('executions')}
+                    />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
