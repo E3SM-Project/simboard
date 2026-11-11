@@ -460,7 +460,8 @@ export const CasesPage = () => {
     caseNameFilter.trim().length > 0 ||
     caseGroupFilter.length > 0 ||
     simulationType !== '' ||
-    hasActiveExecutionFilters;
+    hasActiveExecutionFilters ||
+    Boolean(legacyMachineId);
   const advancedFilterCount = useMemo(
     () =>
       [

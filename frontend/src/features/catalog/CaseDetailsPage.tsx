@@ -938,7 +938,7 @@ export const CaseDetailsPage = ({
             <div className="border-t border-border pt-3">
               <div className="space-y-3">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <h2 className="text-sm font-semibold text-foreground">Resources</h2>
+                  <h3 className="text-sm font-semibold text-foreground">Resources</h3>
                   {resourceCount > 0 ? (
                     <p className="text-sm text-muted-foreground">({resourceCount})</p>
                   ) : null}

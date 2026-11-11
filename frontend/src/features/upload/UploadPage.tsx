@@ -355,7 +355,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
 
         <div className="space-y-6">
           <section className="rounded-xl border bg-card p-6 shadow-sm">
-            <Alert variant="info" className="flex items-start gap-3 p-4">
+            <Alert variant="info" role="note" className="flex items-start gap-3 p-4">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="space-y-2">
                 <p>
@@ -469,7 +469,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                 </div>
               </div>
 
-              {archiveFile ? (
+              {archiveFile && !archiveFileError ? (
                 <Alert variant="success" className="mt-3 flex items-start gap-2">
                   <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>
@@ -480,7 +480,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
               ) : null}
 
               {archiveFileError ? (
-                <p id="upload-archive-error" className="mt-2 text-sm text-destructive">
+                <p id="upload-archive-error" role="alert" className="mt-2 text-sm text-destructive">
                   {archiveFileError}
                 </p>
               ) : null}

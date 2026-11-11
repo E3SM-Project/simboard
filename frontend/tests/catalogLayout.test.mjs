@@ -1024,7 +1024,7 @@ test('upload form uses labeled primitives and marks required fields', async () =
       /aria-required="true"/,
     );
     assert.equal(html.match(/<span class="sr-only">\(required\)<\/span>/g)?.length, 2);
-    assert.match(html, /role="status"[^>]*bg-sky-50/);
+    assert.match(html, /role="note"[^>]*bg-sky-50/);
   } finally {
     client.clear();
   }

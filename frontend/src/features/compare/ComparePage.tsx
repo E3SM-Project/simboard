@@ -756,7 +756,7 @@ export const CompareWorkspace = ({
                           type="button"
                           aria-label={`Hide ${column.executionHeader}`}
                           title="Hide execution (keep selected)"
-                          className="rounded p-1 hover:bg-muted"
+                          className="rounded p-1 hover:bg-card"
                           onClick={() => handleHide(column.colIdx)}
                         >
                           <EyeOff size={14} />
@@ -765,7 +765,7 @@ export const CompareWorkspace = ({
                           type="button"
                           aria-label={`Remove ${column.executionHeader}`}
                           title="Remove execution from selection"
-                          className="rounded p-1 hover:bg-muted"
+                          className="rounded p-1 hover:bg-card"
                           onClick={() => handleRemove(column.colIdx)}
                         >
                           <X size={14} />
@@ -910,9 +910,9 @@ export const CompareWorkspace = ({
             <div id="compare-change-summary">
               <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-foreground">
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-foreground">
                     Change Summary
-                  </h2>
+                  </h3>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Compact diff summary for the highest-signal fields across selected executions.
                   </p>

@@ -366,7 +366,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
         </div>
       </section>
       <section className="mx-auto mt-10 w-full max-w-7xl rounded-xl border border-muted p-6">
-        <h2 className="text-lg font-semibold text-foreground">Catalog at a glance</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Catalog at a glance</h2>
         <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3">
           <div>
             <dt className="text-sm text-muted-foreground">Cases</dt>
