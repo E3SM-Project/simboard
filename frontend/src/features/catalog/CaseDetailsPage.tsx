@@ -261,17 +261,17 @@ const renderResourceLink = (link: ExternalLinkOut) => (
     href={link.url}
     target="_blank"
     rel="noreferrer"
-    className="group inline-flex max-w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    className="group inline-flex max-w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     aria-label={`${link.label || link.url} (${RESOURCE_KIND_DESCRIPTIONS[link.kind]})`}
   >
     <div className="min-w-0">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <p className="break-all text-sm font-medium leading-5 text-slate-900">
+        <p className="break-all text-sm font-medium leading-5 text-foreground">
           {link.label || link.url}
         </p>
         <Badge
           variant="outline"
-          className="h-5 rounded-full border-slate-200 px-2 text-[11px] font-medium text-slate-600"
+          className="h-5 rounded-full border-border px-2 text-[11px] font-medium text-muted-foreground"
         >
           {RESOURCE_GROUP_LABELS[link.kind]}
         </Badge>
@@ -638,7 +638,7 @@ export const CaseDetailsPage = ({
   if (!readableIdentity) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-gray-500">Invalid case identity</div>
+        <div className="text-center text-muted-foreground">Invalid case identity</div>
       </div>
     );
   }
@@ -675,7 +675,7 @@ export const CaseDetailsPage = ({
   if (!caseRecord) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-gray-500">Case not found</div>
+        <div className="text-center text-muted-foreground">Case not found</div>
       </div>
     );
   }
@@ -846,9 +846,9 @@ export const CaseDetailsPage = ({
       </div>
 
       <div>
-        <Card className="border-slate-200 bg-slate-50/40 shadow-sm" data-case-metadata>
+        <Card className="border-border bg-muted-subtle/40 shadow-sm" data-case-metadata>
           <CardContent className="space-y-4 p-4">
-            <h2 className="text-lg font-semibold text-slate-950">Case Metadata</h2>
+            <h2 className="text-lg font-semibold text-foreground">Case Metadata</h2>
 
             {formState ? (
               <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -935,12 +935,12 @@ export const CaseDetailsPage = ({
               <CaseConfigurationDetails record={caseRecord} identity={readableIdentity} />
             ) : null}
 
-            <div className="border-t border-slate-200 pt-3">
+            <div className="border-t border-border pt-3">
               <div className="space-y-3">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <h2 className="text-sm font-semibold text-slate-950">Resources</h2>
+                  <h2 className="text-sm font-semibold text-foreground">Resources</h2>
                   {resourceCount > 0 ? (
-                    <p className="text-sm text-slate-500">({resourceCount})</p>
+                    <p className="text-sm text-muted-foreground">({resourceCount})</p>
                   ) : null}
                 </div>
 
@@ -963,7 +963,7 @@ export const CaseDetailsPage = ({
                     {resourceLinks.map(renderResourceLink)}
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-500">No linked resources yet.</p>
+                  <p className="text-sm text-muted-foreground">No linked resources yet.</p>
                 )}
               </div>
             </div>
@@ -972,11 +972,11 @@ export const CaseDetailsPage = ({
       </div>
 
       <section>
-        <Card className="border-slate-200 shadow-sm">
+        <Card className="border-border shadow-sm">
           <CardContent className="space-y-5 p-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-slate-950">Case Notes</h2>
+                <h2 className="text-lg font-semibold text-foreground">Case Notes</h2>
               </div>
               <div className="flex flex-col items-start gap-2 sm:items-end">
                 {!canEdit ? (
@@ -1125,8 +1125,8 @@ export const CaseDetailsPage = ({
         aria-label="Case executions"
         className="space-y-4"
       >
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="rounded-2xl border border-border bg-card shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-border px-5 py-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-2">
               <h2 className="text-xl font-semibold">Executions</h2>
               <p className="max-w-3xl text-sm text-muted-foreground" data-execution-instructions>
@@ -1144,7 +1144,7 @@ export const CaseDetailsPage = ({
                 {showCaseHashContext ? (
                   <>
                     <div
-                      className="inline-flex rounded-lg border bg-slate-50 p-1"
+                      className="inline-flex rounded-lg border bg-muted-subtle p-1"
                       role="group"
                       aria-label="Execution view"
                     >
@@ -1192,7 +1192,7 @@ export const CaseDetailsPage = ({
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span>{statusSummary}</span>
               </div>
               <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -1200,13 +1200,13 @@ export const CaseDetailsPage = ({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 px-2 text-xs text-slate-500"
+                    className="h-8 px-2 text-xs text-muted-foreground"
                     onClick={() => caseId && setSelectedCaseExecutionIdsForCase(caseId, [])}
                   >
                     Clear selection
                   </Button>
                 ) : null}
-                <span className="text-xs text-slate-500" aria-live="polite">
+                <span className="text-xs text-muted-foreground" aria-live="polite">
                   {caseSelectedExecutionCount} selected
                 </span>
                 <Button
@@ -1221,7 +1221,7 @@ export const CaseDetailsPage = ({
             </div>
 
             {hiddenSelectedCount > 0 ? (
-              <div className="mt-3 text-xs text-slate-500">
+              <div className="mt-3 text-xs text-muted-foreground">
                 {hiddenSelectedCount} selected{' '}
                 {hiddenSelectedCount === 1 ? 'execution is' : 'executions are'} in filtered-out
                 groups.
@@ -1229,14 +1229,14 @@ export const CaseDetailsPage = ({
             ) : null}
           </div>
 
-          <div className="border-t border-slate-200 px-5 py-4">
+          <div className="border-t border-border px-5 py-4">
             <div className={useScrollableGroupsPanel ? 'lg:max-h-[70vh] lg:overflow-y-auto' : ''}>
               <div className="space-y-4">
                 {(viewMode === 'grouped'
                   ? filteredExecutionGroups.length
                   : filteredFlatExecutions.length) === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-6 py-10 text-center">
-                    <p className="text-sm font-medium text-slate-900">
+                  <div className="rounded-xl border border-dashed border-border bg-muted-subtle/40 px-6 py-10 text-center">
+                    <p className="text-sm font-medium text-foreground">
                       {viewMode === 'grouped'
                         ? 'No Case Hash groups match these filters.'
                         : 'No executions match these filters.'}
@@ -1260,7 +1260,7 @@ export const CaseDetailsPage = ({
                     {...executionTableProps}
                   />
                 ) : (
-                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-background">
+                  <div className="overflow-hidden rounded-xl border border-border bg-background">
                     <div className="max-h-[42rem] overflow-auto">
                       <Table className="min-w-[640px] table-fixed">
                         <colgroup>
@@ -1269,9 +1269,9 @@ export const CaseDetailsPage = ({
                           <col style={{ width: '30%' }} />
                           <col style={{ width: '18%' }} />
                         </colgroup>
-                        <TableHeader className="sticky top-0 z-10 bg-slate-50">
-                          <TableRow className="hover:bg-slate-50">
-                            <TableHead className="bg-slate-50">
+                        <TableHeader className="sticky top-0 z-10 bg-muted-subtle">
+                          <TableRow className="hover:bg-muted-subtle">
+                            <TableHead className="bg-muted-subtle">
                               <div className="flex items-center gap-1.5">
                                 <span>Case Hash group</span>
                                 <TooltipProvider delayDuration={150}>
@@ -1292,9 +1292,11 @@ export const CaseDetailsPage = ({
                                 </TooltipProvider>
                               </div>
                             </TableHead>
-                            <TableHead className="w-24 bg-slate-50">Executions</TableHead>
-                            <TableHead className="bg-slate-50">Simulation period range</TableHead>
-                            <TableHead className="bg-slate-50">Actions</TableHead>
+                            <TableHead className="w-24 bg-muted-subtle">Executions</TableHead>
+                            <TableHead className="bg-muted-subtle">
+                              Simulation period range
+                            </TableHead>
+                            <TableHead className="bg-muted-subtle">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1311,7 +1313,7 @@ export const CaseDetailsPage = ({
                             return (
                               <Fragment key={group.key}>
                                 <TableRow
-                                  className="bg-white hover:bg-slate-50/80"
+                                  className="bg-card hover:bg-muted-subtle/80"
                                   data-case-hash-baseline={
                                     group.key === baselineGroup?.key ? 'true' : undefined
                                   }
@@ -1325,14 +1327,14 @@ export const CaseDetailsPage = ({
                                       aria-controls={groupPanelId}
                                     >
                                       <ChevronDown
-                                        className={`mt-0.5 h-4 w-4 shrink-0 text-slate-500 transition-transform ${
+                                        className={`mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
                                           isOpen ? '' : '-rotate-90'
                                         }`}
                                       />
                                       <div className="min-w-0 space-y-1">
                                         <div className="flex flex-wrap items-center gap-2">
                                           <span
-                                            className="truncate font-mono text-xs font-semibold text-slate-950 sm:text-sm"
+                                            className="truncate font-mono text-xs font-semibold text-foreground sm:text-sm"
                                             title={group.caseHash ?? MISSING_CASE_HASH_LABEL}
                                           >
                                             {group.isFallback
@@ -1378,11 +1380,11 @@ export const CaseDetailsPage = ({
                                   </TableCell>
                                 </TableRow>
                                 {isOpen ? (
-                                  <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
+                                  <TableRow className="bg-muted-subtle/50 hover:bg-muted-subtle/50">
                                     <TableCell colSpan={4} className="p-0">
                                       <div
                                         id={groupPanelId}
-                                        className="border-t border-slate-200 px-4 py-3"
+                                        className="border-t border-border px-4 py-3"
                                       >
                                         <CaseExecutionsTable
                                           executions={group.executions}
@@ -1422,8 +1424,8 @@ export const CaseDetailsPage = ({
           ) : null}
 
           {hasNextPage ? (
-            <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-5 py-4">
-              <p className="text-sm text-slate-600">
+            <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-4">
+              <p className="text-sm text-muted-foreground">
                 Loaded metadata for {allExecutions.length} of {executionTotal} executions. ID and
                 simulation-date search and grouping include all case executions. Run-date and
                 metadata search use loaded metadata only.
@@ -1443,7 +1445,7 @@ export const CaseDetailsPage = ({
             </div>
           ) : null}
 
-          <div className="border-t border-slate-200 px-5 py-5">
+          <div className="border-t border-border px-5 py-5">
             <CaseArtifactsTable
               artifacts={artifactValues}
               totalArtifactCount={caseRecord.artifacts.length}
@@ -1498,7 +1500,7 @@ export const CaseDetailsPage = ({
       </Dialog>
 
       {!authLoading && user?.is_superuser === true ? (
-        <details className="rounded-xl border border-slate-200 p-5">
+        <details className="rounded-xl border border-border p-5">
           <summary className="cursor-pointer text-sm font-semibold">Developer Details</summary>
           <div className="mt-4">
             <PerformanceSourceDirectories directories={caseRecord.sourceDirectories} />

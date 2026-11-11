@@ -23,7 +23,7 @@ export const AboutPage = () => (
         detailed records behind it.
       </p>
     </section>
-    <section className="rounded-2xl border border-muted bg-white p-6 shadow-sm">
+    <section className="rounded-2xl border border-muted bg-card p-6 shadow-sm">
       <h2 className="text-2xl font-semibold">What you can do</h2>
       <ul className="mt-4 list-disc space-y-2 pl-5 leading-7 text-muted-foreground">
         <li>Discover cases and refine the catalog by machine, user, and execution context.</li>
@@ -47,7 +47,7 @@ export const AboutPage = () => (
             href={resource.href}
             target="_blank"
             rel="noreferrer"
-            className="rounded-xl border border-muted bg-white p-5 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+            className="rounded-xl border border-muted bg-card p-5 shadow-sm transition hover:border-border hover:bg-muted-subtle"
           >
             <span className="flex items-center gap-2 font-semibold">
               <ExternalLink className="h-4 w-4" />

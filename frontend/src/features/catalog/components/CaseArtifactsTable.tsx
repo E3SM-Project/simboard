@@ -130,28 +130,28 @@ export const CaseArtifactsTable = ({
   return (
     <details className="space-y-4" aria-labelledby="artifacts-heading">
       <summary className="cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-        <h3 id="artifacts-heading" className="inline text-lg font-semibold text-slate-950">
+        <h3 id="artifacts-heading" className="inline text-lg font-semibold text-foreground">
           Artifacts
         </h3>
-        <span className="ml-2 text-sm text-slate-500">
+        <span className="ml-2 text-sm text-muted-foreground">
           {totalArtifactCount} records · {artifacts.length} unique values
         </span>
       </summary>
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-muted-foreground">
         Files, directories, and scripts recorded for executions in this case. Each row shows a
         unique value and its linked executions.
       </p>
 
       {artifacts.length > 0 ? (
         <>
-          <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted-subtle/70 p-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative w-full sm:max-w-sm">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search artifact names or paths"
-                className="bg-white pl-9"
+                className="bg-card pl-9"
                 aria-label="Search artifact names or paths"
               />
             </div>
@@ -181,24 +181,24 @@ export const CaseArtifactsTable = ({
           </div>
 
           {visibleArtifacts.length > 0 ? (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white [&>div]:max-h-[28rem]">
+            <div className="overflow-hidden rounded-xl border border-border bg-card [&>div]:max-h-[28rem]">
               <Table className="min-w-[680px]">
-                <TableHeader className="bg-slate-50">
-                  <TableRow className="hover:bg-slate-50">
+                <TableHeader className="bg-muted-subtle">
+                  <TableRow className="hover:bg-muted-subtle">
                     <SortableTableHead
-                      className="sticky top-0 z-10 w-40 bg-slate-50"
+                      className="sticky top-0 z-10 w-40 bg-muted-subtle"
                       label="Type"
                       direction={sortKey === 'kind' && sortDirection}
                       onSort={() => handleSort('kind')}
                     />
                     <SortableTableHead
-                      className="sticky top-0 z-10 bg-slate-50"
+                      className="sticky top-0 z-10 bg-muted-subtle"
                       label="Artifact"
                       direction={sortKey === 'artifact' && sortDirection}
                       onSort={() => handleSort('artifact')}
                     />
                     <SortableTableHead
-                      className="sticky top-0 z-10 w-48 bg-slate-50"
+                      className="sticky top-0 z-10 w-48 bg-muted-subtle"
                       label="Executions"
                       direction={sortKey === 'executions' && sortDirection}
                       onSort={() => handleSort('executions')}
@@ -224,7 +224,7 @@ export const CaseArtifactsTable = ({
                           <div className="min-w-0 space-y-1">
                             <div className="flex min-w-0 items-center gap-1.5">
                               <p
-                                className="truncate font-medium text-slate-950"
+                                className="truncate font-medium text-foreground"
                                 title={displayName}
                               >
                                 {displayName}
@@ -234,7 +234,7 @@ export const CaseArtifactsTable = ({
                                   href={artifact.uri}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="shrink-0 text-slate-500 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                  className="shrink-0 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                   aria-label={`Open ${displayName} in a new tab`}
                                   title="Open in a new tab"
                                 >
@@ -243,7 +243,7 @@ export const CaseArtifactsTable = ({
                               ) : null}
                             </div>
                             <code
-                              className="block truncate text-xs text-slate-600"
+                              className="block truncate text-xs text-muted-foreground"
                               title={artifact.uri}
                             >
                               {artifact.uri}
@@ -269,13 +269,13 @@ export const CaseArtifactsTable = ({
                                 </Button>
                               </PopoverTrigger>
                               <PopoverContent align="start" className="w-80 p-3">
-                                <p className="text-sm font-medium text-slate-950">
+                                <p className="text-sm font-medium text-foreground">
                                   Linked executions
                                 </p>
                                 <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto">
                                   {artifact.executionIds.map((executionId) => (
                                     <li key={executionId}>
-                                      <code className="block rounded bg-slate-100 px-2 py-1 font-mono text-xs text-slate-800">
+                                      <code className="block rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
                                         {executionId}
                                       </code>
                                     </li>
@@ -292,8 +292,8 @@ export const CaseArtifactsTable = ({
               </Table>
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/40 px-6 py-10 text-center">
-              <p className="text-sm font-medium text-slate-900">
+            <div className="rounded-xl border border-dashed border-border bg-muted-subtle/40 px-6 py-10 text-center">
+              <p className="text-sm font-medium text-foreground">
                 No artifacts match these filters.
               </p>
               <Button
@@ -312,7 +312,7 @@ export const CaseArtifactsTable = ({
           )}
         </>
       ) : (
-        <p className="text-sm text-slate-500">No execution artifacts available.</p>
+        <p className="text-sm text-muted-foreground">No execution artifacts available.</p>
       )}
     </details>
   );

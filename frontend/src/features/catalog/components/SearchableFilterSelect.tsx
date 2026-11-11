@@ -77,7 +77,7 @@ export const SearchableFilterSelect = ({
           role="combobox"
           aria-label={label}
           aria-expanded={open}
-          className="h-10 w-full justify-between rounded-xl border-slate-200 bg-white font-normal shadow-none"
+          className="h-10 w-full justify-between rounded-xl border-border bg-card font-normal shadow-none"
         >
           <span className={cn('truncate', !selectedLabel && 'text-muted-foreground')}>
             {selectedLabel ?? placeholder}

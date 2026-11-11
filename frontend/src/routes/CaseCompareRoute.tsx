@@ -103,7 +103,7 @@ export const CaseCompareRoute = ({
 
   if (!caseId) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-8 text-center text-slate-500">
+      <div className="rounded-xl border border-border bg-muted-subtle px-6 py-8 text-center text-muted-foreground">
         Case compare route is missing case id.
       </div>
     );
@@ -123,7 +123,7 @@ export const CaseCompareRoute = ({
 
   if (!caseRecord) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-8 text-center text-slate-500">
+      <div className="rounded-xl border border-border bg-muted-subtle px-6 py-8 text-center text-muted-foreground">
         Case not found
       </div>
     );

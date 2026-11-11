@@ -24,6 +24,7 @@
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 42%;
+    --muted-subtle: 210 40% 98%;
 
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
@@ -185,7 +186,7 @@
   }
 
   .sb-mdxeditor pre {
-    @apply overflow-x-auto rounded-md bg-slate-950 px-3 py-2 text-sm text-slate-50;
+    @apply overflow-x-auto rounded-md bg-foreground px-3 py-2 text-sm text-background;
   }
 
   .sb-mdxeditor hr {

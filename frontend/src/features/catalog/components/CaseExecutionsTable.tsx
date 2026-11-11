@@ -102,7 +102,7 @@ export const CaseExecutionsTable = ({
   const columns = OPTIONAL_COLUMNS.filter((column) => visibleColumns.includes(column.key));
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-background [&>div]:max-h-[28rem]">
+    <div className="overflow-hidden rounded-lg border border-border bg-background [&>div]:max-h-[28rem]">
       <Table
         className="table-fixed"
         style={{ minWidth: 768 + columns.reduce((width, column) => width + column.width, 0) }}
@@ -117,7 +117,7 @@ export const CaseExecutionsTable = ({
             <col key={column.key} style={{ width: column.width }} />
           ))}
         </colgroup>
-        <TableHeader className="sticky top-0 z-10 bg-slate-50">
+        <TableHeader className="sticky top-0 z-10 bg-muted-subtle">
           <TableRow>
             <TableHead>Select</TableHead>
             <ExecutionSortHeader

@@ -37,24 +37,26 @@ const CompareToolbar = ({
   totalChangedRows,
 }: CompareToolbarProps) => {
   return (
-    <section className="sticky top-4 z-30 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur">
+    <section className="sticky top-4 z-30 rounded-2xl border border-border bg-card/95 p-4 shadow-sm backdrop-blur">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <h2 className="mt-1 text-xl font-semibold text-slate-950">
+          <h2 className="mt-1 text-xl font-semibold text-foreground">
             Comparing {executionCount} execution{executionCount === 1 ? '' : 's'}
           </h2>
           {toolbarDescription ? (
-            <p className="mt-1 max-w-2xl text-sm text-slate-600">{toolbarDescription}</p>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{toolbarDescription}</p>
           ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
+            <Badge variant="outline" className="border-border bg-muted-subtle text-foreground">
               {changedSectionCount} changed section{changedSectionCount === 1 ? '' : 's'}
             </Badge>
-            <Badge variant="outline" className="border-slate-300 bg-slate-50 text-slate-700">
+            <Badge variant="outline" className="border-border bg-muted-subtle text-foreground">
               {totalChangedRows} changed row{totalChangedRows === 1 ? '' : 's'}
             </Badge>
             {diffsOnlyEnabled && (
-              <Badge className="border-0 bg-slate-900 text-white shadow-none">Diff-only mode</Badge>
+              <Badge className="border-0 bg-primary text-primary-foreground shadow-none">
+                Diff-only mode
+              </Badge>
             )}
           </div>
         </div>
@@ -78,8 +80,8 @@ const CompareToolbar = ({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+          <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-muted-subtle px-3 py-2">
+            <label className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
               <input
                 type="checkbox"
                 className="h-4 w-4"
@@ -89,7 +91,7 @@ const CompareToolbar = ({
               />
               <span className="select-none">Differences only</span>
             </label>
-            <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+            <label className="inline-flex items-center gap-2 text-sm font-medium text-foreground">
               <input
                 type="checkbox"
                 className="h-4 w-4"
@@ -102,7 +104,7 @@ const CompareToolbar = ({
           </div>
 
           {!canCompareDifferences && (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               Unhide or add another execution to compare differences.
             </p>
           )}

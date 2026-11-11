@@ -659,20 +659,20 @@ export const CompareWorkspace = ({
           </Alert>
         ) : null}
         {selectedExecutionIds.length >= 2 && selectedExecutions.length < 2 ? (
-          <p className="text-sm text-slate-600" role="status">
+          <p className="text-sm text-muted-foreground" role="status">
             Comparison needs details for at least two selected executions.
           </p>
         ) : null}
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 text-sm">
-          <p className="text-slate-600">
-            <span className="font-medium text-slate-900" aria-live="polite">
+          <p className="text-muted-foreground">
+            <span className="font-medium text-foreground" aria-live="polite">
               {visibleColumns.length} execution{visibleColumns.length === 1 ? '' : 's'} ·{' '}
               {totalChangedRows} differing field{totalChangedRows === 1 ? '' : 's'}
             </span>
             <span className="ml-3 inline-block">Compared against the reference execution</span>
           </p>
           <div
-            className="inline-flex rounded-lg border bg-slate-50 p-1"
+            className="inline-flex rounded-lg border bg-muted-subtle p-1"
             role="group"
             aria-label="Comparison fields"
           >
@@ -709,7 +709,7 @@ export const CompareWorkspace = ({
           </div>
         ) : null}
         <div
-          className="min-h-0 overflow-auto rounded-lg border border-slate-200"
+          className="min-h-0 overflow-auto rounded-lg border border-border"
           tabIndex={0}
           role="region"
           aria-label="Execution comparison"
@@ -728,7 +728,7 @@ export const CompareWorkspace = ({
               <tr>
                 <th
                   scope="col"
-                  className="sticky left-0 z-30 border-b border-r bg-slate-100 px-3 py-3 font-medium"
+                  className="sticky left-0 z-30 border-b border-r bg-muted px-3 py-3 font-medium"
                 >
                   Field
                 </th>
@@ -736,7 +736,7 @@ export const CompareWorkspace = ({
                   <th
                     key={column.executionId}
                     scope="col"
-                    className={`border-b border-r bg-slate-100 px-3 py-3 align-top font-medium ${dragOverIdx === column.colIdx ? 'ring-2 ring-inset ring-blue-400' : ''}`}
+                    className={`border-b border-r bg-muted px-3 py-3 align-top font-medium ${dragOverIdx === column.colIdx ? 'ring-2 ring-inset ring-blue-400' : ''}`}
                     draggable
                     onDragStart={() => handleDragStart(column.colIdx)}
                     onDragOver={(event) => handleDragOver(event, column.colIdx)}
@@ -756,7 +756,7 @@ export const CompareWorkspace = ({
                           type="button"
                           aria-label={`Hide ${column.executionHeader}`}
                           title="Hide execution (keep selected)"
-                          className="rounded p-1 hover:bg-slate-200"
+                          className="rounded p-1 hover:bg-muted"
                           onClick={() => handleHide(column.colIdx)}
                         >
                           <EyeOff size={14} />
@@ -765,7 +765,7 @@ export const CompareWorkspace = ({
                           type="button"
                           aria-label={`Remove ${column.executionHeader}`}
                           title="Remove execution from selection"
-                          className="rounded p-1 hover:bg-slate-200"
+                          className="rounded p-1 hover:bg-muted"
                           onClick={() => handleRemove(column.colIdx)}
                         >
                           <X size={14} />
@@ -805,7 +805,7 @@ export const CompareWorkspace = ({
                     <th
                       colSpan={visibleColumns.length + 1}
                       scope="colgroup"
-                      className="border-b bg-slate-50 text-slate-700"
+                      className="border-b bg-muted-subtle text-foreground"
                     >
                       <button
                         type="button"
@@ -818,7 +818,7 @@ export const CompareWorkspace = ({
                           className={expandedSections[section.key] ? 'rotate-90' : ''}
                         />
                         {section.label}
-                        <span className="text-xs font-normal text-slate-500">
+                        <span className="text-xs font-normal text-muted-foreground">
                           {section.diffCount} difference{section.diffCount === 1 ? '' : 's'}
                         </span>
                       </button>
@@ -829,7 +829,7 @@ export const CompareWorkspace = ({
                       <tr key={row.label}>
                         <th
                           scope="row"
-                          className="sticky left-0 z-10 border-b border-r bg-white px-3 py-2 align-top font-medium"
+                          className="sticky left-0 z-10 border-b border-r bg-card px-3 py-2 align-top font-medium"
                         >
                           {row.label}
                         </th>
@@ -844,7 +844,7 @@ export const CompareWorkspace = ({
                             <td
                               key={column.executionId}
                               data-different={changed || undefined}
-                              className={`border-b border-r px-3 py-2 align-top ${changed ? 'bg-amber-50/70' : 'bg-white'}`}
+                              className={`border-b border-r px-3 py-2 align-top ${changed ? 'bg-amber-50/70' : 'bg-card'}`}
                             >
                               {changed ? (
                                 <span className="sr-only">Differs from reference column. </span>
@@ -860,9 +860,11 @@ export const CompareWorkspace = ({
             })}
           </table>
           {visibleColumns.length === 0 ? (
-            <p className="p-4 text-slate-600">Unhide an execution to restore compare columns.</p>
+            <p className="p-4 text-muted-foreground">
+              Unhide an execution to restore compare columns.
+            </p>
           ) : canCompareDifferences && diffsOnlyEnabled && totalChangedRows === 0 ? (
-            <p className="p-4 text-slate-600">No differences across visible executions.</p>
+            <p className="p-4 text-muted-foreground">No differences across visible executions.</p>
           ) : null}
         </div>
       </div>
@@ -870,12 +872,12 @@ export const CompareWorkspace = ({
   }
 
   return (
-    <div className={embedded ? 'w-full' : 'w-full bg-white'}>
+    <div className={embedded ? 'w-full' : 'w-full bg-card'}>
       <div className={embedded ? 'w-full' : 'mx-auto max-w-[1800px] px-4 py-8 sm:px-6'}>
         {showHeader ? (
           <header className="mb-6">
             <h1 className="mb-2 text-3xl font-bold">{title}</h1>
-            <p className="text-gray-600">{description}</p>
+            <p className="text-muted-foreground">{description}</p>
           </header>
         ) : null}
 
@@ -908,37 +910,37 @@ export const CompareWorkspace = ({
             <div id="compare-change-summary">
               <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-800">
+                  <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-foreground">
                     Change Summary
                   </h2>
-                  <p className="mt-1 text-sm text-slate-600">
+                  <p className="mt-1 text-sm text-muted-foreground">
                     Compact diff summary for the highest-signal fields across selected executions.
                   </p>
                 </div>
                 <Badge
                   variant="outline"
-                  className="self-start border-blue-200 bg-white text-slate-700"
+                  className="self-start border-blue-200 bg-card text-foreground"
                 >
                   {summaryCards.length} highlight{summaryCards.length === 1 ? '' : 's'}
                 </Badge>
               </div>
 
               {visibleOrder.length === 0 ? (
-                <p className="mt-4 text-sm text-slate-600">
+                <p className="mt-4 text-sm text-muted-foreground">
                   All selected executions are hidden. Unhide one or more executions to review
                   changes.
                 </p>
               ) : summaryCards.length === 0 ? (
-                <p className="mt-4 text-sm text-slate-600">
+                <p className="mt-4 text-sm text-muted-foreground">
                   No high-signal differences across visible executions.
                 </p>
               ) : (
                 <div className="mt-3 overflow-x-auto">
                   <div
-                    className="min-w-max rounded-lg border border-white/80 bg-white/90 shadow-sm"
+                    className="min-w-max rounded-lg border border-white/80 bg-card/90 shadow-sm"
                     style={{ minWidth: 280 + visibleOrder.length * 220 }}
                   >
-                    <div className="flex border-b bg-blue-50/70 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    <div className="flex border-b bg-blue-50/70 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       <div className="shrink-0 px-4 py-3" style={{ width: 280 }}>
                         Field
                       </div>
@@ -952,7 +954,7 @@ export const CompareWorkspace = ({
                             value={column.executionHeader}
                             lines={1}
                             mono
-                            className="text-[11px] text-slate-600"
+                            className="text-[11px] text-muted-foreground"
                             fullValueMode="tooltip"
                           />
                         </div>
@@ -962,12 +964,12 @@ export const CompareWorkspace = ({
                     {summaryCards.map((card) => (
                       <div key={card.key} className="flex border-t first:border-t-0">
                         <div
-                          className="shrink-0 px-4 py-3 text-sm font-semibold text-slate-800"
+                          className="shrink-0 px-4 py-3 text-sm font-semibold text-foreground"
                           style={{ width: 280 }}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span>{card.label}</span>
-                            <span className="text-xs font-medium text-slate-500">
+                            <span className="text-xs font-medium text-muted-foreground">
                               {card.uniqueValueCount} distinct
                             </span>
                           </div>
@@ -982,7 +984,7 @@ export const CompareWorkspace = ({
                             <TableCellText
                               value={card.values[column.colIdx]}
                               lines={3}
-                              className="text-sm text-slate-900"
+                              className="text-sm text-foreground"
                               fullValueMode="tooltip"
                             />
                           </div>
@@ -999,14 +1001,14 @@ export const CompareWorkspace = ({
         {/* Show Hidden Executions  */}
         <section
           aria-label="Show hidden executions"
-          className={`mb-2 mt-4 flex min-h-[2.75rem] flex-wrap items-center gap-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2${
+          className={`mb-2 mt-4 flex min-h-[2.75rem] flex-wrap items-center gap-2 rounded-2xl border border-dashed border-border bg-muted-subtle px-3 py-2${
             hidden.length === 0 ? ' invisible' : ''
           }`}
           style={{ minHeight: '2.75rem' }}
         >
           {hidden.length > 0 && (
             <>
-              <span className="text-sm font-medium text-slate-600">Hidden executions:</span>
+              <span className="text-sm font-medium text-muted-foreground">Hidden executions:</span>
               {hidden.map((hiddenId) => {
                 const idx = selectedExecutionIds.indexOf(hiddenId);
                 const headerName = headers[idx] ?? hiddenId;
@@ -1014,7 +1016,7 @@ export const CompareWorkspace = ({
                 return (
                   <button
                     key={hiddenId}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-blue-200 hover:bg-blue-50"
+                    className="rounded-full border border-border bg-card px-3 py-1 text-xs font-medium text-foreground transition hover:border-blue-200 hover:bg-blue-50"
                     onClick={() => handleShow(hiddenId)}
                     type="button"
                   >
@@ -1023,7 +1025,7 @@ export const CompareWorkspace = ({
                 );
               })}
               <button
-                className="ml-1 rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white transition hover:bg-slate-700"
+                className="ml-1 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90"
                 onClick={() => setHidden([])}
                 type="button"
               >
@@ -1034,18 +1036,18 @@ export const CompareWorkspace = ({
         </section>
 
         {/* Table */}
-        <div className="max-h-[calc(100vh-12rem)] overflow-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="max-h-[calc(100vh-12rem)] overflow-auto rounded-xl border border-border bg-card shadow-sm">
           <div className="min-w-max" style={{ minWidth: tableMinWidth }}>
-            <div className="sticky top-0 z-20 flex border-b border-slate-200 bg-slate-100">
+            <div className="sticky top-0 z-20 flex border-b border-border bg-muted">
               <div
-                className="sticky left-0 z-30 shrink-0 border-r border-slate-200 bg-slate-100 px-4 py-3 text-xs font-semibold uppercase text-slate-600 shadow-sm"
+                className="sticky left-0 z-30 shrink-0 border-r border-border bg-muted px-4 py-3 text-xs font-semibold uppercase text-muted-foreground shadow-sm"
                 style={{ width: LABEL_COLUMN_WIDTH }}
               >
                 <div className="flex h-full items-center justify-between gap-3">
                   <span>Field</span>
                   <Badge
                     variant="outline"
-                    className="border-slate-300 bg-white text-[11px] text-slate-700"
+                    className="border-border bg-card text-[11px] text-foreground"
                   >
                     {visibleColumns.length} visible
                   </Badge>
@@ -1061,7 +1063,7 @@ export const CompareWorkspace = ({
                 return (
                   <div
                     key={column.executionId}
-                    className={`group relative shrink-0 border-r border-slate-200 bg-slate-100 px-4 py-3 transition ${
+                    className={`group relative shrink-0 border-r border-border bg-muted px-4 py-3 transition ${
                       isDropTarget ? 'ring-2 ring-blue-400 ring-inset' : ''
                     }`}
                     draggable
@@ -1097,7 +1099,7 @@ export const CompareWorkspace = ({
                         {column.caseHref ? (
                           <a
                             href={column.caseHref}
-                            className="mt-1 block text-xs text-slate-600 transition hover:text-blue-600 hover:underline"
+                            className="mt-1 block text-xs text-muted-foreground transition hover:text-blue-600 hover:underline"
                             title={`Go to case details for ${column.caseName}`}
                             onClick={(event) => {
                               handleInternalLinkClick(event, column.caseHref);
@@ -1113,7 +1115,7 @@ export const CompareWorkspace = ({
                           <TableCellText
                             value={column.caseName}
                             lines={1}
-                            className="mt-1 text-xs text-slate-600"
+                            className="mt-1 text-xs text-muted-foreground"
                             fullValueMode="tooltip"
                           />
                         )}
@@ -1122,7 +1124,7 @@ export const CompareWorkspace = ({
                         <button
                           type="button"
                           aria-label={`Hide ${column.executionHeader}`}
-                          className="rounded-full border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
+                          className="rounded-full border border-border bg-card p-1.5 text-muted-foreground transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-700"
                           onClick={(event) => {
                             event.stopPropagation();
                             handleHide(column.colIdx);
@@ -1134,7 +1136,7 @@ export const CompareWorkspace = ({
                         <button
                           type="button"
                           aria-label={`Remove ${column.executionHeader}`}
-                          className="rounded-full border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                          className="rounded-full border border-border bg-card p-1.5 text-muted-foreground transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
                           onClick={(event) => {
                             event.stopPropagation();
                             handleRemove(column.colIdx);
@@ -1151,7 +1153,7 @@ export const CompareWorkspace = ({
 
               {visibleColumns.length === 0 && (
                 <div
-                  className="shrink-0 border-r border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-500"
+                  className="shrink-0 border-r border-border bg-muted px-4 py-3 text-sm text-muted-foreground"
                   style={{ width: visibleValueWidth }}
                 >
                   Unhide an execution to restore compare columns.
@@ -1166,10 +1168,10 @@ export const CompareWorkspace = ({
               return (
                 <Fragment key={section.key}>
                   <button
-                    className={`group flex w-full border-b border-slate-200 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
+                    className={`group flex w-full border-b border-border text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
                       expandedSections[section.key]
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                        ? 'bg-muted text-foreground'
+                        : 'bg-muted-subtle text-foreground hover:bg-muted'
                     }`}
                     onClick={() => toggleSection(section.key)}
                     aria-expanded={expandedSections[section.key]}
@@ -1178,8 +1180,8 @@ export const CompareWorkspace = ({
                     style={{ minWidth: tableMinWidth }}
                   >
                     <span
-                      className={`sticky left-0 z-10 flex shrink-0 items-start gap-3 border-r border-slate-200 px-4 py-3 shadow-sm group-focus-visible:ring-2 group-focus-visible:ring-inset group-focus-visible:ring-ring ${
-                        expandedSections[section.key] ? 'bg-slate-100' : 'bg-slate-50'
+                      className={`sticky left-0 z-10 flex shrink-0 items-start gap-3 border-r border-border px-4 py-3 shadow-sm group-focus-visible:ring-2 group-focus-visible:ring-inset group-focus-visible:ring-ring ${
+                        expandedSections[section.key] ? 'bg-muted' : 'bg-muted-subtle'
                       }`}
                       style={{ width: LABEL_COLUMN_WIDTH }}
                     >
@@ -1201,7 +1203,7 @@ export const CompareWorkspace = ({
                         <span className="mt-1.5 flex flex-wrap items-center gap-2">
                           <Badge
                             variant="outline"
-                            className="border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold uppercase tracking-normal text-slate-600"
+                            className="border-border bg-card px-2 py-0.5 text-[11px] font-semibold uppercase tracking-normal text-muted-foreground"
                           >
                             {section.rows.length} row{section.rows.length === 1 ? '' : 's'} total
                           </Badge>
@@ -1215,7 +1217,7 @@ export const CompareWorkspace = ({
                           ) : sectionSupportsDiffBadges ? (
                             <Badge
                               variant="outline"
-                              className="border-slate-200 bg-white px-2 py-0.5 text-[11px] font-semibold uppercase tracking-normal text-slate-500"
+                              className="border-border bg-card px-2 py-0.5 text-[11px] font-semibold uppercase tracking-normal text-muted-foreground"
                             >
                               No changes
                             </Badge>
@@ -1229,15 +1231,15 @@ export const CompareWorkspace = ({
                   {expandedSections[section.key] && (
                     <div id={`section-${section.key}`}>
                       {rowsToRender.length === 0 ? (
-                        <div className="flex border-b border-slate-200 bg-slate-50">
+                        <div className="flex border-b border-border bg-muted-subtle">
                           <div
-                            className="sticky left-0 z-10 shrink-0 border-r border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-500 shadow-sm"
+                            className="sticky left-0 z-10 shrink-0 border-r border-border bg-card px-4 py-3 text-sm font-medium text-muted-foreground shadow-sm"
                             style={{ width: LABEL_COLUMN_WIDTH }}
                           >
                             No changed rows
                           </div>
                           <div
-                            className="px-4 py-3 text-sm text-slate-500"
+                            className="px-4 py-3 text-sm text-muted-foreground"
                             style={{ width: visibleValueWidth }}
                           >
                             No changed rows in this section for the currently visible executions.
@@ -1251,12 +1253,12 @@ export const CompareWorkspace = ({
                           return (
                             <div
                               key={row.label}
-                              className={`flex border-b border-slate-200 ${
-                                isDiff ? 'bg-amber-50' : 'bg-white'
+                              className={`flex border-b border-border ${
+                                isDiff ? 'bg-amber-50' : 'bg-card'
                               }`}
                             >
                               <div
-                                className={`sticky left-0 z-10 shrink-0 border-r border-slate-200 bg-white px-4 py-3 text-sm font-medium shadow-sm ${
+                                className={`sticky left-0 z-10 shrink-0 border-r border-border bg-card px-4 py-3 text-sm font-medium shadow-sm ${
                                   isDiff ? 'border-l-2 border-amber-300' : ''
                                 }`}
                                 style={{ width: LABEL_COLUMN_WIDTH }}
@@ -1270,7 +1272,7 @@ export const CompareWorkspace = ({
                                 return (
                                   <div
                                     key={column.executionId}
-                                    className="shrink-0 border-r border-slate-100 px-4 py-3 text-sm align-top last:border-r-0"
+                                    className="shrink-0 border-r border-border px-4 py-3 text-sm align-top last:border-r-0"
                                     style={{ width: VALUE_COLUMN_WIDTH }}
                                   >
                                     {renderCompareValue(section.key, row, value, column.colIdx)}

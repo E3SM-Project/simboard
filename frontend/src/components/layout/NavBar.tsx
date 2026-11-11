@@ -46,7 +46,7 @@ export const NavBar = () => {
   }, [open]);
 
   return (
-    <header className="w-full bg-white border-b">
+    <header className="w-full bg-background border-b">
       <div className="mx-auto flex max-w-[1440px] items-center justify-between px-4 py-3 md:px-6">
         <div className="flex items-center gap-4">
           <Link to="/" className="flex items-center gap-3 text-xl font-bold">

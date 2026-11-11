@@ -8,7 +8,7 @@ export const LoginCard = () => {
 
   return (
     <div className="flex justify-center pt-20 px-4">
-      <Card className="w-full max-w-md shadow-md border border-gray-200/60">
+      <Card className="w-full max-w-md shadow-md border border-border/60">
         <CardHeader className="space-y-2">
           <CardTitle className="text-center text-xl font-semibold">Sign In Required</CardTitle>
           <CardDescription className="text-center">

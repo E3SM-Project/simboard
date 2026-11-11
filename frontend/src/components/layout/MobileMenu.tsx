@@ -110,7 +110,7 @@ export const MobileMenu = ({
           <div
             id="mobile-menu"
             ref={menuRef}
-            className="absolute right-0 top-0 h-full w-64 bg-white shadow-xl p-4 flex flex-col gap-4"
+            className="absolute right-0 top-0 h-full w-64 bg-background shadow-xl p-4 flex flex-col gap-4"
           >
             <button
               type="button"

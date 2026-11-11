@@ -652,7 +652,7 @@ export const CasesPage = () => {
             {row.original.caseGroup && (
               <button
                 type="button"
-                className="mt-1 max-w-full truncate text-left text-xs text-slate-500 hover:text-blue-600 hover:underline"
+                className="mt-1 max-w-full truncate text-left text-xs text-muted-foreground hover:text-blue-600 hover:underline"
                 title={`Filter by case group: ${row.original.caseGroup}`}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -678,7 +678,7 @@ export const CasesPage = () => {
             : null;
 
           return (
-            <div className="min-w-[10rem] text-sm text-slate-600">
+            <div className="min-w-[10rem] text-sm text-muted-foreground">
               {completedRun ?? <UnavailableTimestamp />}
             </div>
           );
@@ -748,7 +748,7 @@ export const CasesPage = () => {
     return (
       <div className="space-y-2">
         <div className="flex h-4 items-center gap-1">
-          <label htmlFor={id} className="text-xs font-medium text-slate-500">
+          <label htmlFor={id} className="text-xs font-medium text-muted-foreground">
             {label}
           </label>
           {description ? (
@@ -758,7 +758,7 @@ export const CasesPage = () => {
                   <button
                     type="button"
                     aria-label={`About ${label}`}
-                    className="rounded-sm text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     <Info className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -788,7 +788,7 @@ export const CasesPage = () => {
         : `View all ${expandedExecutionPage.total} executions on the case details page`
       : `View all ${caseRecord.executionCount} executions on the case details page`;
     return (
-      <div className="mx-3 my-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm sm:ml-12">
+      <div className="mx-3 my-3 space-y-2 rounded-xl border border-border bg-muted-subtle/80 p-3 shadow-sm sm:ml-12">
         <div>
           <p className="text-sm font-medium">Latest executions</p>
           <p className="text-xs text-muted-foreground">
@@ -798,7 +798,7 @@ export const CasesPage = () => {
           </p>
         </div>
 
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-background">
+        <div className="overflow-hidden rounded-lg border border-border bg-background">
           <div className="max-h-[20rem] overflow-auto">
             <Table>
               <TableHeader>
@@ -812,7 +812,7 @@ export const CasesPage = () => {
               <TableBody>
                 {visibleCaseExecutions.map((execution) => (
                   <TableRow key={execution.id}>
-                    <TableCell className="py-2 align-top text-xs text-slate-600">
+                    <TableCell className="py-2 align-top text-xs text-muted-foreground">
                       {formatRunDateRange(execution.runStartDate, execution.runEndDate) ?? (
                         <UnavailableTimestamp />
                       )}
@@ -833,13 +833,13 @@ export const CasesPage = () => {
                     </TableCell>
                     <TableCell className="py-2 align-top">
                       <span
-                        className="font-mono text-xs text-slate-700"
+                        className="font-mono text-xs text-foreground"
                         title={execution.caseHash ?? MISSING_CASE_HASH_LABEL}
                       >
                         {formatCaseHashLabel(execution.caseHash ?? null)}
                       </span>
                     </TableCell>
-                    <TableCell className="py-2 align-top text-xs text-slate-600">
+                    <TableCell className="py-2 align-top text-xs text-muted-foreground">
                       {`${formatModelDate(execution.simulationStartDate)} → ${formatModelDate(
                         execution.simulationEndDate ?? null,
                       )}`}
@@ -891,26 +891,26 @@ export const CasesPage = () => {
           </Button>
         </Alert>
       ) : null}
-      <div className="overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/70 to-slate-100/80 shadow-sm">
+      <div className="overflow-hidden rounded-3xl border border-border/80 bg-gradient-to-br from-card via-muted-subtle/70 to-muted/80 shadow-sm">
         <div className="space-y-5 p-5 sm:p-6">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div className="space-y-3">
               <div className="space-y-2">
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Cases</h1>
-                <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
+                <h1 className="text-3xl font-semibold tracking-tight text-foreground">Cases</h1>
+                <p className="max-w-3xl text-sm leading-6 text-muted-foreground sm:text-[15px]">
                   Find cases and their execution context. Search case names, then refine by run or
                   case metadata.
                 </p>
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white/75 px-4 py-3 text-sm text-slate-600 shadow-sm shadow-slate-200/20">
-              <span className="font-medium text-slate-900">{casePage?.total ?? 0} cases</span>
-              <span className="px-2 text-slate-300">·</span>
+            <div className="rounded-xl border border-border bg-card/75 px-4 py-3 text-sm text-muted-foreground shadow-sm shadow-border/20">
+              <span className="font-medium text-foreground">{casePage?.total ?? 0} cases</span>
+              <span className="px-2 text-muted-foreground">·</span>
               <span>{visibleRunCount} runs on this page</span>
               {activeFilterPills.length > 0 && (
                 <>
-                  <span className="px-2 text-slate-300">·</span>
+                  <span className="px-2 text-muted-foreground">·</span>
                   <span>{activeFilterPills.length} active filters</span>
                 </>
               )}
@@ -918,11 +918,14 @@ export const CasesPage = () => {
           </div>
 
           <Collapsible open={showAdvancedFilters} onOpenChange={setShowAdvancedFilters}>
-            <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-200/30">
+            <div className="rounded-2xl border border-border bg-card/90 p-4 shadow-sm shadow-border/30">
               <div className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1.5fr)_repeat(4,minmax(200px,1fr))]">
                   <div className="space-y-2 sm:col-span-2 xl:col-span-1">
-                    <label htmlFor="cases-search" className="text-xs font-medium text-slate-500">
+                    <label
+                      htmlFor="cases-search"
+                      className="text-xs font-medium text-muted-foreground"
+                    >
                       Search
                     </label>
                     <div className="relative">
@@ -935,7 +938,7 @@ export const CasesPage = () => {
                           setCaseNameFilter(event.target.value);
                           table.setPageIndex(0);
                         }}
-                        className="h-10 rounded-xl border-slate-200 bg-white pl-10 shadow-none"
+                        className="h-10 rounded-xl border-border bg-card pl-10 shadow-none"
                       />
                     </div>
                   </div>
@@ -989,7 +992,7 @@ export const CasesPage = () => {
                     <Button
                       variant="outline"
                       type="button"
-                      className="h-10 rounded-xl border-slate-200 bg-white px-4 text-slate-700 shadow-none hover:bg-slate-50"
+                      className="h-10 rounded-xl border-border bg-card px-4 text-foreground shadow-none hover:bg-muted-subtle"
                     >
                       <SlidersHorizontal className="mr-2 h-4 w-4" />
                       {advancedFilterCount > 0
@@ -1009,7 +1012,7 @@ export const CasesPage = () => {
                       type="button"
                       onClick={() => void handleCopySearch()}
                       disabled={canonicalSearchParams.size === 0}
-                      className="h-10 rounded-xl border-slate-200 bg-white px-4 text-slate-700 shadow-none hover:bg-slate-50"
+                      className="h-10 rounded-xl border-border bg-card px-4 text-foreground shadow-none hover:bg-muted-subtle"
                       aria-label="Copy search link"
                     >
                       <Copy className="mr-2 h-4 w-4" />
@@ -1020,7 +1023,7 @@ export const CasesPage = () => {
                       type="button"
                       onClick={clearAllFilters}
                       disabled={!hasActiveFilters}
-                      className="h-10 rounded-xl px-4 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                      className="h-10 rounded-xl px-4 text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
                       Clear all
                     </Button>
@@ -1029,12 +1032,12 @@ export const CasesPage = () => {
               </div>
 
               <CollapsibleContent>
-                <div className="mt-4 border-t border-slate-200 pt-4">
+                <div className="mt-4 border-t border-border pt-4">
                   <div>
                     <div className="space-y-4">
                       <div className="space-y-1">
-                        <p className="text-sm font-medium text-slate-900">Execution context</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm font-medium text-foreground">Execution context</p>
+                        <p className="text-xs text-muted-foreground">
                           Shows cases with at least one execution matching these filters.
                         </p>
                       </div>
@@ -1080,9 +1083,11 @@ export const CasesPage = () => {
               {activeFilterPills.map((filter) => (
                 <span
                   key={`${filter.key}-${filter.value}`}
-                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm shadow-slate-200/30"
+                  className="inline-flex items-center rounded-full border border-border bg-card px-3 py-1.5 text-sm text-foreground shadow-sm shadow-border/30"
                 >
-                  <span className="mr-2 text-xs font-medium text-slate-500">{filter.label}</span>
+                  <span className="mr-2 text-xs font-medium text-muted-foreground">
+                    {filter.label}
+                  </span>
                   <span className="font-medium">{filter.value}</span>
                   <button
                     type="button"
@@ -1099,9 +1104,9 @@ export const CasesPage = () => {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         {isFetching ? (
-          <div className="border-b border-slate-200 bg-slate-50 px-4 py-2">
+          <div className="border-b border-border bg-muted-subtle px-4 py-2">
             <LoadingState kind="inline" label="Refreshing cases" />
           </div>
         ) : null}
@@ -1152,7 +1157,7 @@ export const CasesPage = () => {
                         ))}
                       </TableRow>
                       {isExpanded && (
-                        <TableRow className="bg-slate-50/40 hover:bg-slate-50/40">
+                        <TableRow className="bg-muted-subtle/40 hover:bg-muted-subtle/40">
                           <TableCell colSpan={columns.length} className="p-0">
                             {renderExpandedContent(row.original)}
                           </TableCell>
