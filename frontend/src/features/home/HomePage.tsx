@@ -224,7 +224,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
       <section className="mx-auto mt-10 w-full max-w-7xl">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
-            <h2 className="text-2xl font-bold">Recent Production Cases</h2>
+            <h2 className="text-2xl font-semibold">Recent Production Cases</h2>
             <p className="text-muted-foreground">
               Production-classified simulations with a completed execution in the last six calendar
               months.
@@ -240,7 +240,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
       <section className="mx-auto mt-10 w-full max-w-7xl">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
-            <h2 className="text-2xl font-bold">Recent Cases</h2>
+            <h2 className="text-2xl font-semibold">Recent Cases</h2>
             <p className="text-muted-foreground">
               Open recently active case pages and move from grouped execution context into execution
               details.
@@ -304,7 +304,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
       </section>
       <section className="mx-auto mt-10 w-full max-w-7xl space-y-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-bold">Common Workflows</h2>
+          <h2 className="text-2xl font-semibold">Common Workflows</h2>
           <p className="text-muted-foreground">
             Jump from the catalog overview into the primary SimBoard tasks.
           </p>
@@ -333,7 +333,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
 
       <section className="mx-auto mt-10 w-full max-w-7xl space-y-8">
         <div className="space-y-1">
-          <h2 className="text-2xl font-bold">Sites and Machines</h2>
+          <h2 className="text-2xl font-semibold">Sites and Machines</h2>
           <p className="text-muted-foreground">
             Computing facilities and systems represented in the SimBoard catalog.
           </p>

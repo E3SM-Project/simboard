@@ -40,7 +40,7 @@ const CompareToolbar = ({
     <section className="sticky top-4 z-30 rounded-2xl border border-border bg-card/95 p-4 shadow-sm backdrop-blur">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <h2 className="mt-1 text-xl font-semibold text-foreground">
+          <h2 className="mt-1 text-lg font-semibold text-foreground">
             Comparing {executionCount} execution{executionCount === 1 ? '' : 's'}
           </h2>
           {toolbarDescription ? (

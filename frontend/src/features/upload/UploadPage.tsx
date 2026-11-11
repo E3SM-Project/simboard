@@ -327,7 +327,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
     <div className="w-full min-h-[calc(100vh-64px)] bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 md:px-6 py-8">
         <header className="mb-6">
-          <h1 className="text-2xl font-bold">Upload a Case</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Upload a Case</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Cases are normally ingested automatically from supported HPC environments. Use this form
             to manually upload a compressed E3SM performance case archive when it is not yet

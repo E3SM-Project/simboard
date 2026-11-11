@@ -788,7 +788,7 @@ export const CaseDetailsPage = ({
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] space-y-6 px-6 py-8">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-6 py-8">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <Button variant="outline" size="sm" asChild className="mb-3">
@@ -797,7 +797,7 @@ export const CaseDetailsPage = ({
               Back
             </Link>
           </Button>
-          <h1 className="text-2xl font-bold">{caseRecord.name}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{caseRecord.name}</h1>
           <p className="mt-1 text-xs text-muted-foreground">
             Page updated: {formatCaseDate(caseRecord.updatedAt)}
           </p>
@@ -1128,7 +1128,7 @@ export const CaseDetailsPage = ({
         <div className="rounded-2xl border border-border bg-card shadow-sm">
           <div className="flex flex-col gap-4 border-b border-border px-5 py-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-2">
-              <h2 className="text-xl font-semibold">Executions</h2>
+              <h2 className="text-lg font-semibold">Executions</h2>
               <p className="max-w-3xl text-sm text-muted-foreground" data-execution-instructions>
                 Select 2–5 executions to compare simulation configurations and results.
                 {hasMultipleCaseHashes

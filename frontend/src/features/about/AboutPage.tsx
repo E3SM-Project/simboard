@@ -14,7 +14,7 @@ const resources = [
 ];
 
 export const AboutPage = () => (
-  <main className="mx-auto min-h-[70vh] w-full max-w-5xl space-y-10 px-6 py-10">
+  <main className="mx-auto min-h-[70vh] w-full max-w-4xl space-y-10 px-6 py-10">
     <section className="space-y-4">
       <h1 className="text-4xl font-bold tracking-tight">About SimBoard</h1>
       <p className="max-w-3xl text-lg leading-8 text-muted-foreground">

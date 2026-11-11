@@ -870,7 +870,7 @@ export const ExecutionDetailsView = ({
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] space-y-6 px-6 py-8">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-6 py-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -880,7 +880,7 @@ export const ExecutionDetailsView = ({
               {backLabel}
             </Link>
           </Button>
-          <h1 className="text-2xl font-bold">{execution.executionId}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{execution.executionId}</h1>
           <Link
             to={caseDetailsPath({
               machineName: execution.machine.name,

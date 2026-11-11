@@ -151,7 +151,9 @@ export const CaseCompareRoute = ({
         <div className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold">Case Compare Needs More Executions</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Case Compare Needs More Executions
+            </h1>
             <p className="mt-2">{message}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               {onClose ? (

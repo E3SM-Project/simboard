@@ -47,7 +47,7 @@ export const NavBar = () => {
 
   return (
     <header className="w-full bg-background border-b">
-      <div className="mx-auto flex max-w-[1440px] items-center justify-between px-4 py-3 md:px-6">
+      <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-4 py-3 md:px-6">
         <div className="flex items-center gap-4">
           <Link to="/" className="flex items-center gap-3 text-xl font-bold">
             <img src="/logos/simboard-logo.png" alt="" className="h-8 w-8 shrink-0" />

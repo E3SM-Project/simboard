@@ -876,7 +876,7 @@ export const CompareWorkspace = ({
       <div className={embedded ? 'w-full' : 'mx-auto max-w-[1800px] px-4 py-8 sm:px-6'}>
         {showHeader ? (
           <header className="mb-6">
-            <h1 className="mb-2 text-3xl font-bold">{title}</h1>
+            <h1 className="mb-2 text-2xl font-semibold tracking-tight">{title}</h1>
             <p className="text-muted-foreground">{description}</p>
           </header>
         ) : null}

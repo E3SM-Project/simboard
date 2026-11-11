@@ -882,7 +882,7 @@ export const CasesPage = () => {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1480px] space-y-6 px-6 py-8">
+    <div className="mx-auto w-full max-w-screen-2xl space-y-6 px-6 py-8">
       {error ? (
         <Alert variant="error" className="flex items-center justify-between gap-3">
           <span>Could not refresh cases. Showing previously loaded results.</span>
@@ -896,7 +896,7 @@ export const CasesPage = () => {
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div className="space-y-3">
               <div className="space-y-2">
-                <h1 className="text-3xl font-semibold tracking-tight text-foreground">Cases</h1>
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">Cases</h1>
                 <p className="max-w-3xl text-sm leading-6 text-muted-foreground sm:text-[15px]">
                   Find cases and their execution context. Search case names, then refine by run or
                   case metadata.
