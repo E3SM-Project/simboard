@@ -3,6 +3,7 @@ import { Loader2, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
+import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -187,11 +188,7 @@ export const ComparisonBar = () => {
             </Button>
           </div>
         </div>
-        {problem ? (
-          <p role="alert" className="text-sm text-red-600">
-            {problem}
-          </p>
-        ) : null}
+        {problem ? <Alert variant="error">{problem}</Alert> : null}
         {retryable && !checking ? (
           <Button
             type="button"

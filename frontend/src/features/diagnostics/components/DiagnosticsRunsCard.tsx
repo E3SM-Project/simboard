@@ -3,9 +3,11 @@ import { ChevronDown } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
+import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { LoadingState } from '@/components/ui/loading-state';
 import { getCaseDiagnosticsRuns } from '@/features/diagnostics/api';
 import {
   MAX_RUNS_PER_GROUP,
@@ -119,10 +121,24 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
         </CardHeader>
         <CollapsibleContent>
           <CardContent className="max-h-[min(65dvh,36rem)] space-y-3 overflow-y-auto border-t p-3 sm:p-4">
-            {query.isError ||
-            query.data?.sources.some(
-              (source) => (source.error && source.error !== 'url_not_allowed') || source.partial,
-            ) ? (
+            {query.isLoading ? (
+              <LoadingState kind="section" label="Reading the diagnostics archive…" />
+            ) : null}
+            {query.isError ? (
+              <Alert variant="error" className="flex flex-wrap items-center gap-2">
+                <p>Diagnostics could not be read. Browse the original output or try again.</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={query.isFetching}
+                  onClick={() => void query.refetch()}
+                >
+                  {query.isFetching ? 'Retrying…' : 'Try again'}
+                </Button>
+              </Alert>
+            ) : query.data?.sources.some(
+                (source) => (source.error && source.error !== 'url_not_allowed') || source.partial,
+              ) ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -142,7 +158,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
               onRemove={basket.remove}
             />
             {query.isSuccess && !runs.length ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
                 No supported runs were found. Original directories may contain other tools or raw
                 outputs.
               </p>

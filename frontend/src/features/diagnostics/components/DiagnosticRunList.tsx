@@ -1,6 +1,7 @@
 import { Check, ExternalLink, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -143,16 +144,16 @@ export const DiagnosticRunList = ({
               <span className="sr-only"> (opens in a new tab)</span>
             </a>
             {source.error ? (
-              <p className="text-sm text-amber-800">
+              <Alert variant="warning" className="mt-1 px-2 py-1.5 text-xs">
                 {source.error === 'url_not_allowed'
                   ? 'This directory is not on a supported public diagnostics server.'
                   : 'This directory could not be read. Browse the original output or try again.'}
-              </p>
+              </Alert>
             ) : null}
             {source.partial ? (
-              <p className="text-xs text-amber-700">
+              <Alert variant="warning" className="mt-1 px-2 py-1.5 text-xs">
                 Run discovery is incomplete. Open the directory or retry to check for missing runs.
-              </p>
+              </Alert>
             ) : null}
           </section>
         ))}

@@ -10,9 +10,9 @@ Existing conventions cover these; no UX decision needed.
 - [x] **2. Page width tiers.** `ComparePage.tsx` uses `max-w-[1600px]`; `ComparisonBar.tsx` uses `max-w-[1440px]`. Use the workspace tier, `max-w-screen-2xl`.
 - [x] **3. Heading scale.** `h1` is `text-xl`; the variable `h2` in `ComparePage.tsx` is `text-base`; the Case details Diagnostics card title is a `div`, so that section has no `h2`. Use `text-2xl font-semibold tracking-tight` for `h1` and `text-lg font-semibold` for `h2`.
 - [x] **4. Back control.** `ComparePage.tsx` uses a text link. Use an outline back button.
-- [ ] **5. Notices.** A local `Notice` component, red error text, and amber status paragraphs repeat state colors; one Retry button sits inside a `<p>`. Use `Alert`.
-- [ ] **6. Loading states.** Compare load is plain text; refetch only dims content; the Diagnostics card shows loading only in its header; case discovery uses plain text. Use `LoadingState` (`section` for first load, `inline` for refresh).
-- [ ] **7. Empty and no-match states.** "No plots in common", "No supported runs", and "No variables match this filter" are plain paragraphs with no reset. Use a dashed-border block and offer "Clear filter".
+- [x] **5. Notices.** A local `Notice` component, red error text, and amber status paragraphs repeat state colors; one Retry button sits inside a `<p>`. Use `Alert`.
+- [x] **6. Loading states.** Compare load is plain text; refetch only dims content; the Diagnostics card shows loading only in its header; case discovery uses plain text. Use `LoadingState` (`section` for first load, `inline` for refresh).
+- [x] **7. Empty and no-match states.** "No plots in common", "No supported runs", and "No variables match this filter" are plain paragraphs with no reset. Use a dashed-border block and offer "Clear filter".
 - [ ] **8. Text links.** Run labels, source directory links, "View in Diagnostics", and "Open original image" are not `text-blue-600 hover:underline`.
 - [ ] **9. Identifiers.** `diagnosticIdentifier` output is not `font-mono text-xs`.
 - [x] **10. Panel radius.** Plot figures and RunEditor panels use `rounded-lg`. Panels use `rounded-xl`.

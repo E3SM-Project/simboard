@@ -3,9 +3,11 @@ import { Info, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import { listCases } from '@/api/catalog';
+import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { LoadingState } from '@/components/ui/loading-state';
 import {
   Select,
   SelectContent,
@@ -442,11 +444,7 @@ export const RunEditor = ({
             {selectionNotice}
           </p>
         ) : null}
-        {problem ? (
-          <p role="alert" className="text-sm text-red-600">
-            {problem}
-          </p>
-        ) : null}
+        {problem ? <Alert variant="error">{problem}</Alert> : null}
         {retryRuns && !checking ? (
           <Button
             type="button"
@@ -637,21 +635,23 @@ const CaseBrowser = ({
               </Tooltip>
             </TooltipProvider>
           </div>
-          {query.isFetching || (!supported.length && !query.isError && !incomplete.length) ? (
-            <div role="status" className="text-xs text-muted-foreground">
-              {query.isFetching
-                ? 'Checking cases for supported diagnostics…'
-                : !supported.length
-                  ? query.hasNextPage
-                    ? 'No supported cases found on this page. Load more or narrow your search.'
-                    : 'No supported cases found.'
-                  : null}
-            </div>
+          {query.isFetching ? (
+            <LoadingState
+              kind="inline"
+              label="Checking cases for supported diagnostics…"
+              className="justify-start text-xs"
+            />
+          ) : !supported.length && !query.isError && !incomplete.length ? (
+            <p role="status" className="text-xs text-muted-foreground">
+              {query.hasNextPage
+                ? 'No supported cases found on this page. Load more or narrow your search.'
+                : 'No supported cases found.'}
+            </p>
           ) : null}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {query.isError || incomplete.length ? (
-            <div role="status" className="space-y-2 p-1 text-xs text-amber-800">
+            <Alert variant="warning" className="mb-2 space-y-2 text-xs">
               {query.isError ? (
                 <p>Case search failed. Results may be incomplete. Retry discovery.</p>
               ) : null}
@@ -697,7 +697,7 @@ const CaseBrowser = ({
                   Retry discovery
                 </Button>
               ) : null}
-            </div>
+            </Alert>
           ) : null}
           <ul className="space-y-1">
             {supported.map(({ record, diagnostics }) => (

@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Copy, ExternalLink, Search } from 'lucide-re
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
+import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,6 +15,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { LoadingState } from '@/components/ui/loading-state';
 import {
   Select,
   SelectContent,
@@ -51,6 +53,9 @@ import type {
 import { readWorkspace, saveWorkspace } from '@/features/diagnostics/workspaceState';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+
+/** Dashed block for empty and no-match states. */
+const EMPTY_STATE = 'rounded-xl border border-dashed p-6 text-sm text-muted-foreground';
 
 const PANEL_LABELS: Record<PanelView, string> = {
   test: 'Run',
@@ -389,39 +394,39 @@ export const ComparePage = () => {
         </div>
       ) : null}
       {groupQuery.isError ? (
-        <p role="status" className="text-sm text-amber-800">
-          Could not check comparison groups. Your active comparison is unchanged.{' '}
+        <Alert variant="warning" className="flex flex-wrap items-center gap-2">
+          <p>Could not check comparison groups. Your active comparison is unchanged.</p>
           <Button variant="outline" size="sm" onClick={() => void groupQuery.refetch()}>
             Retry groups
           </Button>
-        </p>
+        </Alert>
       ) : null}
 
       {state.runs.length > MAX_COMPARED_RUNS ? (
-        <Notice>
+        <Alert variant="warning">
           This link has {state.runs.length} runs; compare at most {MAX_COMPARED_RUNS} at a time. Use
           Edit runs to remove some.
-        </Notice>
+        </Alert>
       ) : query.isLoading ? (
-        <p className="text-sm text-muted-foreground">Reading each run&apos;s published plots…</p>
+        <LoadingState kind="section" label="Reading each run's published plots…" />
       ) : query.isError ? (
-        <div className="space-y-2 text-sm text-red-600">
+        <Alert variant="error" className="flex flex-wrap items-center gap-2">
           <p>The diagnostics archive could not be read just now.</p>
           <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
             Try again
           </Button>
-        </div>
+        </Alert>
       ) : data ? (
         <>
           {failed.length > 0 ? (
-            <Notice>
+            <Alert variant="warning">
               Could not be read: {names(failed)}. Use Edit runs to replace or remove these runs.
-            </Notice>
+            </Alert>
           ) : null}
           {partial.length > 0 ? (
-            <Notice>
+            <Alert variant="warning">
               Only partly read, so some shared plots may be missing: {names(partial)}.
-            </Notice>
+            </Alert>
           ) : null}
           {failed.length || partial.length ? (
             <Button
@@ -435,7 +440,7 @@ export const ComparePage = () => {
           ) : null}
 
           {data.sets.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className={EMPTY_STATE}>
               These runs have no plots in common. Compare runs of the same kind, for example
               model-vs-observations runs with each other. Switch Comparison Group, edit active runs,
               or use Back to Diagnostics to add runs.
@@ -479,7 +484,12 @@ export const ComparePage = () => {
                     {detail?.missing ? `${detail.missing} plots not in every run` : null}
                   </p>
                   {!visible.length ? (
-                    <p className="text-sm text-muted-foreground">No variables match this filter.</p>
+                    <div className={cn(EMPTY_STATE, 'space-y-2')}>
+                      <p>No variables match this filter.</p>
+                      <Button variant="outline" size="sm" onClick={() => update({ filter: '' })}>
+                        Clear filter
+                      </Button>
+                    </div>
                   ) : null}
                   <ul className="max-h-60 space-y-0.5 overflow-y-auto pr-1 lg:max-h-[70vh]">
                     {visible.map((group) => (
@@ -517,7 +527,10 @@ export const ComparePage = () => {
                 </aside>
 
                 {detail && activeGroup && activePlot ? (
-                  <section className={cn('min-w-0 space-y-3', query.isFetching && 'opacity-70')}>
+                  <section className="min-w-0 space-y-3">
+                    {query.isFetching ? (
+                      <LoadingState kind="inline" label="Refreshing plots…" />
+                    ) : null}
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                       <div className="flex min-w-0 items-center gap-1">
                         <Button
@@ -589,12 +602,6 @@ export const ComparePage = () => {
     </Shell>
   );
 };
-
-const Notice = ({ children }: { children: React.ReactNode }) => (
-  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-    {children}
-  </p>
-);
 
 const Shell = ({ children }: { children: React.ReactNode }) => (
   <div className="mx-auto w-full max-w-screen-2xl space-y-4 px-4 py-6 sm:px-6">{children}</div>

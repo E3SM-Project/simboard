@@ -1405,8 +1405,13 @@ async function testViewer() {
     () => document.body.textContent?.includes('No variables match this filter'),
     'empty filter feedback',
   );
-  input(filter, '');
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  click(button('Clear filter'), 'clear variable filter');
+  await waitFor(
+    () =>
+      document.querySelector<HTMLInputElement>('input[aria-label="Filter variables"]')?.value ===
+        '' && !button('Clear filter'),
+    'filter cleared from empty state',
+  );
   const variableButton = document.querySelector<HTMLButtonElement>('aside button')!;
   click(variableButton, 'select variable before keyboard stepping');
   variableButton.focus();
