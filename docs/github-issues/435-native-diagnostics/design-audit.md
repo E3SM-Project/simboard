@@ -21,7 +21,7 @@ Existing conventions cover these; no UX decision needed.
 - [x] **13. Comparison actions.** Compare buttons omit the count, and the tray says "Clear all". Use `Compare (N)` and "Clear selection".
 - [x] **14. Toggle styles.** Variable list and season/region/panel choices use an inverted dark fill; the tool filter uses a muted track; analysis uses `Tabs`. Pick one style, preferably the muted-track style of the tool filter.
 - [x] **15. Accessibility.** Headings carry `aria-live` (`RunEditor.tsx`); controls have both `aria-label` and `aria-labelledby` (`DiagnosticRunList.tsx`); tray `aria-controls` targets an element absent while collapsed; empty `role="group"` anchor spans; low-contrast search icon in `ComparePage.tsx`. The labelled `role="group"` anchor spans stay: resource shortcuts and bookmarked hashes focus them, so they need an accessible name.
-- [ ] **16. Hidden selections.** Tool and analysis filters can hide added runs without telling the user.
+- [x] **16. Hidden selections.** Tool and analysis filters can hide added runs without telling the user.
 
 ## Decisions needed
 

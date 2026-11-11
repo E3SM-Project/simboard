@@ -78,6 +78,24 @@ export const DiagnosticRunList = ({
     ),
   }));
 
+  const visibleUrls = new Set(
+    filters
+      .find((analysis) => analysis.key === activeAnalysis)
+      ?.groups.flatMap(([, runs]) => runs.map((run) => run.url)) ?? [],
+  );
+  const hiddenAdded = new Set(
+    periodGroups(sources)
+      .flatMap(([, runs]) => runs)
+      .filter((run) => actions.isAdded(run.url) && !visibleUrls.has(run.url))
+      .map((run) => run.url),
+  ).size;
+  const showAll = () => {
+    setLocalTool('all');
+    onToolChange?.('all');
+    setLocalAnalysis('all');
+    onAnalysisChange?.('all');
+  };
+
   useEffect(() => {
     if (requestedAnalysis === activeAnalysis) return;
     setLocalAnalysis(activeAnalysis);
@@ -193,6 +211,22 @@ export const DiagnosticRunList = ({
             </Button>
           ))}
         </div>
+      </div>
+      <div aria-live="polite">
+        {hiddenAdded ? (
+          <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+            {hiddenAdded} added {hiddenAdded === 1 ? 'run is' : 'runs are'} hidden by filters.
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-xs text-blue-600"
+              onClick={showAll}
+            >
+              Show all
+            </Button>
+          </p>
+        ) : null}
       </div>
       <Tabs
         value={activeAnalysis}

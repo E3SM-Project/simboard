@@ -1050,6 +1050,24 @@ async function testToolFilters() {
       toolButton('All')?.textContent === 'All (4)',
     'unique case tool counts',
   );
+  click(document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]'), 'add E3SM');
+  click(toolButton('MPAS-Analysis'), 'filter away added run');
+  await waitFor(
+    () => document.body.textContent?.includes('1 added run is hidden by filters.'),
+    'hidden added run notice',
+  );
+  click(button('Show all'), 'show hidden added run');
+  await waitFor(
+    () =>
+      toolButton('All')?.getAttribute('aria-pressed') === 'true' &&
+      !document.body.textContent?.includes('hidden by filters'),
+    'Show all resets filters',
+  );
+  click(document.querySelector<HTMLButtonElement>('button[aria-label^="Remove E3SM"]'), 'reset');
+  await waitFor(
+    () => document.querySelector('button[aria-label^="Add E3SM"]'),
+    'added run removed',
+  );
   check(toolButton('E3SM Diags')?.textContent === 'E3SM Diags (1)', 'Case E3SM count');
   check(
     toolButton('MPAS-Analysis')?.textContent === 'MPAS-Analysis (3)',
