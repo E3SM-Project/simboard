@@ -141,7 +141,7 @@ export const ExecutionPicker = ({
                 />
                 <span className="min-w-0">
                   <span
-                    className="block truncate font-mono font-medium text-blue-700"
+                    className="block truncate font-mono font-medium text-blue-600"
                     title={summary.executionId}
                   >
                     {summary.executionId}

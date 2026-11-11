@@ -29,7 +29,7 @@ Tokens are defined in `frontend/src/index.css` (CSS variables), mapped to utilit
 SimBoard-specific primitives:
 
 - `LoadingState` (`components/ui/loading-state.tsx`): loading indicator with `page`, `section`, and `inline` kinds.
-- `Alert` (`components/ui/alert.tsx`): inline notice with `error`, `warning`, and `info` variants. Use it instead of repeating state-color classes.
+- `Alert` (`components/ui/alert.tsx`): inline notice with `error`, `warning`, and `info` variants. Use it instead of repeating state-color classes. Errors use `role="alert"` and other variants `role="status"`; pass `role="group"` when the alert contains its own live regions or receives focus, to avoid duplicate announcements.
 - `TableCellText` (`components/ui/table-cell-text.tsx`): truncates cell text, exposes the full value, and renders `—` for empty values.
 
 Use `Button size="sm"` in toolbars and tables. Override primitive classes with `className` and `cn()` only for layout, spacing, or radius, not to restyle a variant.

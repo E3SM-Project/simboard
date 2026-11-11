@@ -356,7 +356,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                 </p>
                 <p>
                   <a
-                    className="font-medium underline underline-offset-2 hover:text-blue-700"
+                    className="font-medium underline underline-offset-2 hover:text-blue-600"
                     href="https://simboard.readthedocs.io/en/latest/user/ingestion-coverage/"
                     target="_blank"
                     rel="noreferrer"

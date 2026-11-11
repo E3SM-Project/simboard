@@ -147,14 +147,12 @@ export const CaseCompareRoute = ({
     }
 
     return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-6 shadow-sm">
+      <Alert variant="warning" className="rounded-2xl p-6 shadow-sm">
         <div className="flex items-start gap-3">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold text-slate-950">
-              Case Compare Needs More Executions
-            </h1>
-            <p className="mt-2 text-sm text-slate-700">{message}</p>
+            <h1 className="text-2xl font-semibold">Case Compare Needs More Executions</h1>
+            <p className="mt-2">{message}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               {onClose ? (
                 <Button type="button" variant="outline" onClick={onClose}>
@@ -168,13 +166,13 @@ export const CaseCompareRoute = ({
             </div>
           </div>
         </div>
-      </div>
+      </Alert>
     );
   }
 
   const contextNotice =
     excludedExecutionCount > 0 || missingExecutionCount > 0 ? (
-      <section className="mb-4 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-slate-700 shadow-sm">
+      <Alert variant="warning" role="group" className="mb-4 rounded-2xl p-4 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             {excludedExecutionCount > 0 ? (
@@ -206,7 +204,7 @@ export const CaseCompareRoute = ({
             ) : null}
           </div>
         </div>
-      </section>
+      </Alert>
     ) : undefined;
 
   return (

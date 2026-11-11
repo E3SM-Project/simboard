@@ -486,7 +486,7 @@ export const ExecutionSummaryRail = ({
       {showLoginForAiSummary && (
         <LoginForAiButton
           onLoginForSummary={onLoginForSummary}
-          className="h-auto w-fit px-0 text-blue-700 hover:bg-transparent hover:text-blue-900"
+          className="h-auto w-fit px-0 text-blue-600 hover:bg-transparent hover:text-blue-600 hover:underline"
         />
       )}
     </CardHeader>
@@ -577,7 +577,7 @@ export const ExecutionSummaryLauncher = ({
             {showLoginForAiSummary && (
               <LoginForAiButton
                 onLoginForSummary={onLoginForSummary}
-                className="text-blue-700 hover:bg-blue-50 hover:text-blue-900"
+                className="text-blue-600 hover:bg-blue-50 hover:text-blue-600"
               />
             )}
           </div>
@@ -612,7 +612,7 @@ export const ExecutionSummaryLauncher = ({
               {showLoginForAiSummary && (
                 <LoginForAiButton
                   onLoginForSummary={onLoginForSummary}
-                  className="h-auto w-fit px-0 text-blue-700 hover:bg-transparent hover:text-blue-900"
+                  className="h-auto w-fit px-0 text-blue-600 hover:bg-transparent hover:text-blue-600 hover:underline"
                 />
               )}
             </DialogHeader>

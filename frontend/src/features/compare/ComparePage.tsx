@@ -640,14 +640,11 @@ export const CompareWorkspace = ({
   // -------------------- Render --------------------
   if (selectedExecutionIds.length === 0 && !caseComparison) {
     return (
-      <div className="max-w-screen-2xl mx-auto p-8 text-center text-gray-600">
+      <div className="max-w-screen-2xl mx-auto p-8 text-center text-muted-foreground">
         <p className="text-lg mb-4">{emptyStateMessage}</p>
-        <a
-          href={emptyStateActionHref}
-          className="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-        >
-          {emptyStateActionLabel}
-        </a>
+        <Button asChild>
+          <a href={emptyStateActionHref}>{emptyStateActionLabel}</a>
+        </Button>
       </div>
     );
   }
@@ -1100,7 +1097,7 @@ export const CompareWorkspace = ({
                         {column.caseHref ? (
                           <a
                             href={column.caseHref}
-                            className="mt-1 block text-xs text-slate-600 transition hover:text-blue-700 hover:underline"
+                            className="mt-1 block text-xs text-slate-600 transition hover:text-blue-600 hover:underline"
                             title={`Go to case details for ${column.caseName}`}
                             onClick={(event) => {
                               handleInternalLinkClick(event, column.caseHref);

@@ -887,7 +887,7 @@ export const ExecutionDetailsView = ({
               hpcUsername: execution.hpcUsername,
               caseName: execution.caseName,
             })}
-            className="mt-1 inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-blue-700 hover:underline"
+            className="mt-1 inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-blue-600 hover:underline"
           >
             <span>Case: {execution.caseName}</span>
             <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
