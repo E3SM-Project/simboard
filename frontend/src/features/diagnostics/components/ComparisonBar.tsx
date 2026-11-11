@@ -124,17 +124,19 @@ export const ComparisonBar = () => {
       ref={barRef}
       role="region"
       aria-label="Diagnostics comparison"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur"
     >
       <div className="mx-auto flex max-h-[45vh] max-w-[1440px] flex-col gap-3 overflow-y-auto px-4 py-3 md:px-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-slate-950">Diagnostics</h2>
+            <h2 className="text-sm font-semibold text-foreground">Diagnostics</h2>
             <Badge variant="secondary" aria-live="polite">
               {entries.length} selected
             </Badge>
             {groups.length > 1 ? (
-              <span className="text-xs text-slate-500">{active[1].length} in this group</span>
+              <span className="text-xs text-muted-foreground">
+                {active[1].length} in this group
+              </span>
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -205,7 +207,7 @@ export const ComparisonBar = () => {
         {collapsed ? null : (
           <div id="comparison-tray-selections" className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Compare runs of the same kind, across cases or time ranges.
               </p>
               <Button variant="ghost" size="sm" disabled={checking} onClick={clear}>
@@ -215,12 +217,12 @@ export const ComparisonBar = () => {
             {groups.map(([key, group]) => (
               <div
                 key={key}
-                className="flex flex-col gap-2 rounded-lg border border-slate-200/80 bg-slate-50/60 p-2.5 lg:flex-row lg:items-center lg:justify-between"
+                className="flex flex-col gap-2 rounded-lg border border-border bg-muted-subtle p-2.5 lg:flex-row lg:items-center lg:justify-between"
               >
                 <div className="min-w-0 space-y-1.5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {GROUP_TITLES[key] ?? key}{' '}
-                    <span className="font-normal normal-case text-slate-500">
+                    <span className="font-normal normal-case text-muted-foreground">
                       {group.length}/{MAX_RUNS_PER_GROUP}
                     </span>
                   </p>
@@ -228,17 +230,17 @@ export const ComparisonBar = () => {
                     {group.map((entry) => (
                       <li
                         key={entry.url}
-                        className="flex max-w-full items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs"
+                        className="flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs"
                       >
-                        <span className="min-w-0 break-words font-medium text-slate-900">
+                        <span className="min-w-0 break-words font-medium text-foreground">
                           {entry.caseName}
                         </span>
-                        <span className="text-slate-500">{entry.period}</span>
+                        <span className="text-muted-foreground">{entry.period}</span>
                         <button
                           type="button"
                           disabled={checking}
                           onClick={() => remove(entry.url)}
-                          className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           aria-label={`Remove ${entryLabel(entry)}`}
                         >
                           <X className="h-3 w-3" aria-hidden="true" />

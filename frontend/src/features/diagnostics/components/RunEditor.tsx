@@ -326,7 +326,7 @@ export const RunEditor = ({
     <div className="min-w-0 space-y-3">
       <fieldset disabled={checking} className="min-w-0 space-y-3">
         {onCancel ? (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             Edit active runs here. Use Back to Diagnostics to browse cases and add runs.
           </p>
         ) : (
@@ -370,7 +370,9 @@ export const RunEditor = ({
               </SelectContent>
             </Select>
           ) : null}
-          {!visibleRuns.length ? <p className="text-sm text-slate-500">No runs selected.</p> : null}
+          {!visibleRuns.length ? (
+            <p className="text-sm text-muted-foreground">No runs selected.</p>
+          ) : null}
           <div
             className={cn(
               'space-y-1 overflow-y-auto p-0.5',
@@ -406,11 +408,11 @@ export const RunEditor = ({
                     </div>
                   </div>
                   {run.entry ? (
-                    <p className="text-xs text-slate-500 [overflow-wrap:anywhere]">
+                    <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
                       {diagnosticIdentifier(run.entry)}
                     </p>
                   ) : null}
-                  <details className="text-xs text-slate-500">
+                  <details className="text-xs text-muted-foreground">
                     <summary className="w-fit cursor-pointer rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       Edit address and label
                     </summary>
@@ -434,9 +436,9 @@ export const RunEditor = ({
           </div>
         </section>
       </fieldset>
-      <footer className="sticky bottom-0 z-10 space-y-2 border-t bg-white py-2">
+      <footer className="sticky bottom-0 z-10 space-y-2 border-t bg-card py-2">
         {selectionNotice ? (
-          <p role="status" className="text-sm text-slate-600">
+          <p role="status" className="text-sm text-muted-foreground">
             {selectionNotice}
           </p>
         ) : null}
@@ -636,7 +638,7 @@ const CaseBrowser = ({
             </TooltipProvider>
           </div>
           {query.isFetching || (!supported.length && !query.isError && !incomplete.length) ? (
-            <div role="status" className="text-xs text-slate-500">
+            <div role="status" className="text-xs text-muted-foreground">
               {query.isFetching
                 ? 'Checking cases for supported diagnostics…'
                 : !supported.length
@@ -706,7 +708,7 @@ const CaseBrowser = ({
                   className={cn(
                     'h-auto w-full justify-start gap-2 whitespace-normal px-2 py-2 text-left text-xs',
                     record.id === selected?.record.id &&
-                      'bg-slate-100 text-slate-950 ring-1 ring-inset ring-slate-300',
+                      'bg-muted text-foreground ring-1 ring-inset ring-muted-foreground/40',
                   )}
                   aria-pressed={record.id === selected?.record.id}
                   aria-controls="available-case-diagnostics"
@@ -725,7 +727,7 @@ const CaseBrowser = ({
                   >
                     {record.name}
                   </span>
-                  <span className="shrink-0 text-xs font-normal text-slate-500">
+                  <span className="shrink-0 text-xs font-normal text-muted-foreground">
                     <span className="sr-only"> · </span>
                     {periodGroups(diagnostics?.sources ?? []).reduce(
                       (count, [, runs]) => count + runs.length,

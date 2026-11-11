@@ -142,7 +142,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
               onRemove={basket.remove}
             />
             {query.isSuccess && !runs.length ? (
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-muted-foreground">
                 No supported runs were found. Original directories may contain other tools or raw
                 outputs.
               </p>
@@ -169,7 +169,7 @@ export const DiagnosticsResourceLink = ({ caseId, url }: { caseId: string; url: 
     <Link
       to={{ pathname: location.pathname, search: location.search, hash: `#${target}` }}
       state={location.state}
-      className="rounded px-2 text-xs text-slate-500 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="rounded px-2 text-xs text-muted-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       View in Diagnostics<span className="sr-only"> for {url}</span>
     </Link>

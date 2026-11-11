@@ -93,10 +93,10 @@ export const DiagnosticRunList = ({
           <section key={period} aria-labelledby={`${id}-${activeAnalysis}-period-${index}`}>
             <h4
               id={`${id}-${activeAnalysis}-period-${index}`}
-              className="mb-1 flex items-center gap-2 border-b pb-1 text-xs font-semibold text-slate-900"
+              className="mb-1 flex items-center gap-2 border-b pb-1 text-xs font-semibold text-foreground"
             >
               {period}
-              <span className="text-xs font-normal text-slate-500">{runs.length} runs</span>
+              <span className="text-xs font-normal text-muted-foreground">{runs.length} runs</span>
             </h4>
             <ul className="space-y-1">
               {runs.map((run) => (
@@ -134,7 +134,7 @@ export const DiagnosticRunList = ({
               target="_blank"
               rel="noreferrer"
               title={source.rootUrl}
-              className="inline-flex max-w-full items-center gap-1 rounded text-xs font-medium text-slate-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex max-w-full items-center gap-1 rounded text-xs font-medium text-muted-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="min-w-0 break-words [overflow-wrap:anywhere]">
                 {source.label || 'Browse diagnostics directory'}
@@ -245,15 +245,17 @@ const DiagnosticRunRow = ({
     <li
       className={cn(
         'flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2 py-1.5 text-sm',
-        selected ? 'border-slate-400 bg-slate-50' : 'border-slate-200 bg-white',
+        selected ? 'border-muted-foreground bg-muted-subtle' : 'border-border bg-card',
       )}
     >
       <div className="min-w-0 flex-1 basis-48">
-        <p className="text-xs font-medium text-slate-900">{title}</p>
-        <p className="text-xs text-slate-500 [overflow-wrap:anywhere]">
+        <p className="text-xs font-medium text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
           {tool} · <span>{identifier}</span>
         </p>
-        {combinedPeriods ? <p className="text-xs text-slate-500">{combinedPeriods}</p> : null}
+        {combinedPeriods ? (
+          <p className="text-xs text-muted-foreground">{combinedPeriods}</p>
+        ) : null}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs">

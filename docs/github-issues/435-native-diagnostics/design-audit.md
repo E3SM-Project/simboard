@@ -6,7 +6,7 @@ Audit of the native diagnostics UI against [Frontend Design System](../../design
 
 Existing conventions cover these; no UX decision needed.
 
-- [ ] **1. Raw neutral colors.** 61 `no-restricted-syntax` lint errors (`slate-*`, `bg-white`) in `ComparePage.tsx`, `components/RunEditor.tsx`, `components/ComparisonBar.tsx`, `components/DiagnosticRunList.tsx`, and `components/DiagnosticsRunsCard.tsx`. Use semantic tokens. Blocks CI.
+- [x] **1. Raw neutral colors.** 61 `no-restricted-syntax` lint errors (`slate-*`, `bg-white`) in `ComparePage.tsx`, `components/RunEditor.tsx`, `components/ComparisonBar.tsx`, `components/DiagnosticRunList.tsx`, and `components/DiagnosticsRunsCard.tsx`. Use semantic tokens. Blocks CI.
 - [ ] **2. Page width tiers.** `ComparePage.tsx` uses `max-w-[1600px]`; `ComparisonBar.tsx` uses `max-w-[1440px]`. Use the workspace tier, `max-w-screen-2xl`.
 - [ ] **3. Heading scale.** `h1` is `text-xl`; the variable `h2` in `ComparePage.tsx` is `text-base`; the Case details Diagnostics card title is a `div`, so that section has no `h2`. Use `text-2xl font-semibold tracking-tight` for `h1` and `text-lg font-semibold` for `h2`.
 - [ ] **4. Back control.** `ComparePage.tsx` uses a text link. Use an outline back button.

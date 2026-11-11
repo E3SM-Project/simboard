@@ -259,9 +259,9 @@ export const ComparePage = () => {
     return (
       <Shell>
         <header>
-          <h1 className="text-xl font-semibold text-slate-950">Compare diagnostics</h1>
+          <h1 className="text-xl font-semibold text-foreground">Compare diagnostics</h1>
         </header>
-        <div className="rounded-xl border bg-white p-3 sm:p-4">
+        <div className="rounded-xl border bg-card p-3 sm:p-4">
           <RunEditor initialRuns={[]} onApply={applyRuns} />
         </div>
       </Shell>
@@ -276,15 +276,15 @@ export const ComparePage = () => {
     <Shell>
       <Link
         to="/diagnostics"
-        className="inline-flex items-center gap-1 rounded text-sm text-slate-600 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex items-center gap-1 rounded text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         Back to Diagnostics
       </Link>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold text-slate-950">Compare diagnostics</h1>
-          <p className="mt-1 text-xs text-slate-500" aria-live="polite">
+          <h1 className="text-xl font-semibold text-foreground">Compare diagnostics</h1>
+          <p className="mt-1 text-xs text-muted-foreground" aria-live="polite">
             {state.runs.length} active runs · {selectedRuns.length} selected runs
           </p>
           <div className="mt-1 flex flex-wrap gap-1.5">
@@ -404,7 +404,7 @@ export const ComparePage = () => {
           Edit runs to remove some.
         </Notice>
       ) : query.isLoading ? (
-        <p className="text-sm text-slate-500">Reading each run&apos;s published plots…</p>
+        <p className="text-sm text-muted-foreground">Reading each run&apos;s published plots…</p>
       ) : query.isError ? (
         <div className="space-y-2 text-sm text-red-600">
           <p>The diagnostics archive could not be read just now.</p>
@@ -436,14 +436,14 @@ export const ComparePage = () => {
           ) : null}
 
           {data.sets.length === 0 ? (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-muted-foreground">
               These runs have no plots in common. Compare runs of the same kind, for example
               model-vs-observations runs with each other. Switch Comparison Group, edit active runs,
               or use Back to Diagnostics to add runs.
             </p>
           ) : (
             <>
-              <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+              <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
                 <span id="plot-set-label" className="text-sm font-medium">
                   Diagnostic category
                 </span>
@@ -465,7 +465,7 @@ export const ComparePage = () => {
                 <aside className="space-y-2">
                   <div className="relative">
                     <Search
-                      className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-slate-400"
+                      className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground"
                       aria-hidden="true"
                     />
                     <Input
@@ -476,11 +476,11 @@ export const ComparePage = () => {
                       className="pl-8"
                     />
                   </div>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted-foreground">
                     {detail?.missing ? `${detail.missing} plots not in every run` : null}
                   </p>
                   {!visible.length ? (
-                    <p className="text-sm text-slate-500">No variables match this filter.</p>
+                    <p className="text-sm text-muted-foreground">No variables match this filter.</p>
                   ) : null}
                   <ul className="max-h-60 space-y-0.5 overflow-y-auto pr-1 lg:max-h-[70vh]">
                     {visible.map((group) => (
@@ -496,15 +496,17 @@ export const ComparePage = () => {
                           className={cn(
                             'w-full rounded-md px-2 py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                             group.id === activeGroup?.id
-                              ? 'bg-slate-900 text-white'
-                              : 'text-slate-700 hover:bg-slate-100',
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-foreground hover:bg-muted',
                           )}
                         >
                           <span className="font-medium">{group.title}</span>{' '}
                           <span
                             className={cn(
                               'text-xs',
-                              group.id === activeGroup?.id ? 'text-slate-300' : 'text-slate-500',
+                              group.id === activeGroup?.id
+                                ? 'text-primary-foreground/70'
+                                : 'text-muted-foreground',
                             )}
                           >
                             {group.reference}
@@ -527,9 +529,9 @@ export const ComparePage = () => {
                         >
                           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                         </Button>
-                        <h2 className="min-w-0 break-words text-base font-semibold text-slate-950">
+                        <h2 className="min-w-0 break-words text-base font-semibold text-foreground">
                           {activeGroup.title}{' '}
-                          <span className="font-normal text-slate-500">
+                          <span className="font-normal text-muted-foreground">
                             vs{' '}
                             {new Set(activePlot.references.filter(Boolean)).size > 1
                               ? 'per-run references'
@@ -572,7 +574,7 @@ export const ComparePage = () => {
                       ) : null}
                     </div>
                     {view === 'diff' && !activePlot.singlePanel ? (
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-muted-foreground">
                         Difference shows each run minus its own reference, not the difference
                         between selected simulations. Colors use each published image’s scale.
                       </p>
@@ -610,13 +612,15 @@ interface ChoiceProps {
 /** A segmented control; a single option is shown as plain text. */
 const Choice = ({ label, options, value, onChange, format = (v) => v }: ChoiceProps) => {
   if (options.length < 2) {
-    return options[0] ? <span className="text-sm text-slate-500">{format(options[0])}</span> : null;
+    return options[0] ? (
+      <span className="text-sm text-muted-foreground">{format(options[0])}</span>
+    ) : null;
   }
   return (
     <div
       role="radiogroup"
       aria-label={label}
-      className="inline-flex max-w-full flex-wrap rounded-md border border-slate-200 p-0.5"
+      className="inline-flex max-w-full flex-wrap rounded-md border border-border p-0.5"
       onKeyDown={(event) => {
         const delta = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
         if (!delta && event.key !== 'Home' && event.key !== 'End') return;
@@ -641,7 +645,9 @@ const Choice = ({ label, options, value, onChange, format = (v) => v }: ChoicePr
           onClick={() => onChange(option)}
           className={cn(
             'rounded px-2.5 py-1 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-            option === value ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100',
+            option === value
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:bg-muted',
           )}
         >
           {format(option)}
@@ -692,13 +698,13 @@ const Plots = ({ data, detail, plot, view }: PlotsProps) => {
       {cells.map(({ run, src, ref }) => (
         <figure
           key={`${run.url}|${run.label}`}
-          className="overflow-hidden rounded-lg border border-slate-200 bg-white"
+          className="overflow-hidden rounded-lg border border-border bg-card"
         >
-          <figcaption className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-1.5 text-xs">
-            <span className="min-w-0 break-words font-medium text-slate-900" title={run.url}>
+          <figcaption className="flex items-center justify-between gap-2 border-b border-border px-3 py-1.5 text-xs">
+            <span className="min-w-0 break-words font-medium text-foreground" title={run.url}>
               {displayLabel(run)}
               {view !== 'test' && ref ? (
-                <span className="block font-normal text-slate-500">Reference: {ref}</span>
+                <span className="block font-normal text-muted-foreground">Reference: {ref}</span>
               ) : null}
             </span>
             {src ? (
@@ -706,7 +712,7 @@ const Plots = ({ data, detail, plot, view }: PlotsProps) => {
                 href={src}
                 target="_blank"
                 rel="noreferrer"
-                className="shrink-0 rounded p-1 text-slate-500 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`Open the full image for ${displayLabel(run)}`}
               >
                 <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
@@ -721,7 +727,7 @@ const Plots = ({ data, detail, plot, view }: PlotsProps) => {
               width={detail.imageWidth}
             />
           ) : (
-            <p className="flex min-h-48 items-center justify-center p-4 text-sm text-slate-500">
+            <p className="flex min-h-48 items-center justify-center p-4 text-sm text-muted-foreground">
               Plot unavailable for this run. Use Edit runs to replace it.
             </p>
           )}
@@ -731,9 +737,9 @@ const Plots = ({ data, detail, plot, view }: PlotsProps) => {
         ? references.map((cell) => (
             <figure
               key={`${cell.ref}|${cell.src}`}
-              className="overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-50/50"
+              className="overflow-hidden rounded-lg border border-dashed border-border bg-muted-subtle"
             >
-              <figcaption className="border-b border-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">
+              <figcaption className="border-b border-border px-3 py-1.5 text-xs font-medium text-muted-foreground">
                 Reference · {cell.ref} · {displayLabel(cell.run)}
               </figcaption>
               <PanelImage
@@ -766,7 +772,7 @@ const PanelImage = ({
     return (
       <div
         role="status"
-        className="flex min-h-48 flex-col items-center justify-center gap-2 p-4 text-center text-sm text-slate-500"
+        className="flex min-h-48 flex-col items-center justify-center gap-2 p-4 text-center text-sm text-muted-foreground"
       >
         <p>Published image unavailable: {alt}</p>
         <Button variant="outline" size="sm" onClick={() => setFailedSrc(null)}>
