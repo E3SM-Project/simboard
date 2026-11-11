@@ -201,55 +201,53 @@ export const ComparisonBar = () => {
           </Button>
         ) : null}
 
-        {collapsed ? null : (
-          <div id="comparison-tray-selections" className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">
-                Compare runs of the same kind, across cases or time ranges.
-              </p>
-              <Button variant="ghost" size="sm" disabled={checking} onClick={clear}>
-                Clear selection
-              </Button>
-            </div>
-            {groups.map(([key, group]) => (
-              <div
-                key={key}
-                className="flex flex-col gap-2 rounded-xl border border-border bg-muted-subtle p-2.5 lg:flex-row lg:items-center lg:justify-between"
-              >
-                <div className="min-w-0 space-y-1.5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {GROUP_TITLES[key] ?? key}{' '}
-                    <span className="font-normal normal-case text-muted-foreground">
-                      {group.length}/{MAX_RUNS_PER_GROUP}
-                    </span>
-                  </p>
-                  <ul className="flex flex-wrap gap-1.5">
-                    {group.map((entry) => (
-                      <li
-                        key={entry.url}
-                        className="flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs"
-                      >
-                        <span className="min-w-0 break-words font-medium text-foreground">
-                          {entry.caseName}
-                        </span>
-                        <span className="text-muted-foreground">{entry.period}</span>
-                        <button
-                          type="button"
-                          disabled={checking}
-                          onClick={() => remove(entry.url)}
-                          className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          aria-label={`Remove ${entryLabel(entry)}`}
-                        >
-                          <X className="h-3 w-3" aria-hidden="true" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            ))}
+        <div id="comparison-tray-selections" hidden={collapsed} className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              Compare runs of the same kind, across cases or time ranges.
+            </p>
+            <Button variant="ghost" size="sm" disabled={checking} onClick={clear}>
+              Clear selection
+            </Button>
           </div>
-        )}
+          {groups.map(([key, group]) => (
+            <div
+              key={key}
+              className="flex flex-col gap-2 rounded-xl border border-border bg-muted-subtle p-2.5 lg:flex-row lg:items-center lg:justify-between"
+            >
+              <div className="min-w-0 space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {GROUP_TITLES[key] ?? key}{' '}
+                  <span className="font-normal normal-case text-muted-foreground">
+                    {group.length}/{MAX_RUNS_PER_GROUP}
+                  </span>
+                </p>
+                <ul className="flex flex-wrap gap-1.5">
+                  {group.map((entry) => (
+                    <li
+                      key={entry.url}
+                      className="flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs"
+                    >
+                      <span className="min-w-0 break-words font-medium text-foreground">
+                        {entry.caseName}
+                      </span>
+                      <span className="text-muted-foreground">{entry.period}</span>
+                      <button
+                        type="button"
+                        disabled={checking}
+                        onClick={() => remove(entry.url)}
+                        className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={`Remove ${entryLabel(entry)}`}
+                      >
+                        <X className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

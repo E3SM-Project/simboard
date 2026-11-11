@@ -419,7 +419,7 @@ const compareAction = () =>
 const analysisTab = (text: string) =>
   [
     ...document.querySelectorAll<HTMLButtonElement>(
-      '[aria-label="Filter diagnostics by analysis"] [role="tab"]',
+      '[aria-labelledby$="-analysis-label"] [role="tab"]',
     ),
   ].find((item) => item.textContent?.startsWith(`${text} (`));
 const selectedSummary = () =>
@@ -427,11 +427,9 @@ const selectedSummary = () =>
     item.textContent?.startsWith('Selected runs ('),
   );
 const toolButton = (text: string) =>
-  [
-    ...document.querySelectorAll<HTMLButtonElement>(
-      '[aria-label="Filter diagnostics by tool"] button',
-    ),
-  ].find((item) => item.textContent?.startsWith(`${text} (`));
+  [...document.querySelectorAll<HTMLButtonElement>('[aria-labelledby$="-tool-label"] button')].find(
+    (item) => item.textContent?.startsWith(`${text} (`),
+  );
 const expandSelections = async () => {
   await waitFor(
     () => document.querySelector('[aria-label="Selected runs"]'),
@@ -638,7 +636,7 @@ async function testWorkspace() {
   );
   click(document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]'), 'first run');
   await waitFor(() => button('Expand'), 'collapsed tray');
-  check(!document.getElementById('comparison-tray-selections'), 'Tray starts collapsed');
+  check(document.getElementById('comparison-tray-selections')?.hidden, 'Tray starts collapsed');
   click(link('Beta case'), 'second case');
   await waitFor(() => document.querySelector('h1')?.textContent === 'Case beta', 'second case');
   await waitFor(() => document.querySelector('button[aria-label^="Add E3SM"]'), 'beta runs');
@@ -648,7 +646,10 @@ async function testWorkspace() {
   );
   await waitFor(() => document.body.textContent?.includes('2 selected'), 'persistent count');
   click(button('Expand'), 'expand tray');
-  await waitFor(() => document.getElementById('comparison-tray-selections'), 'expanded tray');
+  await waitFor(
+    () => document.getElementById('comparison-tray-selections')?.hidden === false,
+    'expanded tray',
+  );
   check(
     document.getElementById('comparison-tray-selections')?.textContent?.includes('case.alpha'),
     'Cross-case selection retained',
@@ -1060,7 +1061,7 @@ async function testToolFilters() {
     'Both filter rows have subtle hierarchy labels',
   );
   for (const kind of ['tool', 'analysis']) {
-    const controls = document.querySelector(`[aria-label="Filter diagnostics by ${kind}"]`)!;
+    const controls = document.querySelector(`[aria-labelledby$="-${kind}-label"]`)!;
     check(
       document.getElementById(controls.getAttribute('aria-labelledby')!)?.textContent ===
         (kind === 'tool' ? 'Tool' : 'Analysis'),

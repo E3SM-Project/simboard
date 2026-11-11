@@ -344,8 +344,11 @@ export const RunEditor = ({
           browser
         )}
         <section className="space-y-2 border-t pt-3" aria-label="Selected runs">
-          <h2 className="text-sm font-semibold" aria-live="polite">
-            Selected runs ({visibleRuns.length}/{MAX_COMPARED_RUNS})
+          <h2 className="text-sm font-semibold">
+            Selected runs{' '}
+            <span aria-live="polite">
+              ({visibleRuns.length}/{MAX_COMPARED_RUNS})
+            </span>
           </h2>
           {!onCancel && trayGroups.length > 1 ? (
             <Select
@@ -771,7 +774,7 @@ const CaseBrowser = ({
         aria-label={selected ? `Diagnostics for ${selected.record.name}` : 'Available diagnostics'}
       >
         <header className="space-y-1 border-b p-3">
-          <h3 className="text-sm font-semibold [overflow-wrap:anywhere]" aria-live="polite">
+          <h3 className="text-sm font-semibold [overflow-wrap:anywhere]">
             {selected?.record.name ?? 'Choose a case with supported diagnostics.'}
           </h3>
         </header>

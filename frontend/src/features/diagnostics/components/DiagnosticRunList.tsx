@@ -168,7 +168,6 @@ export const DiagnosticRunList = ({
         </p>
         <div
           role="group"
-          aria-label="Filter diagnostics by tool"
           aria-labelledby={`${id}-tool-label`}
           className="flex w-fit max-w-full flex-wrap gap-0.5 rounded-lg bg-muted p-1"
         >
@@ -206,7 +205,6 @@ export const DiagnosticRunList = ({
           Analysis
         </p>
         <TabsList
-          aria-label="Filter diagnostics by analysis"
           aria-labelledby={`${id}-analysis-label`}
           className="grid w-full max-w-sm grid-cols-3"
         >
