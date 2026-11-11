@@ -11,10 +11,10 @@ SimBoard UI conventions for the React, Tailwind CSS, and shadcn/ui frontend. Sou
 
 ## Tokens
 
-Tokens are defined in `frontend/src/index.css` (CSS variables), mapped to utilities in `frontend/tailwind.config.js`, and configured for shadcn in `frontend/components.json`. SimBoard has a light theme only; do not add `dark:` variants.
+Tokens are defined in `frontend/src/index.css` (CSS variables), mapped to utilities in `frontend/tailwind.config.js`, and configured for shadcn in `frontend/components.json`. SimBoard has a light theme only; do not add `dark:` variants ([#455](https://github.com/E3SM-Project/simboard/issues/455) tracks dark mode).
 
-- **Color:** Use semantic utilities (`text-foreground`, `text-muted-foreground`, `bg-background`, `bg-muted`, `border-border`) for neutral UI. State colors are Tailwind tints, not tokens: `green` for success, `red` for errors, `amber` for warnings and in-progress states, `sky` or `blue` for info. Use `ExecutionStatusBadge` (`components/shared/`, built on `Badge`) for execution status. Text links use `text-blue-600 hover:underline`.
-- **Typography:** `text-sm` for body and table text; `text-xs text-muted-foreground` for secondary metadata, help text, and counts. Identifiers (execution IDs, hashes, paths) use `font-mono text-xs`. One `h1` per page, then `h2` for sections.
+- **Color:** Use semantic utilities for neutral UI, not raw `slate-*`, `gray-*`, or `bg-white`: `text-foreground` for primary text, `text-muted-foreground` for secondary text and control icons, `border-border` for borders, `bg-muted` for subtle fills, `bg-card` for panels, and `bg-background` for page surfaces. State colors are Tailwind tints, not tokens: `green` for success, `red` for errors, `amber` for warnings and in-progress states, `sky` or `blue` for info. Use `ExecutionStatusBadge` (`components/shared/`, built on `Badge`) for execution status. Text links use `text-blue-600 hover:underline`.
+- **Typography:** `text-sm` for body and table text; `text-xs text-muted-foreground` for secondary metadata, help text, and counts. Identifiers (execution IDs, hashes, paths) use `font-mono text-xs`. One `h1` per page, then `h2` for sections. App pages use `text-2xl font-semibold tracking-tight` for `h1` and `text-lg font-semibold` for `h2`. Landing pages (Home, About) use a larger `h1` (`text-4xl font-bold tracking-tight`) and `text-2xl font-semibold` for `h2`.
 - **Radius and elevation:** Controls use `rounded-md`; cards and panels use `rounded-xl` or `rounded-2xl`; pills use `rounded-full`. Surfaces use `border` plus at most `shadow-sm`.
 
 ## Components
@@ -38,7 +38,14 @@ Use `Button size="sm"` in toolbars and tables. Override primitive classes with `
 ## Layout and navigation
 
 - Navigation lives in `NavBar` (desktop) and `MobileMenu` (below `md`).
-- Pages are centered `max-w-*` containers whose width follows content density, from narrow forms (Upload) to wide workspaces (Compare).
+- Pages are centered containers in one of three width tiers:
+
+  | Tier         | Width              | Pages                                  |
+  | ------------ | ------------------ | -------------------------------------- |
+  | Form / prose | `max-w-4xl`        | Upload, About                          |
+  | Detail       | `max-w-7xl`        | Home, Case details, Execution details  |
+  | Workspace    | `max-w-screen-2xl` | Cases, Compare; the `NavBar` container |
+
 - Detail pages start with an outline back button, the `h1`, and right-aligned page actions. See `features/catalog/CaseDetailsPage.tsx`.
 - Group page content in bordered sections or `Card`s, each with an `h2`.
 - Wrap toolbars and action groups, and stack header rows below `md`.
@@ -83,6 +90,7 @@ Canonical: execution selection in `features/catalog/CaseDetailsPage.tsx` and `fe
 
 ## Forms and editing
 
+- Use `Label`, `Input`, `Select`, and other primitives, not native form controls.
 - Pair `Label` (with `htmlFor`) and its control; link help text with `aria-describedby`. See the Case Group field in `features/catalog/CaseDetailsPage.tsx`.
 - Edit mode is explicit: `Edit` switches to inputs with `Cancel` and `Save Changes`. Disable save while saving or when nothing changed, and show progress in the label (`Saving…`).
 - When editing is unavailable, explain why: "Log In to Edit" for signed-out users, or a disabled button with a tooltip.
@@ -107,22 +115,23 @@ Canonical: execution selection in `features/catalog/CaseDetailsPage.tsx` and `fe
 - Refetching after a sort, filter, or page change keeps the current rows, headers, and controls visible, with an inline indicator inside the table container. Keep previous query data while the new data loads.
 - Canonical: `features/home/components/ProductionCasesTable.tsx` and the "Refreshing cases" bar in `features/catalog/CasesPage.tsx`.
 
-| State                          | Pattern                                                                                                                |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| Initial load                   | Page record: `LoadingState kind="page"`. Table or section: `LoadingState kind="section"` in its own area.              |
-| Background refresh             | `LoadingState kind="inline"` inside the table or section container; existing content stays visible.                    |
-| Refresh failed, data available | `Alert variant="error"` above the content ("Could not refresh … Showing previously loaded …") with `Retry`.            |
-| Load failed, no data           | `Alert variant="error"` in place of the content with `Retry`.                                                          |
-| No data or no matching results | Table: one full-width empty row. Panel: a dashed-border block with a message and, when filters apply, "Reset filters". |
-| Transient result               | `toast` from `hooks/use-toast.ts`; `variant: 'destructive'` for failures.                                              |
-| Pending action                 | Disable the button and change its label (`Saving…`, `Loading more…`).                                                  |
+| State                          | Pattern                                                                                                                                      |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Initial load                   | Page record: `LoadingState kind="page"`. Table or section: `LoadingState kind="section"` in its own area.                                    |
+| Background refresh             | `LoadingState kind="inline"` inside the table or section container; existing content stays visible.                                          |
+| Refresh failed, data available | `Alert variant="error"` above the content ("Could not refresh … Showing previously loaded …") with `Retry`.                                  |
+| Load failed, no data           | `Alert variant="error"` in place of the content with `Retry`.                                                                                |
+| No data                        | Table: one full-width empty row. Panel: a dashed-border block. Say nothing exists yet; offer a create action if the user can create one.     |
+| No matching results            | Same container as "No data", with "No … match these filters." and "Reset filters". Search inside a popover uses plain text (`CommandEmpty`). |
+| Transient result               | `toast` from `hooks/use-toast.ts`; `variant: 'destructive'` for failures.                                                                    |
+| Pending action                 | Disable the button and change its label (`Saving…`, `Loading more…`).                                                                        |
 
 ## Accessibility
 
 Apply these to new and changed UI.
 
 - Show focus on custom controls with `focus-visible:ring-2 focus-visible:ring-ring`.
-- Give icon-only buttons an `aria-label`; mark decorative icons `aria-hidden="true"`.
+- Give icon-only buttons an `aria-label`. Lucide icons are `aria-hidden` by default unless given an accessible name; mark custom SVG icons `aria-hidden="true"`.
 - Use `aria-pressed` for toggles, `aria-expanded` for disclosures, `aria-sort` for sorted headers, and `aria-live="polite"` for counts.
 - Meet WCAG 2.2 AA contrast (4.5:1 for text; 3:1 for icons that identify controls). Do not convey state by color alone.
 
@@ -130,10 +139,10 @@ Apply these to new and changed UI.
 
 These exist in the code but are not conventions. Do not copy them into new work:
 
-- Raw `slate-*` and `gray-*` neutrals; prefer semantic tokens.
-- Native form controls on the Upload page.
-- Inline state-color classes instead of `Alert`.
-- `text-blue-700` on link-styled controls.
-- Whole-page loaders that wait for one section's data: Home (catalog overview), Cases (case list), and Case details (executions). The Case details executions table also lacks an in-table refresh indicator.
+- Raw `slate-*`, `gray-*`, and `bg-white` neutrals, mainly in catalog, compare, and upload.
+- Native form controls on the Upload page, and inline state-color panels instead of `Alert` on Upload and Compare.
+- Page widths and heading sizes outside the width tiers and heading scale above.
+- Empty states built from raw neutrals; the Cases table empty row lacks "Reset filters".
+- Whole-page loaders that wait for one section's data: Home (catalog overview), Cases (case list), and Case details (executions). Tracked in [#454](https://github.com/E3SM-Project/simboard/issues/454).
 
-The full list, including accessibility gaps and open design decisions, is tracked in [#452](https://github.com/E3SM-Project/simboard/issues/452). Rationale is in the [design review](github-issues/451-design-system/design-review.md).
+Decisions and rationale are in the [design review](github-issues/451-design-system/design-review.md#decisions-452).
