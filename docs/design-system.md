@@ -38,7 +38,7 @@ SimBoard UI conventions for the React, Tailwind CSS, and shadcn/ui frontend. Sou
 ### Spacing, radius, and elevation
 
 - Use the Tailwind spacing scale. Page sections stack with `space-y-6`; form fields with `space-y-1` or `space-y-2`.
-- Radius: controls and notices use `rounded-md` (from `--radius`); cards and panels use `rounded-xl` or `rounded-2xl`; pills use `rounded-full`.
+- Radius: controls use `rounded-md` (from `--radius`), which is also the `Alert` default; cards, panels, and panel-sized notices use `rounded-xl` or `rounded-2xl`; pills use `rounded-full`.
 - Elevation: surfaces use `border` plus at most `shadow-sm`. Stronger shadows are for overlays only (provided by the primitives).
 
 ## Components
@@ -50,13 +50,13 @@ SimBoard UI conventions for the React, Tailwind CSS, and shadcn/ui frontend. Sou
 | Layout     | `components/layout/`     | App shell: `NavBar`, `MobileMenu`.                                                        |
 | Feature    | `features/*/components/` | Feature-specific UI. Promote to `components/shared/` only when a second feature needs it. |
 
-Commonly used SimBoard-specific primitives:
+Commonly used primitives:
 
 - `LoadingState` (`components/ui/loading-state.tsx`): loading and refresh indicator with `page`, `section`, and `inline` kinds. Announces via `role="status"`.
 - `Alert` (`components/ui/alert.tsx`): inline error, warning, or info notice. Errors use `role="alert"`; others use `role="status"`. Pass layout classes (flex, padding, radius) through `className`.
 - `TableCellText` (`components/ui/table-cell-text.tsx`): truncates cell text to 1–3 lines, shows the full value by `title` or tooltip, and renders `—` for empty values.
 - `Button` variants: `default` for the primary action, `outline` for secondary actions, `ghost` for low-emphasis and icon actions, `destructive` for deletes, `link` for inline text actions. Use `size="sm"` in toolbars and tables.
-- Override primitive classes with `className` and `cn()` (`lib/utils.ts`) only for layout or sizing, not to restyle the variant.
+- Override primitive classes with `className` and `cn()` (`lib/utils.ts`) only for layout, spacing, or radius, not to restyle the variant.
 
 ## Layout and navigation
 
@@ -145,11 +145,13 @@ Every dialog has a `DialogTitle` and `DialogDescription`, and returns focus to i
 
 ## Accessibility
 
+Apply these to new and changed UI. Existing gaps are listed under [Known deviations](#known-deviations).
+
 - Rely on Radix primitives for focus management, keyboard support, and ARIA on dialogs, popovers, menus, selects, and tabs.
 - Show focus on custom controls with `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`.
 - Every icon-only button has an `aria-label`; decorative icons use `aria-hidden="true"`.
 - Use `aria-pressed` for toggle buttons, `aria-expanded` for disclosure buttons, `aria-sort` for sorted headers, and `role="status"` or `aria-live="polite"` for counts and loading text.
-- Keep text at WCAG 2.2 AA contrast (4.5:1 for normal text). Do not convey state by color alone; status badges pair color with a label and icon.
+- Keep text at WCAG 2.2 AA contrast (4.5:1 for normal text; 3:1 for icons that identify controls). Do not convey state by color alone; status badges always include a text label.
 
 ## Known deviations
 
@@ -160,3 +162,7 @@ These exist in the code but are not conventions. Do not copy them into new work.
 - The Upload page uses native form controls instead of shadcn primitives. Tracked in #452.
 - Page container widths and `h1` sizes vary per page. Tracked in #452.
 - Upload's validation and result panels and the compare-route notice panels still inline their state colors instead of using `Alert`.
+- `Checkbox` (`components/ui/checkbox.tsx`) removes its visible focus ring.
+- Some text and icons fall below AA contrast: `text-destructive` on white, `text-muted-foreground` on `bg-muted`, and `text-slate-400` icons on controls.
+- Many decorative icons lack `aria-hidden="true"`.
+- A few link-styled controls and labels still use `text-blue-700` (`ExecutionSummaryPanel`, `ExecutionPicker`).

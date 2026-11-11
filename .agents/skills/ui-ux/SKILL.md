@@ -23,11 +23,10 @@ Skip this skill for straightforward implementation that follows existing convent
 2. Identify the user task and evaluate hierarchy, workflow efficiency, feedback states, responsiveness, and accessibility.
 3. Prefer existing conventions and canonical implementations. When proposing something new, explain why existing patterns are insufficient; cite external design systems only as supporting evidence.
 4. Present recommendations with the problem, proposal, tradeoffs, affected components, and priority. Separate consistency fixes from changes that need a product or architecture decision.
-5. Wait for approval before implementation. When a decision changes a convention, update `docs/design-system.md` with the implementation.
+5. Wait for approval before implementation unless the user has already approved or specified the design. When a decision changes a convention, update `docs/design-system.md` with the implementation.
 
 ## Guardrails
 
-- Do not implement changes as part of an evaluation.
 - Do not present proposals as established conventions.
 - Do not introduce new UI libraries, visual styles, or dependencies to match external systems.
 - Preserve SimBoard's existing visual identity unless a change has clear usability or accessibility justification.
