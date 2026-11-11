@@ -54,7 +54,7 @@ export const ProductionCasesTable = () => {
   }
 
   return (
-    <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
+    <div className="rounded-xl border border-muted bg-card p-4 shadow-sm md:p-6">
       {error ? (
         <Alert variant="error" className="mb-3 flex items-center justify-between gap-3">
           <span>Could not refresh production cases. Showing previously loaded data.</span>

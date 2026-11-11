@@ -107,7 +107,7 @@ export const CaseConfigurationDetails = ({
       id="case-configuration-differences"
       tabIndex={-1}
       aria-labelledby="case-configuration-differences-title"
-      className="min-w-0 border-t border-slate-200 pt-3"
+      className="min-w-0 border-t border-border pt-3"
       data-case-configuration
     >
       <summary className="cursor-pointer">
@@ -126,7 +126,7 @@ export const CaseConfigurationDetails = ({
         >
           <TableHeader>
             <TableRow>
-              <TableHead scope="col" className="sticky left-0 z-10 w-40 bg-white align-top">
+              <TableHead scope="col" className="sticky left-0 z-10 w-40 bg-card align-top">
                 Field
               </TableHead>
               {orderedGroups.map((group) => (
@@ -136,7 +136,7 @@ export const CaseConfigurationDetails = ({
                   className="w-56 py-2 align-top [overflow-wrap:anywhere]"
                 >
                   <span
-                    className="font-mono text-xs font-semibold text-slate-950"
+                    className="font-mono text-xs font-semibold text-foreground"
                     title={groupLabel(group)}
                   >
                     {group.caseHash ? formatCaseHashLabel(group.caseHash) : groupLabel(group)}
@@ -168,7 +168,7 @@ export const CaseConfigurationDetails = ({
                   scope="row"
                   id={configurationFieldId(field)}
                   tabIndex={-1}
-                  className="sticky left-0 z-10 scroll-mt-24 bg-white py-2 align-top text-xs font-medium text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                  className="sticky left-0 z-10 scroll-mt-24 bg-card py-2 align-top text-xs font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   {label}
                 </TableHead>

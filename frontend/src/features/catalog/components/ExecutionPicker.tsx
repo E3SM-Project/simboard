@@ -141,14 +141,17 @@ export const ExecutionPicker = ({
                 />
                 <span className="min-w-0">
                   <span
-                    className="block truncate font-mono font-medium text-blue-700"
+                    className="block truncate font-mono font-medium text-blue-600"
                     title={summary.executionId}
                   >
                     {summary.executionId}
                   </span>
                   <span className="block">Simulation: {summary.simulationPeriod}</span>
                   {summary.context ? (
-                    <span className="mt-0.5 block truncate text-slate-500" title={summary.context}>
+                    <span
+                      className="mt-0.5 block truncate text-muted-foreground"
+                      title={summary.context}
+                    >
                       {summary.context}
                     </span>
                   ) : null}

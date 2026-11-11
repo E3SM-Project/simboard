@@ -466,7 +466,7 @@ const EditableResourceList = <TKind extends string>({
                   placeholder="Optional label"
                   className={cn(
                     'h-9 text-sm',
-                    rowErrors?.[index]?.label ? 'border-red-300 focus-visible:ring-red-200' : '',
+                    rowErrors?.[index]?.label ? 'border-red-300 focus-visible:ring-red-600' : '',
                   )}
                 />
                 {rowErrors?.[index]?.label ? (
@@ -483,7 +483,7 @@ const EditableResourceList = <TKind extends string>({
                   placeholder={valuePlaceholder}
                   className={cn(
                     'h-9 text-sm',
-                    rowErrors?.[index]?.value ? 'border-red-300 focus-visible:ring-red-200' : '',
+                    rowErrors?.[index]?.value ? 'border-red-300 focus-visible:ring-red-600' : '',
                   )}
                 />
                 {rowErrors?.[index]?.value ? (
@@ -870,7 +870,7 @@ export const ExecutionDetailsView = ({
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] space-y-6 px-6 py-8">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-6 py-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -880,14 +880,14 @@ export const ExecutionDetailsView = ({
               {backLabel}
             </Link>
           </Button>
-          <h1 className="text-2xl font-bold">{execution.executionId}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{execution.executionId}</h1>
           <Link
             to={caseDetailsPath({
               machineName: execution.machine.name,
               hpcUsername: execution.hpcUsername,
               caseName: execution.caseName,
             })}
-            className="mt-1 inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-blue-700 hover:underline"
+            className="mt-1 inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-blue-600 hover:underline"
           >
             <span>Case: {execution.caseName}</span>
             <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />

@@ -114,6 +114,16 @@ export default [
         },
       ],
 
+      // Design tokens: use semantic neutrals (docs/design-system.md)
+      'no-restricted-syntax': [
+        'error',
+        ...['Literal[value=/RAW/]', 'TemplateElement[value.raw=/RAW/]'].map((selector) => ({
+          selector: selector.replace('RAW', String.raw`\b(slate|gray)-\d|\bbg-white\b`),
+          message:
+            'Use semantic color tokens (text-foreground, text-muted-foreground, border-border, bg-muted-subtle, bg-muted, bg-card) instead of raw slate, gray, or white classes.',
+        })),
+      ],
+
       // ----------------------------------------------
       // Architectural boundaries
       // ----------------------------------------------
@@ -129,6 +139,10 @@ export default [
             {
               from: 'routes',
               allow: ['feature', 'ui', 'shared', 'lib', 'types', 'api'],
+            },
+            {
+              from: 'shared',
+              allow: ['ui', 'lib', 'types'],
             },
             {
               from: 'ui',

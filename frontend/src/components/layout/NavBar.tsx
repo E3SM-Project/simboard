@@ -14,28 +14,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { LoadingState } from '@/components/ui/loading-state';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { label: 'Home', href: '/', description: 'Overview and entry points for catalog discovery' },
-  {
-    label: 'Cases',
-    href: '/cases',
-    description: 'Primary case-centric discovery and detail pages',
-  },
-  {
-    label: 'Upload',
-    href: '/upload',
-    description: 'Manually upload a compressed case archive',
-  },
-  { label: 'About', href: '/about', description: 'Learn about SimBoard and catalog ingestion' },
-  {
-    label: 'Docs',
-    href: 'https://simboard.readthedocs.io/en/latest/user/',
-    description: 'Guides and references for using SimBoard',
-    external: true,
-  },
+  { label: 'Home', href: '/' },
+  { label: 'Cases', href: '/cases' },
+  { label: 'Upload', href: '/upload' },
+  { label: 'About', href: '/about' },
+  { label: 'Docs', href: 'https://simboard.readthedocs.io/en/latest/user/', external: true },
 ];
 
 export const NavBar = () => {
@@ -60,8 +46,8 @@ export const NavBar = () => {
   }, [open]);
 
   return (
-    <header className="w-full bg-white border-b">
-      <div className="mx-auto flex max-w-[1440px] items-center justify-between px-4 py-3 md:px-6">
+    <header className="w-full bg-background border-b">
+      <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-4 py-3 md:px-6">
         <div className="flex items-center gap-4">
           <Link to="/" className="flex items-center gap-3 text-xl font-bold">
             <img src="/logos/simboard-logo.png" alt="" className="h-8 w-8 shrink-0" />
@@ -77,36 +63,27 @@ export const NavBar = () => {
                 ? location.pathname === item.href
                 : location.pathname === item.href || location.pathname.startsWith(`${item.href}/`));
 
-            return (
-              <TooltipProvider delayDuration={150} key={item.href}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    {item.external ? (
-                      <a
-                        href={item.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-sm font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent px-2 py-1 rounded flex items-center gap-1"
-                      >
-                        {item.label}
-                      </a>
-                    ) : (
-                      <Link
-                        to={item.href}
-                        className={cn(
-                          'text-sm font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent px-2 py-1 rounded flex items-center gap-1',
-                          isActive && 'text-foreground border-foreground font-semibold',
-                        )}
-                      >
-                        {item.label}
-                      </Link>
-                    )}
-                  </TooltipTrigger>
-                  <TooltipContent className="bg-gray-900 text-white px-3 py-2 rounded shadow-lg text-xs">
-                    {item.description}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+            return item.external ? (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent px-2 py-1 rounded flex items-center gap-1"
+              >
+                {item.label}
+              </a>
+            ) : (
+              <Link
+                key={item.href}
+                to={item.href}
+                className={cn(
+                  'text-sm font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent px-2 py-1 rounded flex items-center gap-1',
+                  isActive && 'text-foreground border-foreground font-semibold',
+                )}
+              >
+                {item.label}
+              </Link>
             );
           })}
         </nav>

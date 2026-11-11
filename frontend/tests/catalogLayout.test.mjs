@@ -926,3 +926,109 @@ test('run date sorting uses end/start fallback and keeps missing or invalid date
   );
   assert.deepEqual(sortCaseExecutions([], { key: 'run', direction: 'asc' }), []);
 });
+
+test('execution status badge maps statuses to shared tones with a readable fallback', async () => {
+  const { ExecutionStatusBadge } = await server.ssrLoadModule(
+    '/src/components/shared/ExecutionStatusBadge.tsx',
+  );
+  const render = (status) => renderToStaticMarkup(createElement(ExecutionStatusBadge, { status }));
+
+  const running = render('RUNNING');
+  assert.match(running, /^<div class="[^"]*bg-amber-50[^"]*"/);
+  assert.match(running, /aria-hidden="true"/);
+  assert.match(running, />Running<\/div>$/);
+
+  const fallback = render('archived');
+  assert.match(fallback, /bg-muted text-muted-foreground/);
+  assert.match(fallback, />Archived<\/div>$/);
+  assert.doesNotMatch(fallback, /<svg/);
+});
+
+test('sortable table head exposes sort state on the header and its button', async () => {
+  const { SortableTableHead } = await server.ssrLoadModule(
+    '/src/components/ui/sortable-table-head.tsx',
+  );
+  const render = (direction) =>
+    renderToStaticMarkup(
+      createElement(SortableTableHead, { label: 'Run dates', direction, onSort: () => {} }),
+    );
+
+  const ascending = render('asc');
+  assert.match(ascending, /<th [^>]*aria-sort="ascending"/);
+  assert.match(ascending, /aria-label="Sort by Run dates, currently ascending"/);
+  assert.match(render('desc'), /<th [^>]*aria-sort="descending"/);
+
+  const unsorted = render(false);
+  assert.doesNotMatch(unsorted, /aria-sort/);
+  assert.match(unsorted, /aria-label="Sort by Run dates, currently not sorted"/);
+});
+
+test('cases empty state offers reset only when filters cause it', async () => {
+  const { CasesPage } = await server.ssrLoadModule('/src/features/catalog/CasesPage.tsx');
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const client = new QueryClient();
+  client.setQueryDefaults(['cases', 'page'], {
+    initialData: { items: [], total: 0, page: 1, pageSize: 25 },
+  });
+  const render = (url) =>
+    renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(MemoryRouter, { initialEntries: [url] }, createElement(CasesPage)),
+      ),
+    );
+
+  try {
+    const filtered = render('/cases?search=missing');
+    assert.match(filtered, /No cases match the current filters\./);
+    assert.match(filtered, />Reset filters<\/button>/);
+
+    const unfiltered = render('/cases');
+    assert.match(unfiltered, /No cases yet\./);
+    assert.doesNotMatch(unfiltered, /Reset filters/);
+  } finally {
+    client.clear();
+  }
+});
+
+test('upload form uses labeled primitives and marks required fields', async () => {
+  const { UploadPage } = await server.ssrLoadModule('/src/features/upload/UploadPage.tsx');
+  const { Alert } = await server.ssrLoadModule('/src/components/ui/alert.tsx');
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const client = new QueryClient();
+
+  try {
+    const html = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(
+          MemoryRouter,
+          null,
+          createElement(UploadPage, { machines: [{ id: 'm1', name: 'chrysalis' }] }),
+        ),
+      ),
+    );
+
+    assert.doesNotMatch(html, /<select(?![^>]*aria-hidden="true")/);
+    assert.match(html, /<label[^>]*for="upload-machine"/);
+    const machineTrigger = html.match(/<button[^>]*id="upload-machine"[^>]*>/)?.[0] ?? '';
+    assert.match(machineTrigger, /role="combobox"/);
+    assert.match(machineTrigger, /aria-required="true"/);
+    assert.match(html, /<label[^>]*for="upload-hpc-username"/);
+    assert.match(html, /<input[^>]*id="upload-hpc-username"/);
+    assert.match(html, /<label[^>]*for="upload-archive"/);
+    assert.match(
+      html.match(/<input[^>]*id="upload-archive"[^>]*>/)?.[0] ?? '',
+      /aria-required="true"/,
+    );
+    assert.equal(html.match(/<span class="sr-only">\(required\)<\/span>/g)?.length, 2);
+    assert.match(html, /role="note"[^>]*bg-sky-50/);
+  } finally {
+    client.clear();
+  }
+
+  const success = renderToStaticMarkup(createElement(Alert, { variant: 'success' }, 'Done'));
+  assert.match(success, /role="status"[^>]*bg-green-50/);
+});

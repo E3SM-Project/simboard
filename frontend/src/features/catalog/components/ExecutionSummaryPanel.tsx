@@ -106,7 +106,7 @@ const getSummaryStatusClasses = (status: string) => {
     case 'Error':
       return 'bg-red-100 text-red-800';
     default:
-      return 'bg-slate-100 text-slate-700';
+      return 'bg-muted text-foreground';
   }
 };
 
@@ -133,7 +133,7 @@ const getSummaryLauncherDescription = (
 const SummaryTextBlock = ({ value, className }: { value: string; className?: string }) => (
   <div
     className={cn(
-      'min-h-[140px] whitespace-pre-wrap rounded-md border bg-white px-4 py-3 text-sm leading-6 break-words',
+      'min-h-[140px] whitespace-pre-wrap rounded-md border bg-card px-4 py-3 text-sm leading-6 break-words',
       className,
     )}
   >
@@ -142,7 +142,7 @@ const SummaryTextBlock = ({ value, className }: { value: string; className?: str
 );
 
 const SummaryList = ({ items }: { items: string[] }) => (
-  <ul className="space-y-2 rounded-md border bg-white px-4 py-3 text-sm">
+  <ul className="space-y-2 rounded-md border bg-card px-4 py-3 text-sm">
     {items.map((item) => (
       <li key={item} className="list-none leading-6">
         {item}
@@ -152,7 +152,7 @@ const SummaryList = ({ items }: { items: string[] }) => (
 );
 
 const SummaryCitations = ({ summary }: { summary: ExecutionSummaryResponseOut }) => (
-  <div className="rounded-md border bg-white">
+  <div className="rounded-md border bg-card">
     <div className="divide-y">
       {summary.citations.map((citation) => (
         <div
@@ -209,13 +209,13 @@ const SummarySectionAccordion = ({
     <Accordion
       type="multiple"
       defaultValue={defaultValue}
-      className="rounded-md border bg-white px-4"
+      className="rounded-md border bg-card px-4"
     >
       {sections.map((section) => (
         <AccordionItem
           key={section.value}
           value={section.value}
-          className="border-slate-200 last:border-b-0"
+          className="border-border last:border-b-0"
         >
           <AccordionTrigger className="py-3 text-sm font-medium text-foreground hover:no-underline">
             {section.label}
@@ -264,7 +264,7 @@ const SummaryActionButton = ({
       void onGenerateSummary?.();
     }}
     disabled={summaryLoading || isCheckingAuth || (!canGenerateSummary && !onLoginForSummary)}
-    className={cn('border-blue-200 bg-white text-blue-900 hover:bg-blue-50', className)}
+    className={cn('border-blue-200 bg-card text-blue-900 hover:bg-blue-50', className)}
   >
     {isCheckingAuth ? (
       'Checking login...'
@@ -345,7 +345,7 @@ const SummaryPanelBody = ({
       )}
     >
       {!summaryRequested && !summary && !summaryError && (
-        <div className="flex min-h-[220px] items-center rounded-md border border-dashed border-blue-200 bg-white/80 px-4 py-5 text-sm text-muted-foreground">
+        <div className="flex min-h-[220px] items-center rounded-md border border-dashed border-blue-200 bg-card/80 px-4 py-5 text-sm text-muted-foreground">
           {canGenerateSummary
             ? showLoginForAiSummary
               ? 'Generate a read-only, metadata-based summary now, or log in to use AI summary for this execution.'
@@ -370,13 +370,13 @@ const SummaryPanelBody = ({
       )}
 
       {summaryLoading && !summary && (
-        <div className="flex min-h-[220px] items-center rounded-md border bg-white/80 px-4 py-5">
+        <div className="flex min-h-[220px] items-center rounded-md border bg-card/80 px-4 py-5">
           <div className="space-y-1 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <Spinner className="size-4" />
               Generating summary from SimBoard metadata...
             </div>
-            <div className="pl-6 text-xs text-slate-500">
+            <div className="pl-6 text-xs text-muted-foreground">
               {llmSummaryAvailable && !showLoginForAiSummary
                 ? `${formatSummaryRuntime(summaryElapsedMs)} elapsed. This can fall back to a metadata-based summary if AI generation stalls or fails.`
                 : `${formatSummaryRuntime(summaryElapsedMs)} elapsed. ${showLoginForAiSummary ? 'AI summary requires login.' : 'This deployment currently provides metadata-based summaries only.'}`}
@@ -387,13 +387,13 @@ const SummaryPanelBody = ({
 
       {summary && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-white px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-card px-4 py-3">
             <Badge
               variant="secondary"
               className={
                 summaryGenerationMode === 'llm'
                   ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-slate-100 text-slate-700'
+                  : 'bg-muted text-foreground'
               }
             >
               {summaryGenerationMode === 'llm' ? 'LLM Summary' : 'Deterministic Summary'}
@@ -431,7 +431,7 @@ const SummaryPanelBody = ({
       )}
 
       {!summary && !summaryLoading && !summaryError && summaryRequested && (
-        <div className="flex min-h-[220px] items-center rounded-md border bg-white/80 px-4 py-5 text-sm text-muted-foreground">
+        <div className="flex min-h-[220px] items-center rounded-md border bg-card/80 px-4 py-5 text-sm text-muted-foreground">
           No summary is available yet.
         </div>
       )}
@@ -460,7 +460,7 @@ export const ExecutionSummaryRail = ({
   isCheckingAuth = false,
   onLoginForSummary,
 }: ExecutionSummaryPanelProps) => (
-  <Card className="overflow-hidden border-blue-200/80 bg-gradient-to-br from-blue-50/70 via-white to-slate-50 shadow-sm">
+  <Card className="overflow-hidden border-blue-200/80 bg-gradient-to-br from-blue-50/70 via-card to-muted-subtle shadow-sm">
     <CardHeader className="space-y-3 border-b border-blue-100/80 pb-4">
       <div className="space-y-1">
         <CardTitle className="flex items-center gap-2 text-base">
@@ -486,7 +486,7 @@ export const ExecutionSummaryRail = ({
       {showLoginForAiSummary && (
         <LoginForAiButton
           onLoginForSummary={onLoginForSummary}
-          className="h-auto w-fit px-0 text-blue-700 hover:bg-transparent hover:text-blue-900"
+          className="h-auto w-fit px-0 text-blue-600 hover:bg-transparent hover:text-blue-600 hover:underline"
         />
       )}
     </CardHeader>
@@ -528,7 +528,7 @@ export const ExecutionSummaryLauncher = ({
 
   return (
     <>
-      <Card className="border-blue-200/80 bg-gradient-to-br from-blue-50/70 via-white to-slate-50 shadow-sm">
+      <Card className="border-blue-200/80 bg-gradient-to-br from-blue-50/70 via-card to-muted-subtle shadow-sm">
         <CardHeader className="space-y-3 pb-4">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
@@ -569,7 +569,7 @@ export const ExecutionSummaryLauncher = ({
             <Button
               type="button"
               variant="outline"
-              className="border-blue-200 bg-white text-blue-900 hover:bg-blue-50"
+              className="border-blue-200 bg-card text-blue-900 hover:bg-blue-50"
               onClick={() => setOpen(true)}
             >
               {llmSummaryAvailable && !showLoginForAiSummary ? 'Open AI Summary' : 'Open Summary'}
@@ -577,7 +577,7 @@ export const ExecutionSummaryLauncher = ({
             {showLoginForAiSummary && (
               <LoginForAiButton
                 onLoginForSummary={onLoginForSummary}
-                className="text-blue-700 hover:bg-blue-50 hover:text-blue-900"
+                className="text-blue-600 hover:bg-blue-50 hover:text-blue-600"
               />
             )}
           </div>
@@ -585,7 +585,7 @@ export const ExecutionSummaryLauncher = ({
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="left-auto right-0 top-0 h-[100dvh] w-full max-w-[min(92vw,42rem)] translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-l border-slate-200 p-0 data-[state=closed]:slide-out-to-right data-[state=closed]:slide-out-to-top-0 data-[state=closed]:zoom-out-100 data-[state=open]:slide-in-from-right data-[state=open]:slide-in-from-top-0 data-[state=open]:zoom-in-100 sm:max-w-[28rem] sm:rounded-none">
+        <DialogContent className="left-auto right-0 top-0 h-[100dvh] w-full max-w-[min(92vw,42rem)] translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-l border-border p-0 data-[state=closed]:slide-out-to-right data-[state=closed]:slide-out-to-top-0 data-[state=closed]:zoom-out-100 data-[state=open]:slide-in-from-right data-[state=open]:slide-in-from-top-0 data-[state=open]:zoom-in-100 sm:max-w-[28rem] sm:rounded-none">
           <div className="flex h-full min-h-0 flex-col">
             <DialogHeader className="gap-3 border-b border-blue-100/80 px-6 py-5 text-left">
               <div className="pr-10">
@@ -612,7 +612,7 @@ export const ExecutionSummaryLauncher = ({
               {showLoginForAiSummary && (
                 <LoginForAiButton
                   onLoginForSummary={onLoginForSummary}
-                  className="h-auto w-fit px-0 text-blue-700 hover:bg-transparent hover:text-blue-900"
+                  className="h-auto w-fit px-0 text-blue-600 hover:bg-transparent hover:text-blue-600 hover:underline"
                 />
               )}
             </DialogHeader>

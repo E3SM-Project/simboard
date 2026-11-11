@@ -43,7 +43,7 @@ const InfrastructureTable = ({
   machineCaseCounts,
   rows,
 }: InfrastructureTableProps) => (
-  <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
+  <div className="rounded-xl border border-muted bg-card p-4 shadow-sm md:p-6">
     <Table className="table-fixed">
       <TableHeader>
         <TableRow>
@@ -173,7 +173,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
   }
 
   return (
-    <main className="min-h-[70vh] bg-white px-4 py-10">
+    <main className="min-h-[70vh] bg-card px-4 py-10">
       {error ? (
         <Alert
           variant="error"
@@ -186,7 +186,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
         </Alert>
       ) : null}
 
-      <section className="mx-auto flex w-full max-w-7xl flex-col gap-6 rounded-2xl border border-muted bg-white p-6 shadow-sm md:flex-row md:items-start md:justify-between md:p-8">
+      <section className="mx-auto flex w-full max-w-7xl flex-col gap-6 rounded-2xl border border-muted bg-card p-6 shadow-sm md:flex-row md:items-start md:justify-between md:p-8">
         <div className="max-w-3xl space-y-5">
           <div className="space-y-3">
             <h1 className="text-4xl font-bold tracking-tight text-foreground md:text-5xl">
@@ -224,7 +224,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
       <section className="mx-auto mt-10 w-full max-w-7xl">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
-            <h2 className="text-2xl font-bold">Recent Production Cases</h2>
+            <h2 className="text-2xl font-semibold">Recent Production Cases</h2>
             <p className="text-muted-foreground">
               Production-classified simulations with a completed execution in the last six calendar
               months.
@@ -240,7 +240,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
       <section className="mx-auto mt-10 w-full max-w-7xl">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
-            <h2 className="text-2xl font-bold">Recent Cases</h2>
+            <h2 className="text-2xl font-semibold">Recent Cases</h2>
             <p className="text-muted-foreground">
               Open recently active case pages and move from grouped execution context into execution
               details.
@@ -250,7 +250,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             <Link to="/cases">Browse Recent Cases</Link>
           </Button>
         </div>
-        <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
+        <div className="rounded-xl border border-muted bg-card p-4 shadow-sm md:p-6">
           <Table className="min-w-[1100px] table-fixed">
             <TableHeader>
               <TableRow>
@@ -304,7 +304,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
       </section>
       <section className="mx-auto mt-10 w-full max-w-7xl space-y-4">
         <div className="space-y-1">
-          <h2 className="text-2xl font-bold">Common Workflows</h2>
+          <h2 className="text-2xl font-semibold">Common Workflows</h2>
           <p className="text-muted-foreground">
             Jump from the catalog overview into the primary SimBoard tasks.
           </p>
@@ -315,7 +315,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
             return (
               <div
                 key={workflow.title}
-                className="flex h-full flex-col gap-4 rounded-xl border border-muted bg-white p-5 shadow-sm"
+                className="flex h-full flex-col gap-4 rounded-xl border border-muted bg-card p-5 shadow-sm"
               >
                 <div className="flex items-center gap-2 text-foreground">
                   <Icon className="h-4 w-4 text-muted-foreground" />
@@ -333,7 +333,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
 
       <section className="mx-auto mt-10 w-full max-w-7xl space-y-8">
         <div className="space-y-1">
-          <h2 className="text-2xl font-bold">Sites and Machines</h2>
+          <h2 className="text-2xl font-semibold">Sites and Machines</h2>
           <p className="text-muted-foreground">
             Computing facilities and systems represented in the SimBoard catalog.
           </p>
@@ -366,7 +366,7 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
         </div>
       </section>
       <section className="mx-auto mt-10 w-full max-w-7xl rounded-xl border border-muted p-6">
-        <h2 className="text-lg font-semibold text-foreground">Catalog at a glance</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Catalog at a glance</h2>
         <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3">
           <div>
             <dt className="text-sm text-muted-foreground">Cases</dt>

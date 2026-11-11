@@ -99,7 +99,7 @@ export const EditableExternalLinkList = ({
                   placeholder="Optional label"
                   className={cn(
                     'h-9 text-sm',
-                    rowErrors?.[index]?.label ? 'border-red-300 focus-visible:ring-red-200' : '',
+                    rowErrors?.[index]?.label ? 'border-red-300 focus-visible:ring-red-600' : '',
                   )}
                 />
                 {rowErrors?.[index]?.label ? (
@@ -116,7 +116,7 @@ export const EditableExternalLinkList = ({
                   placeholder={valuePlaceholder}
                   className={cn(
                     'h-9 text-sm',
-                    rowErrors?.[index]?.value ? 'border-red-300 focus-visible:ring-red-200' : '',
+                    rowErrors?.[index]?.value ? 'border-red-300 focus-visible:ring-red-600' : '',
                   )}
                 />
                 {rowErrors?.[index]?.value ? (

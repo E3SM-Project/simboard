@@ -1,7 +1,5 @@
 import { useQueries } from '@tanstack/react-query';
-import { AlertTriangle } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
 
 import { getExecutionById } from '@/api/catalog';
 import { normalizeSelectedExecutionIds } from '@/components/shared/normalizeSelectedExecutionIds';
@@ -11,12 +9,10 @@ import { LoadingState } from '@/components/ui/loading-state';
 import { CompareWorkspace } from '@/features/compare/ComparePage';
 import { useCase } from '@/lib/catalog/hooks/useCase';
 import { catalogQueryKeys } from '@/lib/catalog/queryKeys';
-import { caseDetailsPath } from '@/lib/catalog/urls';
 import type { ExecutionOut } from '@/types';
 
 interface CaseCompareRouteProps {
   caseId: string;
-  onClose?: () => void;
   selectedCaseExecutionIdsByCase: Record<string, string[]>;
   setSelectedCaseExecutionIdsForCase: (caseId: string, ids: string[]) => void;
 }
@@ -25,7 +21,6 @@ const EMPTY_SELECTED_EXECUTION_IDS: string[] = [];
 
 export const CaseCompareRoute = ({
   caseId,
-  onClose,
   selectedCaseExecutionIdsByCase,
   setSelectedCaseExecutionIdsForCase,
 }: CaseCompareRouteProps) => {
@@ -103,7 +98,7 @@ export const CaseCompareRoute = ({
 
   if (!caseId) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-8 text-center text-slate-500">
+      <div className="rounded-xl border border-border bg-muted-subtle px-6 py-8 text-center text-muted-foreground">
         Case compare route is missing case id.
       </div>
     );
@@ -123,58 +118,15 @@ export const CaseCompareRoute = ({
 
   if (!caseRecord) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-8 text-center text-slate-500">
+      <div className="rounded-xl border border-border bg-muted-subtle px-6 py-8 text-center text-muted-foreground">
         Case not found
-      </div>
-    );
-  }
-
-  const caseDetailsHref =
-    caseRecord.machineNames[0] && caseRecord.hpcUsernames[0]
-      ? caseDetailsPath({
-          machineName: caseRecord.machineNames[0],
-          hpcUsername: caseRecord.hpcUsernames[0],
-          caseName: caseRecord.name,
-        })
-      : '/cases';
-  if (renderableSelectedExecutionIds.length < 2 && !onClose) {
-    let message = 'Select at least two executions from this case to compare.';
-
-    if (excludedExecutionCount > 0) {
-      message = `Ignored ${excludedExecutionCount} stored execution${excludedExecutionCount === 1 ? '' : 's'} that no longer belong to this case.`;
-    } else if (missingExecutionCount > 0) {
-      message = 'Selected case executions are not available in the current compare dataset.';
-    }
-
-    return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-6 shadow-sm">
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
-          <div className="min-w-0">
-            <h1 className="text-2xl font-semibold text-slate-950">
-              Case Compare Needs More Executions
-            </h1>
-            <p className="mt-2 text-sm text-slate-700">{message}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {onClose ? (
-                <Button type="button" variant="outline" onClick={onClose}>
-                  Hide Compare
-                </Button>
-              ) : (
-                <Button asChild variant="outline">
-                  <Link to={caseDetailsHref}>Back to Case</Link>
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
       </div>
     );
   }
 
   const contextNotice =
     excludedExecutionCount > 0 || missingExecutionCount > 0 ? (
-      <section className="mb-4 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-slate-700 shadow-sm">
+      <Alert variant="warning" role="group" className="mb-4 rounded-2xl p-4 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             {excludedExecutionCount > 0 ? (
@@ -206,26 +158,17 @@ export const CaseCompareRoute = ({
             ) : null}
           </div>
         </div>
-      </section>
+      </Alert>
     ) : undefined;
 
   return (
     <CompareWorkspace
       key={`case-compare:${caseId}`}
-      caseComparison
       contextNotice={contextNotice}
-      description="Review selected executions from this case side by side."
-      embedded
-      emptyStateActionHref={caseDetailsHref}
-      emptyStateActionLabel="Hide Compare"
-      emptyStateMessage="No case executions selected for comparison."
       hiddenStorageKey={`case_compare_hidden_cols:${caseId}`}
-      labelColumnWidth={320}
       selectedExecutionIds={caseSelectedExecutionIds}
       selectedExecutions={renderableSelectedExecutions}
       setSelectedExecutionIds={handleCaseSelectionChange}
-      showHeader={false}
-      title={`Compare Case Executions: ${caseRecord.name}`}
     />
   );
 };
