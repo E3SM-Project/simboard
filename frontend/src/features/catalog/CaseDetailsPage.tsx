@@ -339,7 +339,6 @@ export const CaseDetailsPage = ({
     'machineName',
   ]);
   const [executionQuery, setExecutionQuery] = useState('');
-  const [artifactExecutionIds, setArtifactExecutionIds] = useState<string[] | null>(null);
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<string[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const history = useMetadataHistory('case', caseId ?? '', isHistoryOpen);
@@ -389,24 +388,9 @@ export const CaseDetailsPage = ({
     () => sortCaseHashGroups(executionGroups),
     [executionGroups],
   );
-  const artifactFilteredExecutionGroups = useMemo(() => {
-    if (artifactExecutionIds == null) {
-      return sortedExecutionGroups;
-    }
-
-    const matchingExecutionIds = new Set(artifactExecutionIds);
-    return sortedExecutionGroups
-      .map((group) => ({
-        ...group,
-        executions: group.executions.filter(({ summary }) =>
-          matchingExecutionIds.has(summary.executionId),
-        ),
-      }))
-      .filter((group) => group.executions.length > 0);
-  }, [artifactExecutionIds, sortedExecutionGroups]);
   const filteredExecutionGroups = useMemo(
     () =>
-      artifactFilteredExecutionGroups
+      sortedExecutionGroups
         .map((group) => ({
           ...group,
           executions: sortCaseExecutions(
@@ -421,7 +405,7 @@ export const CaseDetailsPage = ({
           ),
         }))
         .filter((group) => group.executions.length > 0),
-    [artifactFilteredExecutionGroups, dateSort, executionDiscovery, executionQuery],
+    [sortedExecutionGroups, dateSort, executionDiscovery, executionQuery],
   );
   const filteredFlatExecutions = useMemo(
     () =>
@@ -801,18 +785,6 @@ export const CaseDetailsPage = ({
     onSort: toggleDateSort,
     identity: readableIdentity,
     from: currentPath,
-  };
-
-  const clearArtifactExecutionFilter = () => {
-    setArtifactExecutionIds(null);
-  };
-
-  const filterExecutionsForArtifact = (executionIds: string[]) => {
-    setArtifactExecutionIds([...new Set(executionIds)]);
-    setViewMode('flat');
-    requestAnimationFrame(() => {
-      executionsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
   };
 
   return (
@@ -1255,27 +1227,6 @@ export const CaseDetailsPage = ({
                 groups.
               </div>
             ) : null}
-
-            {artifactExecutionIds != null ? (
-              <Alert
-                variant="info"
-                className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg px-3 py-2"
-              >
-                <p>
-                  Showing {pluralize(filteredExecutionCount, 'execution')} linked to the selected
-                  artifact.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="border-sky-200 bg-white text-sky-950 hover:bg-sky-100"
-                  onClick={clearArtifactExecutionFilter}
-                >
-                  Clear artifact filter
-                </Button>
-              </Alert>
-            ) : null}
           </div>
 
           <div className="border-t border-slate-200 px-5 py-4">
@@ -1496,7 +1447,6 @@ export const CaseDetailsPage = ({
             <CaseArtifactsTable
               artifacts={artifactValues}
               totalArtifactCount={caseRecord.artifacts.length}
-              onFilterExecutionIds={filterExecutionsForArtifact}
             />
           </div>
         </div>

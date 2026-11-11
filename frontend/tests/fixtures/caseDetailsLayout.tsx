@@ -1894,16 +1894,7 @@ async function checkArtifactsScrolling() {
     uri: `https://example.test/output/${index}`,
     executionIds: ['run-1'],
   }));
-  let selectedIds: string[] = [];
-  root.render(
-    <CaseArtifactsTable
-      artifacts={artifacts}
-      totalArtifactCount={artifacts.length}
-      onFilterExecutionIds={(ids) => {
-        selectedIds = ids;
-      }}
-    />,
-  );
+  root.render(<CaseArtifactsTable artifacts={artifacts} totalArtifactCount={artifacts.length} />);
   await waitFor(() => document.querySelector('table')?.tBodies[0].rows.length === 30);
 
   const table = document.querySelector('table')!;
@@ -1964,10 +1955,12 @@ async function checkArtifactsScrolling() {
   await new Promise((resolve) => setTimeout(resolve, 20));
   artifactSort.click();
   await waitFor(() => table.tBodies[0].rows[0].cells[1].textContent?.includes('Artifact 29'));
-  table
-    .querySelector<HTMLButtonElement>('[aria-label="Filter executions linked to Artifact 29"]')!
-    .click();
-  check(selectedIds.join() === 'run-1', 'Artifact execution filtering still works');
+  const executionsCell = table.tBodies[0].rows[0].cells[2];
+  check(
+    executionsCell.querySelector('span')?.textContent === '1' &&
+      !table.querySelector('[aria-label^="Filter executions linked to"]'),
+    'Artifact execution counts are plain numbers without a filter action',
+  );
 
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
     search,
@@ -1990,14 +1983,7 @@ async function checkArtifactsScrolling() {
     'Reopening artifacts preserves filters',
   );
 
-  root.render(
-    <CaseArtifactsTable
-      key="empty-artifacts"
-      artifacts={[]}
-      totalArtifactCount={0}
-      onFilterExecutionIds={() => {}}
-    />,
-  );
+  root.render(<CaseArtifactsTable key="empty-artifacts" artifacts={[]} totalArtifactCount={0} />);
   await waitFor(() => document.body.textContent?.includes('No execution artifacts available.'));
   const emptyDisclosure = document.getElementById('artifacts-heading')!.closest('details')!;
   check(!emptyDisclosure.open, 'Empty artifacts start collapsed');
