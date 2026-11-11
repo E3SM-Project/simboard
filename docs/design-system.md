@@ -160,7 +160,6 @@ These exist in the code but are not conventions. Do not copy them into new work.
 - `.dark` tokens exist but dark mode is not supported (no toggle, many `bg-white` surfaces). Tracked in #452.
 - The Upload page uses native form controls instead of shadcn primitives. Tracked in #452.
 - Page container widths and `h1` sizes vary per page. Tracked in #452.
-- The Cases table shows sort direction with `▲`/`▼` text and no `aria-sort`, and its filter labels are not associated with their controls.
 - Error, warning, and info notices are written as inline `div`s with repeated classes instead of a shared primitive.
 - Text links mix `text-blue-600` and `text-blue-700`.
 - Some files are unused: `App.css`, `features/compare/ComparePage.css`, `components/examples/`, `components/ui/multi-select.tsx`, and several `features/upload/components/` files.

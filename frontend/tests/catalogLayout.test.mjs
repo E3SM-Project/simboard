@@ -667,6 +667,45 @@ test('Case Group stays visible without opening or counting as an advanced filter
   }
 });
 
+test('cases table exposes sort state and labels its filters', async () => {
+  const { CasesPage } = await server.ssrLoadModule('/src/features/catalog/CasesPage.tsx');
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const client = new QueryClient();
+  client.setQueryDefaults(['cases', 'page'], {
+    initialData: {
+      items: [{ id: 'case-1', name: 'case-a', executionCount: 1 }],
+      total: 1,
+      page: 1,
+      pageSize: 25,
+    },
+  });
+
+  try {
+    const html = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/cases?sortBy=name&sortOrder=asc'] },
+          createElement(CasesPage),
+        ),
+      ),
+    );
+
+    assert.equal(html.match(/aria-sort="/g)?.length, 1);
+    assert.match(html, /<th[^>]*aria-sort="ascending"[^>]*><button[^>]*>Case Name/);
+    assert.doesNotMatch(html, /[▲▼]/);
+    assert.match(html, /aria-label="Expand executions" aria-expanded="false"/);
+    assert.match(html, /<label for="cases-search"/);
+    assert.match(html, /<input[^>]*id="cases-search"/);
+    assert.match(html, /<label for="cases-filter-case-group"/);
+    assert.match(html, /<button[^>]*id="cases-filter-case-group"/);
+  } finally {
+    client.clear();
+  }
+});
+
 for (const latestExecution of [
   { runEndDate: '2026-09-02T12:00:00Z', runStartDate: '2026-09-01T12:00:00Z' },
   { runEndDate: null, runStartDate: '2026-09-01T12:00:00Z' },

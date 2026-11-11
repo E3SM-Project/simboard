@@ -1,6 +1,16 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { ChevronDown, ChevronRight, Copy, Info, Search, SlidersHorizontal, X } from 'lucide-react';
+import {
+  ArrowUpDown,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Copy,
+  Info,
+  Search,
+  SlidersHorizontal,
+  X,
+} from 'lucide-react';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
@@ -612,6 +622,7 @@ export const CasesPage = () => {
               type="button"
               className="h-8 w-8"
               aria-label={isExpanded ? 'Collapse executions' : 'Expand executions'}
+              aria-expanded={isExpanded}
               onClick={(event) => {
                 event.stopPropagation();
                 setExpandedCaseId((current) =>
@@ -738,10 +749,14 @@ export const CasesPage = () => {
         ? [{ value, label: value }, ...options]
         : options;
 
+    const id = `cases-filter-${label.toLowerCase().replace(/\s+/g, '-')}`;
+
     return (
       <div className="space-y-2">
         <div className="flex h-4 items-center gap-1">
-          <label className="text-xs font-medium text-slate-500">{label}</label>
+          <label htmlFor={id} className="text-xs font-medium text-slate-500">
+            {label}
+          </label>
           {description ? (
             <TooltipProvider delayDuration={150}>
               <Tooltip>
@@ -760,6 +775,7 @@ export const CasesPage = () => {
           ) : null}
         </div>
         <SearchableFilterSelect
+          id={id}
           label={label}
           value={value}
           placeholder={placeholder}
@@ -912,10 +928,13 @@ export const CasesPage = () => {
               <div className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1.5fr)_repeat(4,minmax(200px,1fr))]">
                   <div className="space-y-2 sm:col-span-2 xl:col-span-1">
-                    <label className="text-xs font-medium text-slate-500">Search</label>
+                    <label htmlFor="cases-search" className="text-xs font-medium text-slate-500">
+                      Search
+                    </label>
                     <div className="relative">
                       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <Input
+                        id="cases-search"
                         placeholder="Search case name…"
                         value={caseNameFilter}
                         onChange={(event) => {
@@ -1097,23 +1116,36 @@ export const CasesPage = () => {
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id}>
-                      {header.isPlaceholder ? null : (
-                        <button
-                          type="button"
-                          className={
-                            header.column.getCanSort() ? 'select-none text-left' : 'text-left'
-                          }
-                          onClick={header.column.getToggleSortingHandler()}
-                        >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          {header.column.getIsSorted() === 'asc' && ' ▲'}
-                          {header.column.getIsSorted() === 'desc' && ' ▼'}
-                        </button>
-                      )}
-                    </TableHead>
-                  ))}
+                  {headerGroup.headers.map((header) => {
+                    const sorted = header.column.getIsSorted();
+                    const SortIcon =
+                      sorted === 'asc' ? ChevronUp : sorted === 'desc' ? ChevronDown : ArrowUpDown;
+                    const ariaSort = sorted
+                      ? sorted === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : undefined;
+                    const headerContent = header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext());
+
+                    return (
+                      <TableHead key={header.id} aria-sort={ariaSort}>
+                        {header.column.getCanSort() ? (
+                          <button
+                            type="button"
+                            className="inline-flex select-none items-center gap-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            onClick={header.column.getToggleSortingHandler()}
+                          >
+                            {headerContent}
+                            <SortIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          </button>
+                        ) : (
+                          headerContent
+                        )}
+                      </TableHead>
+                    );
+                  })}
                 </TableRow>
               ))}
             </TableHeader>
