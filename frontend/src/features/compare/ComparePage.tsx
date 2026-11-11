@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TableCellText } from '@/components/ui/table-cell-text';
@@ -582,7 +583,7 @@ export const CompareWorkspace = ({
         return (
           <a
             href={caseHref}
-            className="text-blue-700 transition hover:underline"
+            className="text-blue-600 transition hover:underline"
             title={`Go to case details for ${textValue}`}
             onClick={(event) => {
               handleInternalLinkClick(event, caseHref);
@@ -656,12 +657,9 @@ export const CompareWorkspace = ({
       <div className="flex min-h-0 flex-col gap-4" data-case-comparison>
         {contextNotice}
         {selectedExecutionIds.length < 2 ? (
-          <p
-            className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
-            role="status"
-          >
+          <Alert variant="warning">
             Select at least two executions using Edit executions to compare.
-          </p>
+          </Alert>
         ) : null}
         {selectedExecutionIds.length >= 2 && selectedExecutions.length < 2 ? (
           <p className="text-sm text-slate-600" role="status">
@@ -752,7 +750,7 @@ export const CompareWorkspace = ({
                       <a
                         href={column.executionHref}
                         onClick={(event) => handleInternalLinkClick(event, column.executionHref)}
-                        className="min-w-0 break-all font-mono text-blue-700 hover:underline"
+                        className="min-w-0 break-all font-mono text-blue-600 hover:underline"
                       >
                         {column.executionHeader}
                       </a>
@@ -784,7 +782,7 @@ export const CompareWorkspace = ({
                     ) : (
                       <button
                         type="button"
-                        className="mt-1 text-xs text-blue-700 hover:underline"
+                        className="mt-1 text-xs text-blue-600 hover:underline"
                         aria-label={`Use ${column.executionHeader} as reference`}
                         onClick={() =>
                           setOrder((current) => [
@@ -1087,7 +1085,7 @@ export const CompareWorkspace = ({
                       <div className="min-w-0 flex-1">
                         <a
                           href={column.executionHref}
-                          className="block max-w-full font-mono text-sm font-semibold text-blue-700 transition hover:underline"
+                          className="block max-w-full font-mono text-sm font-semibold text-blue-600 transition hover:underline"
                           title={`Go to details for ${column.executionHeader}`}
                           onClick={(event) => {
                             handleInternalLinkClick(event, column.executionHref);

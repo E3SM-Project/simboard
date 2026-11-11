@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 
 import { getExecutionById } from '@/api/catalog';
 import { normalizeSelectedExecutionIds } from '@/components/shared/normalizeSelectedExecutionIds';
+import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/loading-state';
 import { CompareWorkspace } from '@/features/compare/ComparePage';
@@ -114,9 +115,9 @@ export const CaseCompareRoute = ({
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 px-6 py-8 text-center text-red-700">
+      <Alert variant="error" className="rounded-xl px-6 py-8 text-center">
         Error: {error}
-      </div>
+      </Alert>
     );
   }
 

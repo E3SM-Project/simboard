@@ -16,6 +16,7 @@ import { updateCase } from '@/api/catalog';
 import { useAuth } from '@/auth/hooks/useAuth';
 import { MarkdownContent } from '@/components/shared/MarkdownContent';
 import { normalizeSelectedExecutionIds } from '@/components/shared/normalizeSelectedExecutionIds';
+import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -338,7 +339,6 @@ export const CaseDetailsPage = ({
     'machineName',
   ]);
   const [executionQuery, setExecutionQuery] = useState('');
-  const [artifactExecutionIds, setArtifactExecutionIds] = useState<string[] | null>(null);
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<string[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const history = useMetadataHistory('case', caseId ?? '', isHistoryOpen);
@@ -388,24 +388,9 @@ export const CaseDetailsPage = ({
     () => sortCaseHashGroups(executionGroups),
     [executionGroups],
   );
-  const artifactFilteredExecutionGroups = useMemo(() => {
-    if (artifactExecutionIds == null) {
-      return sortedExecutionGroups;
-    }
-
-    const matchingExecutionIds = new Set(artifactExecutionIds);
-    return sortedExecutionGroups
-      .map((group) => ({
-        ...group,
-        executions: group.executions.filter(({ summary }) =>
-          matchingExecutionIds.has(summary.executionId),
-        ),
-      }))
-      .filter((group) => group.executions.length > 0);
-  }, [artifactExecutionIds, sortedExecutionGroups]);
   const filteredExecutionGroups = useMemo(
     () =>
-      artifactFilteredExecutionGroups
+      sortedExecutionGroups
         .map((group) => ({
           ...group,
           executions: sortCaseExecutions(
@@ -420,7 +405,7 @@ export const CaseDetailsPage = ({
           ),
         }))
         .filter((group) => group.executions.length > 0),
-    [artifactFilteredExecutionGroups, dateSort, executionDiscovery, executionQuery],
+    [sortedExecutionGroups, dateSort, executionDiscovery, executionQuery],
   );
   const filteredFlatExecutions = useMemo(
     () =>
@@ -802,18 +787,6 @@ export const CaseDetailsPage = ({
     from: currentPath,
   };
 
-  const clearArtifactExecutionFilter = () => {
-    setArtifactExecutionIds(null);
-  };
-
-  const filterExecutionsForArtifact = (executionIds: string[]) => {
-    setArtifactExecutionIds([...new Set(executionIds)]);
-    setViewMode('flat');
-    requestAnimationFrame(() => {
-      executionsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  };
-
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-6 px-6 py-8">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -942,15 +915,15 @@ export const CaseDetailsPage = ({
                     </p>
                   )}
                   {hasAmbiguousDiagnosticsTiers ? (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    <Alert variant="warning">
                       Diagnostics provenance has evidence from both {diagnosticsTierLabel} tiers;
                       SimBoard cannot determine one observed tier.
-                    </div>
+                    </Alert>
                   ) : hasDiagnosticsMismatch ? (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    <Alert variant="warning">
                       Case classification is {caseRecord.simulationType}, but diagnostics provenance
                       is {diagnosticsTierLabel}.
-                    </div>
+                    </Alert>
                   ) : null}
                 </div>
               </div>
@@ -1130,15 +1103,15 @@ export const CaseDetailsPage = ({
                 ) : null}
 
                 {isEditing && summaryErrorMessage ? (
-                  <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  <Alert variant="error">
                     <div className="flex items-start gap-2">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                       <div>
                         <p className="font-medium">Save blocked</p>
-                        <p className="mt-1 text-red-700">{summaryErrorMessage}</p>
+                        <p className="mt-1">{summaryErrorMessage}</p>
                       </div>
                     </div>
-                  </div>
+                  </Alert>
                 ) : null}
               </div>
             ) : null}
@@ -1252,24 +1225,6 @@ export const CaseDetailsPage = ({
                 {hiddenSelectedCount} selected{' '}
                 {hiddenSelectedCount === 1 ? 'execution is' : 'executions are'} in filtered-out
                 groups.
-              </div>
-            ) : null}
-
-            {artifactExecutionIds != null ? (
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
-                <p>
-                  Showing {pluralize(filteredExecutionCount, 'execution')} linked to the selected
-                  artifact.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="border-sky-200 bg-white text-sky-950 hover:bg-sky-100"
-                  onClick={clearArtifactExecutionFilter}
-                >
-                  Clear artifact filter
-                </Button>
               </div>
             ) : null}
           </div>
@@ -1413,7 +1368,7 @@ export const CaseDetailsPage = ({
                                   <TableCell className="align-top">
                                     <button
                                       type="button"
-                                      className="whitespace-nowrap rounded-sm font-medium text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                      className="whitespace-nowrap rounded-sm font-medium text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                       onClick={() => toggleGroupExpansion(group.key, !isOpen)}
                                       aria-expanded={isOpen}
                                       aria-controls={groupPanelId}
@@ -1450,7 +1405,10 @@ export const CaseDetailsPage = ({
           </div>
 
           {executionsError ? (
-            <div className="flex items-center justify-between gap-3 border-t border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
+            <Alert
+              variant="error"
+              className="flex items-center justify-between gap-3 rounded-none border-x-0 border-b-0 px-5 py-4"
+            >
               <span>Could not load more execution metadata: {executionsError}</span>
               <Button
                 type="button"
@@ -1460,7 +1418,7 @@ export const CaseDetailsPage = ({
               >
                 Retry
               </Button>
-            </div>
+            </Alert>
           ) : null}
 
           {hasNextPage ? (
@@ -1489,7 +1447,6 @@ export const CaseDetailsPage = ({
             <CaseArtifactsTable
               artifacts={artifactValues}
               totalArtifactCount={caseRecord.artifacts.length}
-              onFilterExecutionIds={filterExecutionsForArtifact}
             />
           </div>
         </div>

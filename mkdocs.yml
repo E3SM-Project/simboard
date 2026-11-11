@@ -24,6 +24,7 @@ nav:
       - Assistant LLM Setup: developer/assistant-llm-setup.md
       - Backend Guide: backend/README.md
       - Frontend Guide: frontend/README.md
+      - Frontend Design System: design-system.md
   - Architecture:
       - Metadata Ingestion: architecture/metadata-ingestion.md
       - Diagnostics Linkage: architecture/diagnostics-linkage.md

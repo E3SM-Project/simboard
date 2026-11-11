@@ -667,6 +667,82 @@ test('Case Group stays visible without opening or counting as an advanced filter
   }
 });
 
+test('alert announces errors assertively and lets layout classes override defaults', async () => {
+  const { Alert } = await server.ssrLoadModule('/src/components/ui/alert.tsx');
+  const render = (props) => renderToStaticMarkup(createElement(Alert, props, 'Notice'));
+
+  const error = render({ variant: 'error', className: 'rounded-none p-6' });
+  assert.match(error, /role="alert"/);
+  assert.match(error, /bg-red-50/);
+  assert.match(error, /rounded-none/);
+  assert.doesNotMatch(error, /rounded-md|p-3/);
+
+  assert.match(render({ variant: 'warning' }), /role="status"[^>]*bg-amber-50/);
+  assert.match(render({}), /role="status"[^>]*bg-sky-50/);
+});
+
+test('cases table exposes sort state and labels its filters', async () => {
+  const { CasesPage } = await server.ssrLoadModule('/src/features/catalog/CasesPage.tsx');
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const client = new QueryClient();
+  client.setQueryDefaults(['cases', 'page'], {
+    initialData: {
+      items: [{ id: 'case-1', name: 'case-a', executionCount: 1 }],
+      total: 1,
+      page: 1,
+      pageSize: 25,
+    },
+  });
+
+  try {
+    const html = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(
+          MemoryRouter,
+          { initialEntries: ['/cases?sortBy=name&sortOrder=asc'] },
+          createElement(CasesPage),
+        ),
+      ),
+    );
+
+    assert.equal(html.match(/aria-sort="/g)?.length, 1);
+    assert.match(html, /<th[^>]*aria-sort="ascending"[^>]*><button[^>]*>Case Name/);
+    assert.doesNotMatch(html, /[▲▼]/);
+    assert.match(html, /aria-label="Expand executions" aria-expanded="false"/);
+    assert.match(html, /<label for="cases-search"/);
+    assert.match(html, /<input[^>]*id="cases-search"/);
+    assert.match(html, /<label for="cases-filter-case-group"/);
+    assert.match(html, /<button[^>]*id="cases-filter-case-group"/);
+  } finally {
+    client.clear();
+  }
+});
+
+test('cases table shows the default latest-run sort on a sortable header', async () => {
+  const { CasesPage } = await server.ssrLoadModule('/src/features/catalog/CasesPage.tsx');
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const client = new QueryClient();
+  client.setQueryDefaults(['cases', 'page'], {
+    initialData: { items: [], total: 0, page: 1, pageSize: 25 },
+  });
+
+  try {
+    const html = renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(MemoryRouter, { initialEntries: ['/cases'] }, createElement(CasesPage)),
+      ),
+    );
+
+    assert.match(html, /<th[^>]*aria-sort="descending"[^>]*><button[^>]*>Latest completed run<svg/);
+  } finally {
+    client.clear();
+  }
+});
+
 for (const latestExecution of [
   { runEndDate: '2026-09-02T12:00:00Z', runStartDate: '2026-09-01T12:00:00Z' },
   { runEndDate: null, runStartDate: '2026-09-01T12:00:00Z' },

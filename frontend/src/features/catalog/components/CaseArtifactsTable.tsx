@@ -147,11 +147,9 @@ const SortHeader = ({
 export const CaseArtifactsTable = ({
   artifacts,
   totalArtifactCount,
-  onFilterExecutionIds,
 }: {
   artifacts: CaseArtifactValue[];
   totalArtifactCount: number;
-  onFilterExecutionIds: (executionIds: string[]) => void;
 }) => {
   const [query, setQuery] = useState('');
   const [kindFilter, setKindFilter] = useState<ArtifactKindFilter>('all');
@@ -332,17 +330,9 @@ export const CaseArtifactsTable = ({
                         </TableCell>
                         <TableCell className="align-top">
                           <div className="flex items-center gap-1.5">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 whitespace-nowrap"
-                              onClick={() => onFilterExecutionIds(artifact.executionIds)}
-                              aria-label={`Filter executions linked to ${displayName}`}
-                            >
-                              {artifact.executionIds.length}{' '}
-                              {artifact.executionIds.length === 1 ? 'execution' : 'executions'}
-                            </Button>
+                            <span className="min-w-6 text-sm tabular-nums">
+                              {artifact.executionIds.length}
+                            </span>
                             <Popover>
                               <PopoverTrigger asChild>
                                 <Button

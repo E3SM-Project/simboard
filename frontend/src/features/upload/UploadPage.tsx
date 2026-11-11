@@ -592,7 +592,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                   </div>
                   {createdCaseSummary ? (
                     <Link
-                      className="shrink-0 text-sm font-medium text-blue-700 hover:underline"
+                      className="shrink-0 text-sm font-medium text-blue-600 hover:underline"
                       to={caseDetailsPath({
                         machineName: createdCaseSummary.machineName,
                         hpcUsername: createdCaseSummary.hpcUsername,
@@ -617,7 +617,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                         <tr className="hover:bg-gray-50" key={execution.id}>
                           <td className="px-4 py-4">
                             <Link
-                              className="block truncate font-medium text-blue-700 hover:underline"
+                              className="block truncate font-medium text-blue-600 hover:underline"
                               title={execution.execution_id}
                               to={executionDetailsPath({
                                 machineName: execution.machine_name,
@@ -632,7 +632,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                           <td className="px-4 py-4 text-right text-sm">
                             <div className="flex justify-end gap-3">
                               <Link
-                                className="text-blue-700 hover:underline"
+                                className="text-blue-600 hover:underline"
                                 to={executionDetailsPath({
                                   machineName: execution.machine_name,
                                   hpcUsername: execution.hpc_username,
@@ -644,7 +644,7 @@ export const UploadPage = ({ machines }: UploadPageProps) => {
                               </Link>
                               {!createdCaseSummary ? (
                                 <Link
-                                  className="text-blue-700 hover:underline"
+                                  className="text-blue-600 hover:underline"
                                   to={caseDetailsPath({
                                     machineName: execution.machine_name,
                                     hpcUsername: execution.hpc_username,

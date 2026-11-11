@@ -19,6 +19,7 @@ interface SearchableFilterOption {
 }
 
 interface SearchableFilterSelectProps {
+  id?: string;
   label: string;
   value: string;
   placeholder: string;
@@ -29,6 +30,7 @@ interface SearchableFilterSelectProps {
 const MAX_VISIBLE_OPTIONS = 100;
 
 export const SearchableFilterSelect = ({
+  id,
   label,
   value,
   placeholder,
@@ -70,6 +72,7 @@ export const SearchableFilterSelect = ({
     >
       <PopoverTrigger asChild>
         <Button
+          id={id}
           variant="outline"
           role="combobox"
           aria-label={label}
