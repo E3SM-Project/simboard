@@ -135,7 +135,7 @@ export const DiagnosticRunList = ({
               target="_blank"
               rel="noreferrer"
               title={source.rootUrl}
-              className="inline-flex max-w-full items-center gap-1 rounded text-xs font-medium text-muted-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex max-w-full items-center gap-1 rounded text-xs font-medium text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="min-w-0 break-words [overflow-wrap:anywhere]">
                 {source.label || 'Browse diagnostics directory'}
@@ -252,7 +252,7 @@ const DiagnosticRunRow = ({
       <div className="min-w-0 flex-1 basis-48">
         <p className="text-xs font-medium text-foreground">{title}</p>
         <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-          {tool} · <span>{identifier}</span>
+          {tool} · <span className="font-mono">{identifier}</span>
         </p>
         {combinedPeriods ? (
           <p className="text-xs text-muted-foreground">{combinedPeriods}</p>

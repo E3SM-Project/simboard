@@ -13,8 +13,8 @@ Existing conventions cover these; no UX decision needed.
 - [x] **5. Notices.** A local `Notice` component, red error text, and amber status paragraphs repeat state colors; one Retry button sits inside a `<p>`. Use `Alert`.
 - [x] **6. Loading states.** Compare load is plain text; refetch only dims content; the Diagnostics card shows loading only in its header; case discovery uses plain text. Use `LoadingState` (`section` for first load, `inline` for refresh).
 - [x] **7. Empty and no-match states.** "No plots in common", "No supported runs", and "No variables match this filter" are plain paragraphs with no reset. Use a dashed-border block and offer "Clear filter".
-- [ ] **8. Text links.** Run labels, source directory links, "View in Diagnostics", and "Open original image" are not `text-blue-600 hover:underline`.
-- [ ] **9. Identifiers.** `diagnosticIdentifier` output is not `font-mono text-xs`.
+- [x] **8. Text links.** Run labels, source directory links, "View in Diagnostics", and "Open original image" are not `text-blue-600 hover:underline`.
+- [x] **9. Identifiers.** `diagnosticIdentifier` output is not `font-mono text-xs`.
 - [x] **10. Panel radius.** Plot figures and RunEditor panels use `rounded-lg`. Panels use `rounded-xl`.
 - [x] **11. Elevation.** `ComparisonBar.tsx` uses a custom shadow, `backdrop-blur`, and translucent white. Use `border-t bg-card shadow-sm`.
 - [ ] **12. Selection limit.** Add stays enabled when a group is full, then shows a destructive toast or inline error. Disable unselected rows at the limit and explain why.

@@ -185,7 +185,7 @@ export const DiagnosticsResourceLink = ({ caseId, url }: { caseId: string; url: 
     <Link
       to={{ pathname: location.pathname, search: location.search, hash: `#${target}` }}
       state={location.state}
-      className="rounded px-2 text-xs text-muted-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="rounded px-2 text-xs text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       View in Diagnostics<span className="sr-only"> for {url}</span>
     </Link>

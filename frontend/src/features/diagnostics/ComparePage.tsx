@@ -788,7 +788,7 @@ const PanelImage = ({
           href={src}
           target="_blank"
           rel="noreferrer"
-          className="rounded underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="rounded text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           Open original image
         </a>

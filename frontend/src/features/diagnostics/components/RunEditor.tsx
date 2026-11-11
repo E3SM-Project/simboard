@@ -391,7 +391,7 @@ export const RunEditor = ({
                       target="_blank"
                       rel="noreferrer"
                       title={run.url}
-                      className="min-w-0 text-sm font-medium hover:underline [overflow-wrap:anywhere]"
+                      className="min-w-0 text-sm font-medium text-blue-600 hover:underline [overflow-wrap:anywhere]"
                     >
                       {displayLabel(run)}
                     </a>
@@ -410,7 +410,7 @@ export const RunEditor = ({
                     </div>
                   </div>
                   {run.entry ? (
-                    <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                    <p className="font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">
                       {diagnosticIdentifier(run.entry)}
                     </p>
                   ) : null}
