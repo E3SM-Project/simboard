@@ -13,7 +13,7 @@ SimBoard UI conventions for the React, Tailwind CSS, and shadcn/ui frontend. Sou
 
 Tokens are defined in `frontend/src/index.css` (CSS variables), mapped to utilities in `frontend/tailwind.config.js`, and configured for shadcn in `frontend/components.json`. SimBoard has a light theme only; do not add `dark:` variants ([#455](https://github.com/E3SM-Project/simboard/issues/455) tracks dark mode).
 
-- **Color:** Use semantic utilities for neutral UI, not raw `slate-*`, `gray-*`, or `bg-white`: `text-foreground` for primary text, `text-muted-foreground` for secondary text and control icons, `border-border` for borders, `bg-muted-subtle` for light fills such as table headers and toolbars, `bg-muted` for stronger fills and hover states, `bg-card` for panels, and `bg-background` for page surfaces. State colors are Tailwind tints, not tokens: `green` for success, `red` for errors, `amber` for warnings and in-progress states, `sky` or `blue` for info. Use `ExecutionStatusBadge` (`components/shared/`, built on `Badge`) for execution status. Text links use `text-blue-600 hover:underline`.
+- **Color:** Use semantic utilities for neutral UI, not raw `slate-*`, `gray-*`, or `bg-white` (ESLint enforces this): `text-foreground` for primary text, `text-muted-foreground` for secondary text and control icons, `border-border` for borders, `bg-muted-subtle` for light fills such as table headers and toolbars, `bg-muted` for stronger fills and hover states, `bg-card` for panels, and `bg-background` for page surfaces. State colors are Tailwind tints, not tokens: `green` for success, `red` for errors, `amber` for warnings and in-progress states, `sky` or `blue` for info. Use `ExecutionStatusBadge` (`components/shared/`, built on `Badge`) for execution status. Text links use `text-blue-600 hover:underline`.
 - **Typography:** `text-sm` for body and table text; `text-xs text-muted-foreground` for secondary metadata, help text, and counts. Identifiers (execution IDs, hashes, paths) use `font-mono text-xs`. One `h1` per page, then `h2` for sections. App pages use `text-2xl font-semibold tracking-tight` for `h1` and `text-lg font-semibold` for `h2`. Landing pages (Home, About) use a larger `h1` (`text-4xl font-bold tracking-tight`, up to `md:text-5xl` on Home) and `text-2xl font-semibold` for `h2`.
 - **Radius and elevation:** Controls use `rounded-md`; cards and panels use `rounded-xl` or `rounded-2xl`; pills use `rounded-full`. Surfaces use `border` plus at most `shadow-sm`.
 
@@ -140,10 +140,7 @@ Apply these to new and changed UI.
 
 These exist in the code but are not conventions. Do not copy them into new work:
 
-- Raw `slate-*`, `gray-*`, and `bg-white` neutrals, mainly in catalog, compare, and upload.
-- Native form controls on the Upload page, and inline state-color panels instead of `Alert` on Upload and Compare.
-- Page widths and heading sizes outside the width tiers and heading scale above.
-- Empty states built from raw neutrals; the Cases table empty row lacks "Reset filters".
+- Blue-tinted highlight sections on About and in the Compare change summary. [#456](https://github.com/E3SM-Project/simboard/issues/456) will define an accent color for these.
 - Whole-page loaders that wait for one section's data: Home (catalog overview), Cases (case list), and Case details (executions). Tracked in [#454](https://github.com/E3SM-Project/simboard/issues/454).
 
 Decisions and rationale are in the [design review](github-issues/451-design-system/design-review.md#decisions-452).
