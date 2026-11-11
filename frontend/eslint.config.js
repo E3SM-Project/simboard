@@ -21,7 +21,6 @@ export default [
       // generated / vendor UI
       'src/components/ui/**',
       'src/components/ui/use-toast.ts',
-      'src/components/examples/**',
 
       // tooling / config files
       'tailwind.config.js',

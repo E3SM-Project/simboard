@@ -160,4 +160,3 @@ These exist in the code but are not conventions. Do not copy them into new work.
 - The Upload page uses native form controls instead of shadcn primitives. Tracked in #452.
 - Page container widths and `h1` sizes vary per page. Tracked in #452.
 - Upload's validation and result panels and the compare-route notice panels still inline their state colors instead of using `Alert`.
-- Some files are unused: `App.css`, `features/compare/ComparePage.css`, `components/examples/`, `components/ui/multi-select.tsx`, and several `features/upload/components/` files.
