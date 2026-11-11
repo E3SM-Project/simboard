@@ -1166,7 +1166,7 @@ export const CompareWorkspace = ({
               return (
                 <Fragment key={section.key}>
                   <button
-                    className={`flex w-full border-b border-slate-200 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
+                    className={`group flex w-full border-b border-slate-200 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
                       expandedSections[section.key]
                         ? 'bg-slate-100 text-slate-900'
                         : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
@@ -1178,7 +1178,7 @@ export const CompareWorkspace = ({
                     style={{ minWidth: tableMinWidth }}
                   >
                     <span
-                      className={`sticky left-0 z-10 flex shrink-0 items-start gap-3 border-r border-slate-200 px-4 py-3 shadow-sm ${
+                      className={`sticky left-0 z-10 flex shrink-0 items-start gap-3 border-r border-slate-200 px-4 py-3 shadow-sm group-focus-visible:ring-2 group-focus-visible:ring-inset group-focus-visible:ring-ring ${
                         expandedSections[section.key] ? 'bg-slate-100' : 'bg-slate-50'
                       }`}
                       style={{ width: LABEL_COLUMN_WIDTH }}
