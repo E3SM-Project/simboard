@@ -269,6 +269,11 @@ export const ComparePage = () => {
       <Shell>
         <header>
           <h1 className="text-2xl font-semibold tracking-tight">Compare diagnostics</h1>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            View E3SM Diags and MPAS-Analysis plots from several runs side by side. Browse cases for
+            published diagnostics or add a run by URL, select up to {MAX_COMPARED_RUNS} runs of one
+            kind, then choose Compare.
+          </p>
         </header>
         <div className="rounded-xl border bg-card p-3 sm:p-4">
           <RunEditor initialRuns={[]} onApply={applyRuns} />

@@ -1346,6 +1346,12 @@ async function testViewer() {
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
   render('/diagnostics');
   await waitFor(() => document.getElementById('diagnostic-case-search'), 'search browser');
+  check(
+    document
+      .querySelector('header p')
+      ?.textContent?.includes('select up to 12 runs of one kind, then choose Compare'),
+    'Diagnostics page explains what to do',
+  );
   input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'paged');
   await waitFor(
     () => document.body.textContent?.includes('No supported cases found on this page'),
