@@ -89,6 +89,7 @@ export const ComparePage = () => {
   const basket = useComparisonBasket();
   const { applyComparison } = basket;
   const activatedRuns = useRef('');
+  const filterInput = useRef<HTMLInputElement>(null);
   const selectedRuns = useMemo(
     () =>
       (state.selected ?? state.runs).map((run) => ({
@@ -403,14 +404,14 @@ export const ComparePage = () => {
       ) : null}
 
       {state.runs.length > MAX_COMPARED_RUNS ? (
-        <Alert variant="warning">
+        <Alert variant="warning" role="group">
           This link has {state.runs.length} runs; compare at most {MAX_COMPARED_RUNS} at a time. Use
           Edit runs to remove some.
         </Alert>
       ) : query.isLoading ? (
         <LoadingState kind="section" label="Reading each run's published plots…" />
       ) : query.isError ? (
-        <Alert variant="error" className="flex flex-wrap items-center gap-2">
+        <Alert variant="error" role="group" className="flex flex-wrap items-center gap-2">
           <p>The diagnostics archive could not be read just now.</p>
           <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
             Try again
@@ -473,6 +474,7 @@ export const ComparePage = () => {
                       aria-hidden="true"
                     />
                     <Input
+                      ref={filterInput}
                       value={filter}
                       onChange={(event) => update({ filter: event.target.value })}
                       placeholder="Filter variables"
@@ -486,7 +488,14 @@ export const ComparePage = () => {
                   {!visible.length ? (
                     <div className={cn(EMPTY_STATE, 'space-y-2')}>
                       <p>No variables match this filter.</p>
-                      <Button variant="outline" size="sm" onClick={() => update({ filter: '' })}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          update({ filter: '' });
+                          filterInput.current?.focus();
+                        }}
+                      >
                         Clear filter
                       </Button>
                     </div>

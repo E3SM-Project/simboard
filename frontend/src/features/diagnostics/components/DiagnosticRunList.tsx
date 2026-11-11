@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { MAX_COMPARED_RUNS } from '@/features/diagnostics/compareState';
 import {
   type DiagnosticAnalysis,
@@ -147,14 +148,14 @@ export const DiagnosticRunList = ({
               <span className="sr-only"> (opens in a new tab)</span>
             </a>
             {source.error ? (
-              <Alert variant="warning" className="mt-1 px-2 py-1.5 text-xs">
+              <Alert variant="warning" role="note" className="mt-1 px-2 py-1.5 text-xs">
                 {source.error === 'url_not_allowed'
                   ? 'This directory is not on a supported public diagnostics server.'
                   : 'This directory could not be read. Browse the original output or try again.'}
               </Alert>
             ) : null}
             {source.partial ? (
-              <Alert variant="warning" className="mt-1 px-2 py-1.5 text-xs">
+              <Alert variant="warning" role="note" className="mt-1 px-2 py-1.5 text-xs">
                 Run discovery is incomplete. Open the directory or retry to check for missing runs.
               </Alert>
             ) : null}
@@ -275,29 +276,49 @@ const DiagnosticRunRow = ({
             Open <ExternalLink className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
           </a>
         </Button>
-        <Button
-          type="button"
-          variant={selected ? 'secondary' : 'outline'}
-          size="sm"
-          className="h-7 w-[4.5rem] px-2 text-xs"
-          aria-pressed={selected}
-          aria-label={`${selected ? 'Remove' : 'Add'} ${label}`}
-          disabled={full}
-          title={
-            full
-              ? `Compare up to ${MAX_COMPARED_RUNS} runs of one kind. Remove one first.`
-              : undefined
-          }
-          onClick={() => (selected ? onRemove(run.url) : onAdd(run))}
-        >
-          {selected ? (
-            <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-          ) : (
-            <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-          )}
-          {selected ? 'Added' : 'Add'}
-        </Button>
+        <LimitReason full={full}>
+          <Button
+            type="button"
+            variant={selected ? 'secondary' : 'outline'}
+            size="sm"
+            className="h-7 w-[4.5rem] px-2 text-xs"
+            aria-pressed={selected}
+            aria-label={`${selected ? 'Remove' : 'Add'} ${label}`}
+            disabled={full}
+            onClick={() => (selected ? onRemove(run.url) : onAdd(run))}
+          >
+            {selected ? (
+              <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <Plus className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {selected ? 'Added' : 'Add'}
+          </Button>
+        </LimitReason>
       </div>
     </li>
   );
 };
+
+const LIMIT_REASON = `Compare up to ${MAX_COMPARED_RUNS} runs of one kind. Remove one first.`;
+
+/** Disabled buttons cannot take focus, so a focusable wrapper explains the limit. */
+const LimitReason = ({ full, children }: { full: boolean; children: React.ReactNode }) =>
+  full ? (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            tabIndex={0}
+            aria-label={LIMIT_REASON}
+            className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {children}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-64">{LIMIT_REASON}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  ) : (
+    children
+  );

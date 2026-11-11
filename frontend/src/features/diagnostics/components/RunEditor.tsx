@@ -269,7 +269,12 @@ export const RunEditor = ({
         <CaseBrowser
           isAdded={(url) => runs.some((run) => run.url === url)}
           isFull={(candidate) =>
-            runs.filter((run) => selectedRunGroup(run) === groupKey(candidate)).length >=
+            runs.filter((run) => selectedRunGroup(run) === groupKey(candidate)).length +
+              basket.entries.filter(
+                (entry) =>
+                  groupKey(entry) === groupKey(candidate) &&
+                  !runs.some((run) => run.url === entry.url),
+              ).length >=
             MAX_COMPARED_RUNS
           }
           onAdd={(entry) => add({ url: entry.url, label: entryLabel(entry), entry })}

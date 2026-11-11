@@ -590,7 +590,8 @@ async function testWorkspace() {
     document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]')?.disabled &&
       document
         .querySelector('button[aria-label^="Add E3SM"]')
-        ?.getAttribute('title')
+        ?.parentElement?.closest('[tabindex="0"]')
+        ?.getAttribute('aria-label')
         ?.startsWith('Compare up to 12 runs'),
     'Add is disabled with a reason when the group is full',
   );

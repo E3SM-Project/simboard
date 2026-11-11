@@ -92,32 +92,34 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
     >
       <Card>
         <CardHeader className="p-0">
-          <CollapsibleTrigger asChild>
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 rounded-xl p-4 text-left hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <div className="min-w-0 flex-1">
-                <h2 className="text-lg font-semibold text-foreground">
-                  Diagnostics{query.isSuccess ? ` (${runs.length})` : ''}
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {query.isLoading
-                    ? 'Reading the diagnostics archive…'
-                    : query.isError
-                      ? 'Diagnostics could not be read. Browse the original output or try again.'
-                      : `${runs.length} supported runs${selected ? ` · ${selected} added to compare` : ''}`}
-                </p>
-              </div>
-              <ChevronDown
-                aria-hidden="true"
-                className={cn(
-                  'h-5 w-5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none',
-                  open && 'rotate-180',
-                )}
-              />
-            </button>
-          </CollapsibleTrigger>
+          <h2>
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 rounded-xl p-4 text-left hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-lg font-semibold text-foreground">
+                    Diagnostics{query.isSuccess ? ` (${runs.length})` : ''}
+                  </span>
+                  <span className="mt-1 block text-sm font-normal text-muted-foreground">
+                    {query.isLoading
+                      ? 'Reading the diagnostics archive…'
+                      : query.isError
+                        ? 'Diagnostics could not be read. Browse the original output or try again.'
+                        : `${runs.length} supported runs${selected ? ` · ${selected} added to compare` : ''}`}
+                  </span>
+                </span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={cn(
+                    'h-5 w-5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none',
+                    open && 'rotate-180',
+                  )}
+                />
+              </button>
+            </CollapsibleTrigger>
+          </h2>
         </CardHeader>
         <CollapsibleContent>
           <CardContent className="max-h-[min(65dvh,36rem)] space-y-3 overflow-y-auto border-t p-3 sm:p-4">
