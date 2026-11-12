@@ -6,7 +6,8 @@ from uuid import uuid4
 import pytest
 
 from app.api.version import API_BASE
-from app.features.ingestion.models import ScheduledJobRun
+from app.features.ingestion.job_health import DEFAULT_THRESHOLD_MINUTES
+from app.features.ingestion.models import ScheduledJob, ScheduledJobRun
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 from app.main import app
@@ -15,9 +16,12 @@ JOBS_URL = f"{API_BASE}/ingestions/jobs"
 JOB_ID = "chrysalis-staging"
 STARTED_AT = "2026-01-02T00:00:00+00:00"
 FINISHED_AT = "2026-01-02T00:05:00+00:00"
-SUCCESS = {"started_at": STARTED_AT, "finished_at": FINISHED_AT, "exit_code": 0}
+IDENTITY = {"machine_name": "chrysalis", "scan_mode": "staging"}
+ARCHIVE = {"scan_mode": "archive"}
+START = {**IDENTITY, "started_at": STARTED_AT}
+SUCCESS = {**START, "finished_at": FINISHED_AT, "exit_code": 0}
 FAILURE = {
-    "started_at": STARTED_AT,
+    **START,
     "finished_at": FINISHED_AT,
     "exit_code": 1,
     "failure": {
@@ -128,37 +132,78 @@ def test_only_the_bound_service_account_reports_runs(client, users, act_as, job,
     act_as(users[role])
     run_id = uuid4()
 
-    start = client.put(_run_url(run_id, "start"), json={"started_at": STARTED_AT})
+    start = client.put(_run_url(run_id, "start"), json=START)
     finish = client.put(_run_url(run_id, "finish"), json=SUCCESS)
 
     assert start.status_code == 403
     assert finish.status_code == 403
 
 
-def test_reports_for_unregistered_jobs_are_rejected(client, users, act_as):
-    url = _run_url(uuid4(), "start", job_id="unknown")
+@pytest.mark.parametrize(("action", "payload"), [("start", START), ("finish", SUCCESS)])
+def test_first_report_registers_the_job(client, db, users, act_as, action, payload):
     act_as(users["reporter"])
-    unknown = client.put(url, json={"started_at": STARTED_AT})
-    # Other callers cannot probe whether a job ID exists.
-    act_as(users["user"])
-    probe = client.put(url, json={"started_at": STARTED_AT})
 
-    assert unknown.status_code == 404
+    response = client.put(_run_url(uuid4(), action), json=payload)
+
+    registered = db.get(ScheduledJob, JOB_ID)
+    assert response.status_code == 200
+    assert registered.service_account_id == users["reporter"].id
+    assert registered.machine.name == "chrysalis"
+    assert registered.scan_mode == "staging"
+    assert (
+        registered.max_silence_minutes,
+        registered.max_duration_minutes,
+    ) == DEFAULT_THRESHOLD_MINUTES["staging"]
+    # The registering account owns the job.
+    act_as(users["other"])
+    assert client.put(_run_url(uuid4(), "start"), json=START).status_code == 403
+
+
+def test_unregistered_reports_need_a_service_account_and_known_machine(
+    client, db, users, act_as
+):
+    url = _run_url(uuid4(), "start")
+    # Other callers cannot probe or register job IDs.
+    act_as(users["user"])
+    probe = client.put(url, json=START)
+    act_as(users["reporter"])
+    unknown_machine = client.put(url, json={**START, "machine_name": "unknown"})
+    missing_identity = client.put(url, json={"started_at": STARTED_AT})
+
     assert probe.status_code == 403
+    assert unknown_machine.status_code == 404
+    assert missing_identity.status_code == 422
+    assert db.get(ScheduledJob, JOB_ID) is None
+
+
+@pytest.mark.parametrize(
+    "identity", [{"machine_name": "perlmutter"}, ARCHIVE], ids=["machine", "mode"]
+)
+def test_reports_for_another_machine_or_mode_conflict(client, job, identity):
+    response = client.put(_run_url(uuid4(), "start"), json={**START, **identity})
+
+    assert response.status_code == 409
+
+
+def test_reports_keep_preregistered_thresholds(client, db, job):
+    assert client.put(_run_url(uuid4(), "start"), json=START).status_code == 200
+
+    registered = db.get(ScheduledJob, JOB_ID)
+    assert (registered.max_silence_minutes, registered.max_duration_minutes) == (30, 20)
 
 
 def test_start_and_finish_persist_once_across_retries(client, db, job):
     run_id = uuid4()
 
     for _ in range(2):
-        start = client.put(_run_url(run_id, "start"), json={"started_at": STARTED_AT})
+        start = client.put(_run_url(run_id, "start"), json=START)
         assert start.status_code == 200
         assert start.json()["status"] == "running"
     for _ in range(2):
         finish = client.put(_run_url(run_id, "finish"), json=SUCCESS)
         assert finish.status_code == 200
     # A late start retry must not reopen a finished run.
-    late_start = client.put(_run_url(run_id, "start"), json={"started_at": STARTED_AT})
+    late_start = client.put(_run_url(run_id, "start"), json=START)
 
     run = db.query(ScheduledJobRun).one()
     assert late_start.json()["status"] == "succeeded"
@@ -200,10 +245,11 @@ def test_reports_cannot_change_an_outcome_or_another_jobs_run(
     act_as(users["reporter"])
     other_job_start = client.put(
         _run_url(run_id, "start", job_id="chrysalis-archive"),
-        json={"started_at": STARTED_AT},
+        json={**START, **ARCHIVE},
     )
     other_job_finish = client.put(
-        _run_url(run_id, "finish", job_id="chrysalis-archive"), json=SUCCESS
+        _run_url(run_id, "finish", job_id="chrysalis-archive"),
+        json={**SUCCESS, **ARCHIVE},
     )
 
     assert changed.status_code == 409
@@ -247,13 +293,14 @@ def test_new_runs_prune_only_their_jobs_records_past_retention(
     old_run_id, other_job_run_id = uuid4(), uuid4()
     client.put(_run_url(old_run_id, "finish"), json=SUCCESS)
     client.put(
-        _run_url(other_job_run_id, "finish", job_id="chrysalis-archive"), json=SUCCESS
+        _run_url(other_job_run_id, "finish", job_id="chrysalis-archive"),
+        json={**SUCCESS, **ARCHIVE},
     )
     for run_id in (old_run_id, other_job_run_id):
         db.get(ScheduledJobRun, run_id).reported_at -= timedelta(days=91)
     db.commit()
 
-    payload = {"started_at": STARTED_AT} if action == "start" else SUCCESS
+    payload = START if action == "start" else SUCCESS
     client.put(_run_url(uuid4(), action), json=payload)
 
     db.expire_all()

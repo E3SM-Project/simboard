@@ -30,6 +30,7 @@ ARCHIVE_SNAPSHOT_NAME_PATTERN = (
 SCHEDULED_JOB_ID_PATTERN = r"^[a-z0-9][a-z0-9_-]{0,99}$"
 # One year keeps derived deadlines within datetime range.
 SCHEDULED_JOB_MAX_THRESHOLD_MINUTES = 525_600
+ScheduledJobScanMode = Literal["staging", "archive", "diagnostics"]
 
 
 class IngestionExecutionSummary(BaseModel):
@@ -435,7 +436,7 @@ class ScheduledJobRegister(BaseModel):
     """Admin registration of one scheduled job and its health thresholds."""
 
     machine_name: str
-    scan_mode: Literal["staging", "archive", "diagnostics"]
+    scan_mode: ScheduledJobScanMode
     service_account_email: str
     max_silence_minutes: Annotated[
         int, Field(gt=0, le=SCHEDULED_JOB_MAX_THRESHOLD_MINUTES)
@@ -445,7 +446,14 @@ class ScheduledJobRegister(BaseModel):
     ]
 
 
-class ScheduledJobRunStart(BaseModel):
+class ScheduledJobReport(BaseModel):
+    """Job identity sent with every report; it registers an unknown job."""
+
+    machine_name: str
+    scan_mode: ScheduledJobScanMode
+
+
+class ScheduledJobRunStart(ScheduledJobReport):
     started_at: AwareDatetime
 
 
@@ -456,7 +464,7 @@ class ScheduledJobFailure(BaseModel):
     transient: bool | None = None
 
 
-class ScheduledJobRunFinish(BaseModel):
+class ScheduledJobRunFinish(ScheduledJobReport):
     """Finish report; the start time lets a lost start report be recovered."""
 
     started_at: AwareDatetime

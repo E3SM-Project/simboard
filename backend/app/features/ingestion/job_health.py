@@ -20,6 +20,13 @@ from app.features.machine.models import Machine
 from app.features.user.models import User
 
 RUN_RETENTION = timedelta(days=90)
+# (max_silence_minutes, max_duration_minutes) for jobs registered by their first
+# report, based on the cron template schedules. Administrators can override them.
+DEFAULT_THRESHOLD_MINUTES: dict[str, tuple[int, int]] = {
+    "staging": (45, 60),
+    "archive": (1560, 720),
+    "diagnostics": (420, 300),
+}
 
 
 class JobRunConflictError(Exception):
@@ -41,6 +48,30 @@ def register_job(
     job.max_silence_minutes = payload.max_silence_minutes
     job.max_duration_minutes = payload.max_duration_minutes
     db.add(job)
+
+    return job
+
+
+def register_reporting_job(
+    db: Session,
+    job_id: str,
+    scan_mode: str,
+    machine: Machine,
+    service_account: User,
+) -> ScheduledJob:
+    """Register an unknown job for its first reporter with default thresholds."""
+    max_silence_minutes, max_duration_minutes = DEFAULT_THRESHOLD_MINUTES[scan_mode]
+    job = ScheduledJob(
+        id=job_id,
+        machine=machine,
+        scan_mode=scan_mode,
+        service_account_id=service_account.id,
+        max_silence_minutes=max_silence_minutes,
+        max_duration_minutes=max_duration_minutes,
+    )
+    db.add(job)
+    # Runs reference the job by foreign key only, so insert the job first.
+    db.flush()
 
     return job
 
