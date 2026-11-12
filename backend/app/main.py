@@ -4,6 +4,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.health import router as health_router
 from app.api.ingestion_summary import router as ingestion_summary_router
+from app.api.job_health import router as job_health_router
 from app.api.meta import router as meta_router
 from app.api.metadata_backfill import router as metadata_backfill_router
 from app.api.source_directories import router as source_directories_router
@@ -59,6 +60,7 @@ def create_app() -> FastAPI:
     app.include_router(token_router, prefix=API_BASE)
     app.include_router(ingestion_router, prefix=API_BASE)
     app.include_router(ingestion_summary_router, prefix=API_BASE)
+    app.include_router(job_health_router, prefix=API_BASE)
     app.include_router(source_directories_router, prefix=API_BASE)
     app.include_router(metadata_backfill_router, prefix=API_BASE)
     app.include_router(meta_router, prefix=API_BASE)
