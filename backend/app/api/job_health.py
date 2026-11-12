@@ -18,6 +18,7 @@ from app.features.ingestion.job_health import (
     record_run_finish,
     record_run_start,
     register_job,
+    register_reporting_job,
     summarize_job_health,
     to_job_read,
 )
@@ -27,6 +28,7 @@ from app.features.ingestion.schemas import (
     ScheduledJobHealthResponse,
     ScheduledJobRead,
     ScheduledJobRegister,
+    ScheduledJobReport,
     ScheduledJobRunFinish,
     ScheduledJobRunRead,
     ScheduledJobRunStart,
@@ -63,7 +65,11 @@ def register_scheduled_job(
     db: Annotated[Session, Depends(get_database_session)],
     user: Annotated[User, Depends(current_active_user)],
 ) -> ScheduledJobRead:
-    """Create or update a job's reporting account and health thresholds."""
+    """Create or update a job's reporting account and health thresholds.
+
+    Optional: jobs register themselves on their first report. Pre-register a job
+    to assign its account or thresholds, or to report it stale before it runs.
+    """
     if user.role != UserRole.ADMIN:
         raise HTTPException(
             status_code=403, detail="Only administrators may register jobs."
@@ -90,10 +96,10 @@ def report_scheduled_job_start(
     db: Annotated[Session, Depends(get_database_session)],
     user: Annotated[User, Depends(current_active_user)],
 ) -> ScheduledJobRunRead:
-    """Record a run start. Repeated reports are idempotent."""
-    job = _get_reporting_job(db, job_id, user)
+    """Record a run start, registering an unknown job. Retries are idempotent."""
     try:
         with transaction(db):
+            job = _get_reporting_job(db, job_id, user, payload)
             run = record_run_start(db, job, run_id, payload, _now())
     except JobRunConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -110,9 +116,9 @@ def report_scheduled_job_finish(
     user: Annotated[User, Depends(current_active_user)],
 ) -> ScheduledJobRunRead:
     """Record a run outcome. Identical retries succeed; changed outcomes conflict."""
-    job = _get_reporting_job(db, job_id, user)
     try:
         with transaction(db):
+            job = _get_reporting_job(db, job_id, user, payload)
             run = record_run_finish(db, job, run_id, payload, _now())
     except JobRunConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -120,19 +126,35 @@ def report_scheduled_job_finish(
     return ScheduledJobRunRead.model_validate(run)
 
 
-def _get_reporting_job(db: Session, job_id: str, user: User) -> ScheduledJob:
+def _get_reporting_job(
+    db: Session, job_id: str, user: User, report: ScheduledJobReport
+) -> ScheduledJob:
+    """Return the reported job, registering it on its first report.
+
+    Call inside the run's transaction so a new job is committed with its run.
+    """
     # Check the role first so other callers cannot probe which job IDs exist.
     if user.role != UserRole.SERVICE_ACCOUNT:
         raise HTTPException(
             status_code=403, detail="Only service accounts may report job runs."
         )
+    machine = _resolve_request_machine(db, report.machine_name)
     job = db.get(ScheduledJob, job_id)
     if job is None:
-        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+        return register_reporting_job(db, job_id, report.scan_mode, machine, user)
     if job.service_account_id != user.id:
         raise HTTPException(
             status_code=403,
             detail="Only the job's service account may report its runs.",
+        )
+    # Distinct jobs must not share an ID.
+    if (job.machine_id, job.scan_mode) != (machine.id, report.scan_mode):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Job '{job_id}' is registered for {job.machine.name} "
+                f"{job.scan_mode} runs."
+            ),
         )
 
     return job

@@ -38,8 +38,8 @@ SIMBOARD_ROOT=/path/to/simboard_root
 # archive jobs can run concurrently. Archive lock contention exits nonzero so
 # cron reports a missed daily archive scan; staging contention exits successfully.
 # SIMBOARD_JOB_ID names the job whose live runs report their start and finish
-# to the command's API environment. Register each job ID in that environment
-# before enabling live runs; dry runs and commands without an ID do not report.
+# to the command's API environment; the first report registers the job. Dry
+# runs and commands without an ID do not report.
 
 # The launcher defaults to a dry run. Uncomment only after reviewing dry-run
 # logs and enabling live ingestion and diagnostics linking for this scheduler.
