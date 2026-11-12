@@ -214,8 +214,11 @@ def _derive_health(
     latest_completed: ScheduledJobRun | None,
     active_run: ScheduledJobRun | None,
 ) -> ScheduledJobHealth:
+    if last_reported_at is None:
+        return ScheduledJobHealth.STALE
+    # A run within its allowed duration may outlast the silence interval.
     silence_limit = timedelta(minutes=job.max_silence_minutes)
-    if last_reported_at is None or now - last_reported_at > silence_limit:
+    if active_run is None and now - last_reported_at > silence_limit:
         return ScheduledJobHealth.STALE
     if latest_completed and latest_completed.status == ScheduledJobRunStatus.FAILED:
         return ScheduledJobHealth.FAILED

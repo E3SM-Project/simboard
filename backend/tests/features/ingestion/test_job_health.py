@@ -106,6 +106,13 @@ def test_run_within_allowed_duration_is_running(db, job):
     assert health.latest_completed_run is None
 
 
+def test_long_run_within_allowed_duration_is_not_silent(db, job):
+    job.max_duration_minutes = 60
+    _run(db, job, RUNNING, 45)
+
+    assert _health(db).health == "running"
+
+
 def test_missing_completion_is_stale_not_failed(db, job):
     completed = _run(db, job, SUCCEEDED, 25, 22)
     _run(db, job, RUNNING, 21)
