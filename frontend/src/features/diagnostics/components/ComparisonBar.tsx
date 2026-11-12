@@ -145,7 +145,7 @@ export const ComparisonBar = () => {
               <Select value={active[0]} onValueChange={setSelectedGroup} disabled={checking}>
                 <SelectTrigger
                   aria-label="Comparison group"
-                  className="h-8 w-[min(260px,65vw)] text-xs"
+                  className="h-8 w-[min(340px,65vw)] text-xs"
                 >
                   <SelectValue />
                 </SelectTrigger>
@@ -216,9 +216,9 @@ export const ComparisonBar = () => {
               className="flex flex-col gap-2 rounded-xl border border-border bg-muted-subtle p-2.5 lg:flex-row lg:items-center lg:justify-between"
             >
               <div className="min-w-0 space-y-1.5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <p className="text-sm font-medium text-muted-foreground">
                   {GROUP_TITLES[key] ?? key}{' '}
-                  <span className="font-normal normal-case text-muted-foreground">
+                  <span className="font-normal text-muted-foreground">
                     {group.length}/{MAX_RUNS_PER_GROUP}
                   </span>
                 </p>
