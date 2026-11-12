@@ -159,6 +159,44 @@ class TestHttpFetcher:
         assert self._fetch(handler, remaining=0.0).failed
         assert requested == []
 
+    @pytest.mark.parametrize(
+        "remaining, expected",
+        [(0.5, 0.5), (30.0, settings.diagnostics_request_timeout_seconds)],
+    )
+    def test_request_timeouts_never_outlast_the_deadline(self, remaining, expected):
+        timeouts = []
+
+        def handler(request):
+            timeouts.append(request.extensions["timeout"])
+            return self._html()
+
+        self._fetch(handler, remaining=remaining)
+        (timeout,) = timeouts
+        assert list(timeout.values()) == pytest.approx([expected] * 4, abs=0.05)
+
+    def test_a_response_after_the_deadline_fails(self):
+        clock = {"now": 0.0}
+
+        def handler(_request):
+            clock["now"] += 5.0
+            return httpx.Response(404)
+
+        with patch(CLOCK, side_effect=lambda: clock["now"]):
+            assert self._fetch(handler, remaining=3.0).failed
+
+    def test_a_redirect_after_the_deadline_is_not_followed(self):
+        clock = {"now": 0.0}
+        requested = []
+
+        def handler(request):
+            requested.append(request.url)
+            clock["now"] += 5.0
+            return httpx.Response(301, headers={"location": ROOT + "/other/"})
+
+        with patch(CLOCK, side_effect=lambda: clock["now"]):
+            assert self._fetch(handler, remaining=3.0).failed
+        assert len(requested) == 1
+
     def test_redirect_within_the_archive_is_followed(self):
         def handler(request):
             if str(request.url).endswith("/e3sm_diags"):

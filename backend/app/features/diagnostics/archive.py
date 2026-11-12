@@ -146,6 +146,13 @@ def _classify(response: httpx.Response) -> FetchResult | None:
     return None
 
 
+def _answer(response: httpx.Response, deadline: float) -> FetchResult:
+    # A response that arrives after the deadline is a failed read, not an answer.
+    if time.monotonic() >= deadline:
+        return FAILED
+    return _classify(response) or _read_body(response, deadline)
+
+
 def _read_body(response: httpx.Response, deadline: float) -> FetchResult:
     # httpx's read timeout bounds the gap between chunks, not the response,
     # so a server trickling bytes would never time out on its own.
@@ -176,7 +183,8 @@ def http_fetcher(client: httpx.Client) -> Fetcher:
     def _fetch(url: str, deadline: float) -> FetchResult:
         target = url
         for _ in range(_MAX_REDIRECTS + 1):
-            if time.monotonic() >= deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 return FAILED
             if not is_allowed_url(target):
                 logger.warning(
@@ -184,19 +192,24 @@ def http_fetcher(client: httpx.Client) -> Fetcher:
                 )
                 return FAILED
             try:
+                # The client's timeout is per operation; never wait past the deadline.
                 with client.stream(
                     "GET",
                     target,
                     headers={"User-Agent": _USER_AGENT},
                     follow_redirects=False,
+                    timeout=min(
+                        settings.diagnostics_request_timeout_seconds, remaining
+                    ),
                 ) as response:
+                    # A late redirect fails at the top of the next hop.
                     if response.is_redirect:
                         location = response.headers.get("location")
                         if not location:
                             return FAILED
                         target = str(response.url.join(location))
                         continue
-                    return _classify(response) or _read_body(response, deadline)
+                    return _answer(response, deadline)
             except (httpx.HTTPError, httpx.InvalidURL) as exc:
                 # InvalidURL is not an HTTPError; a bad Location header raises it.
                 logger.debug("Diagnostics fetch failed for %s: %s", url, exc)
