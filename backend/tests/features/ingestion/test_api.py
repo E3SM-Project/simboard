@@ -27,6 +27,7 @@ from app.features.ingestion.api import (
     _build_hpc_upload_payload,
     _build_ingestion_state_response,
     _normalize_processed_execution_ids,
+    _resolve_ingestion_status,
     _run_ingest_archive,
     _save_uploaded_file_and_hash,
     _validate_archive_path,
@@ -119,6 +120,70 @@ def _create_case(
     db.add(case)
     db.flush()
     return case
+
+
+@pytest.mark.parametrize(
+    "created_count,error_count,expected_status",
+    [
+        (1, 0, "success"),
+        (0, 0, "success"),
+        (1, 1, "partial"),
+        (0, 1, "failed"),
+    ],
+)
+def test_resolve_ingestion_status(created_count, error_count, expected_status):
+    assert _resolve_ingestion_status(created_count, error_count) == expected_status
+
+
+@pytest.mark.parametrize("transport", ["path", "hpc-upload", "upload"])
+@pytest.mark.parametrize("duplicate_count", [0, 2], ids=["empty", "duplicate-only"])
+def test_error_free_noop_ingestion_records_success(
+    client, db, tmp_path, transport, duplicate_count
+):
+    machine = db.query(Machine).first()
+    archive_path = tmp_path / "noop.tar.gz"
+    archive_path.write_bytes(b"noop-archive")
+    payload = {"machine_name": machine.name}
+
+    with patch(
+        "app.features.ingestion.api.ingest_archive",
+        return_value=IngestArchiveResult(
+            executions=[], created_count=0, duplicate_count=duplicate_count, errors=[]
+        ),
+    ):
+        if transport == "path":
+            response = client.post(
+                f"{API_BASE}/ingestions/from-path",
+                json={**payload, "archive_path": str(archive_path)},
+            )
+            source_reference = str(archive_path)
+        else:
+            source_reference = archive_path.name
+            if transport == "hpc-upload":
+                source_reference = "/archive/noop-case"
+                payload.update(
+                    case_path=source_reference, processed_execution_ids=["100.1-1"]
+                )
+            response = client.post(
+                f"{API_BASE}/ingestions/from-{transport}",
+                data=payload,
+                files={
+                    "file": (archive_path.name, b"noop-archive", "application/gzip")
+                },
+            )
+
+    assert response.status_code == (200 if transport == "path" else 201), response.text
+    assert response.json() == {
+        "created_count": 0,
+        "duplicate_count": duplicate_count,
+        "executions": [],
+        "errors": [],
+    }
+    ingestion = db.query(Ingestion).filter_by(source_reference=source_reference).one()
+    assert ingestion.status == "success"
+    assert ingestion.created_count == 0
+    assert ingestion.duplicate_count == duplicate_count
+    assert ingestion.error_count == 0
 
 
 @pytest.mark.parametrize("transport", ["path", "hpc-upload", "upload"])
