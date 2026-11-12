@@ -470,7 +470,23 @@ export const RunEditor = ({
           </Button>
         ) : null}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex gap-2">
+          {visibleRuns.length ? null : (
+            <p className="text-xs text-muted-foreground">
+              Add runs from a case or by URL to compare them.
+            </p>
+          )}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {!onCancel && visibleRuns.length ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs text-muted-foreground"
+                onClick={() => changeRuns(runs.filter((run) => !visibleRuns.includes(run)))}
+              >
+                Clear selection
+              </Button>
+            ) : null}
             {onCancel ? (
               <Button type="button" variant="outline" size="sm" onClick={onCancel}>
                 Cancel

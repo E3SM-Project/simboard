@@ -1861,6 +1861,44 @@ async function testDiscoveryWarnings() {
   (document.getElementById('diagnostic-case-search') as HTMLInputElement).focus();
 }
 
+async function testCompareFooter() {
+  localStorage.clear();
+  window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
+  render('/diagnostics');
+  await waitFor(() => button('case.alpha · 2 runs'), 'footer setup');
+  const footerText = () => compareAction()?.closest('footer')?.textContent ?? '';
+  check(
+    footerText().includes('Add runs from a case or by URL to compare them.'),
+    'Empty footer explains how to start',
+  );
+  check(!button('Clear selection'), 'Clear selection hidden without runs');
+  check(compareAction()?.textContent?.trim() === 'Compare (0)', 'Compare shows zero count');
+  click(
+    document.querySelector<HTMLButtonElement>(
+      '#available-case-diagnostics button[aria-label^="Add E3SM"]',
+    ),
+    'footer add run',
+  );
+  await waitFor(
+    () => compareAction()?.textContent?.trim() === 'Compare (1)',
+    'Compare shows live count',
+  );
+  check(
+    !footerText().includes('Add runs from a case'),
+    'Empty-state hint hides once a run is selected',
+  );
+  const actions = compareAction()!.parentElement!;
+  check(actions.className.includes('ml-auto'), 'Compare actions are right-aligned');
+  check(actions.lastElementChild === compareAction(), 'Compare is the last action in the footer');
+  click(button('Clear selection'), 'clear footer selection');
+  await waitFor(
+    () => document.body.textContent?.includes('Selected runs (0/'),
+    'Clear selection empties selected runs',
+  );
+  check(compareAction()?.disabled, 'Compare disabled after clearing');
+  check(!button('Clear selection'), 'Clear selection hides after clearing');
+}
+
 async function testCompatibilityValidation() {
   localStorage.clear();
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
@@ -2657,6 +2695,7 @@ testWorkspace()
   .then(testViewer)
   .then(testUnifiedSelections)
   .then(testDiscoveryWarnings)
+  .then(testCompareFooter)
   .then(testCompatibilityValidation)
   .then(testTrayCompatibility)
   .then(testExampleRetryAndGroupSwitch)
