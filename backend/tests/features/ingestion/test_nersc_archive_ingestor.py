@@ -1,6 +1,7 @@
 """Tests for the NERSC archive ingestion runner script."""
 
 import gzip
+import json
 import logging
 import runpy
 from dataclasses import replace
@@ -862,11 +863,20 @@ def test_run_ingestor_returns_failure_when_state_fetch_fails(
         request_timeout_seconds=30,
     )
 
+    status_file = tmp_path / "job-status.json"
+    monkeypatch.setenv("SIMBOARD_JOB_STATUS_FILE", str(status_file))
+
     exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
 
     assert exit_code == 1
     assert any(event == "state_fetch_failed" for event, _ in logged_events)
     assert not any(event == "scan_completed" for event, _ in logged_events)
+    assert json.loads(status_file.read_text()) == {
+        "reason": "api_request",
+        "message": "boom",
+        "status_code": 503,
+        "transient": True,
+    }
 
 
 def test_run_ingestor_default_dry_run_fetches_state_before_archive_checkpoints(

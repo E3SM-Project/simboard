@@ -21,6 +21,7 @@ from app.scripts.ingestion.diagnostics_archives import (
     DIAGNOSTICS_ARCHIVES_BY_MACHINE,
     DiagnosticsArchive,
 )
+from app.scripts.ingestion.job_health import record_exception, record_failure
 
 TIMESTAMP_RE = re.compile(r"^provenance\.(\d{8}_\d{6}_\d{6})\.cfg$")
 REQUIRED_SETTINGS = {"case_name", "machine", "hpc_username", "diagnostics_url"}
@@ -90,6 +91,7 @@ def run(included_case_paths: set[Path] | None = None) -> int:
         # Do not log exception messages/locals: HTTP errors may contain URLs,
         # credentials or response bodies. Keep frame locations for diagnosis.
         frames = traceback.extract_tb(exc.__traceback__)
+        record_exception(exc, f"{type(exc).__name__} during {progress.phase}")
         _log_event(
             "diagnostics_scanner_failed",
             {
@@ -228,6 +230,7 @@ def _link_candidates(
 
             if state is None or state.status_code != 200:
                 summary["deferred_state_lookups"] += 1
+                _record_request_failure("Diagnostics state lookup failed.", state)
                 _log_event(
                     "diagnostics_scanner_state_lookup_deferred",
                     {
@@ -281,6 +284,7 @@ def _link_candidates(
             )
             if response is None or response.status_code != 204:
                 summary["failed_link_submissions"] += 1
+                _record_request_failure("Diagnostics link submission failed.", response)
                 _log_event(
                     "diagnostics_scanner_link_submission_failed",
                     {
@@ -502,6 +506,19 @@ def _request_with_retry(method, url: str, **kwargs) -> httpx.Response | None:
         },
     )
     return response
+
+
+def _record_request_failure(message: str, response: httpx.Response | None) -> None:
+    """Record a final API failure; retries cover only transient statuses."""
+    status_code = None if response is None else response.status_code
+    record_failure(
+        "api_request",
+        message,
+        status_code=status_code,
+        transient=status_code is None
+        or status_code in {408, 429}
+        or status_code >= 500,
+    )
 
 
 def _read_settings_bytes(path: Path) -> bytes:

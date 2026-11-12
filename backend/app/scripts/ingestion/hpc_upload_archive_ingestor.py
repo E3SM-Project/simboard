@@ -82,6 +82,7 @@ from app.scripts.ingestion.archive_workflow import (
     _persist_discovery_results,
     _validate_run_preconditions,
 )
+from app.scripts.ingestion.job_health import record_exception, record_request_failure
 
 
 @logged_main
@@ -155,6 +156,7 @@ def _prepare_run_state(
                 "archive_checkpoint_fetch_failed",
                 {"status_code": exc.status_code, "error": str(exc)},
             )
+            record_request_failure(exc)
             return None
 
     try:
@@ -173,6 +175,7 @@ def _prepare_run_state(
                 "error": str(exc),
             },
         )
+        record_request_failure(exc)
         return None
 
     return state, completed_snapshot_keys, endpoint_url
@@ -238,6 +241,7 @@ def _run_ingestor(
             "archive_scan_failed",
             {"error": f"{exc.__class__.__name__}: {exc}"},
         )
+        record_exception(exc, f"{exc.__class__.__name__}: {exc}")
         return 1
 
     _log_scan_completed(

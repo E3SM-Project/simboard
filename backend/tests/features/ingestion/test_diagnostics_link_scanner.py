@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import httpx
@@ -586,7 +587,15 @@ def test_run_defers_after_exhausted_state_lookup(
     monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
     monkeypatch.setenv("MACHINE_NAME", "perlmutter")
     monkeypatch.setenv("DRY_RUN", "false")
+    status_file = tmp_path.parent / "job-status.json"
+    monkeypatch.setenv("SIMBOARD_JOB_STATUS_FILE", str(status_file))
     assert run() == 1
+    assert json.loads(status_file.read_text()) == {
+        "reason": "api_request",
+        "message": "Diagnostics state lookup failed.",
+        "status_code": 503,
+        "transient": True,
+    }
     assert client.post_calls == []
     assert (
         "diagnostics_scanner_request_retry_exhausted",
