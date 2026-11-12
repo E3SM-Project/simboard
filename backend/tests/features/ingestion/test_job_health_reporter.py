@@ -1,6 +1,11 @@
 """Scheduled job failure handoff and best-effort launcher health reports."""
 
 import json
+import os
+import signal
+import subprocess
+import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -189,3 +194,95 @@ def test_missing_configuration_never_fails_the_reporter(monkeypatch, events):
 
     assert main(["start"]) == 0
     assert events[0][0] == "job_report_failed"
+
+
+@pytest.fixture
+def fake_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    module_dir = tmp_path / "modules"
+    module_dir.mkdir()
+    (module_dir / "fake_job.py").write_text(
+        "import os, sys\n"
+        "path = os.environ.get('SIMBOARD_JOB_STATUS_FILE')\n"
+        "if path:\n"
+        "    with open(path, 'x') as status_file:\n"
+        '        status_file.write(\'{"reason": "filesystem", "message": "disk"}\')\n'
+        "sys.exit(3)\n"
+    )
+    monkeypatch.setenv("PYTHONPATH", str(module_dir))
+
+    return "fake_job"
+
+
+def test_run_reports_a_live_scheduled_module(
+    report_env, sent, monkeypatch, fake_module
+):
+    monkeypatch.setenv("DRY_RUN", "false")
+
+    assert main(["run", fake_module]) == 3
+
+    start, finish = (json.loads(request.data) for request, _ in sent)
+    start_url, finish_url = (request.full_url for request, _ in sent)
+    assert start_url.endswith("/start")
+    assert finish_url == start_url.removesuffix("/start") + "/finish"
+    assert RUN_ID not in start_url
+    assert finish["started_at"] == start["started_at"]
+    assert finish["exit_code"] == 3
+    assert finish["failure"] == {"reason": "filesystem", "message": "disk"}
+    assert not Path(job_health.os.environ["SIMBOARD_JOB_STATUS_FILE"]).exists()
+
+
+@pytest.mark.parametrize(
+    ("dry_run", "job_id"), [(None, "chrysalis-staging"), ("false", None)]
+)
+def test_run_only_reports_live_scheduled_jobs(
+    report_env, sent, monkeypatch, fake_module, dry_run, job_id
+):
+    for key, value in (("DRY_RUN", dry_run), ("SIMBOARD_JOB_ID", job_id)):
+        if value is None:
+            monkeypatch.delenv(key, raising=False)
+        else:
+            monkeypatch.setenv(key, value)
+
+    assert main(["run", fake_module]) == 3
+    assert sent == []
+
+
+def test_run_keeps_the_module_exit_code_when_reports_fail(
+    report_env, monkeypatch, events, fake_module
+):
+    def failing_urlopen(*_args, **_kwargs):
+        raise TimeoutError
+
+    monkeypatch.setattr(job_health.urllib.request, "urlopen", failing_urlopen)
+    monkeypatch.setenv("DRY_RUN", "false")
+
+    assert main(["run", fake_module]) == 3
+    assert [event for event, _ in events] == ["job_report_failed"] * 2
+
+
+def test_run_forwards_termination_to_the_module(tmp_path: Path):
+    ready = tmp_path / "ready"
+    (tmp_path / "sleeper.py").write_text(
+        "import pathlib, sys, time\n"
+        f"pathlib.Path({str(ready)!r}).touch()\n"
+        "time.sleep(30)\n"
+    )
+    backend_dir = Path(__file__).resolve().parents[3]
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"SIMBOARD_JOB_ID", "DRY_RUN"}
+    }
+    env["PYTHONPATH"] = str(tmp_path)
+    process = subprocess.Popen(
+        [sys.executable, "-m", "app.scripts.ingestion.job_health", "run", "sleeper"],
+        cwd=backend_dir,
+        env=env,
+    )
+    deadline = time.monotonic() + 20
+    while not ready.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+    process.send_signal(signal.SIGTERM)
+
+    assert process.wait(timeout=20) == 128 + signal.SIGTERM
