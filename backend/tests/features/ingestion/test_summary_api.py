@@ -95,6 +95,22 @@ def test_summary_requires_ingestion_access(client, summary_user, role, status_co
     summary_user.role = role
     response = client.get(SUMMARY_URL, params=RANGE)
     assert response.status_code == status_code, response.text
+    if status_code == 403:
+        assert response.json() == {
+            "detail": "Only administrators and service accounts may read summaries."
+        }
+
+
+def test_ingestion_state_denial_message_is_unchanged(client, summary_user):
+    summary_user.role = UserRole.USER
+    response = client.get(
+        f"{API_BASE}/ingestions/archive-checkpoints",
+        params={"machine_name": "perlmutter", "archive_name": "test-archive"},
+    )
+    assert response.status_code == 403, response.text
+    assert response.json() == {
+        "detail": "Only administrators and service accounts may manage ingestion state."
+    }
 
 
 @pytest.mark.parametrize(

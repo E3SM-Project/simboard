@@ -40,7 +40,7 @@ def get_ingestion_summary(
     machine_name: str | None = None,
 ) -> IngestionSummaryResponse:
     """Count executions created in [start_date, end_date), using UTC days."""
-    _require_ingestion_state_access(user)
+    _require_ingestion_state_access(user, action="read summaries")
     if not 0 < (end_date - start_date).days <= MAX_SUMMARY_RANGE_DAYS:
         raise HTTPException(
             status_code=422,

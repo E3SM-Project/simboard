@@ -77,11 +77,13 @@ STATEFUL_INGESTION_SOURCE_TYPES = (
 )
 
 
-def _require_ingestion_state_access(user: User) -> None:
+def _require_ingestion_state_access(
+    user: User, *, action: str = "manage ingestion state"
+) -> None:
     if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators and service accounts may manage ingestion state.",
+            detail=f"Only administrators and service accounts may {action}.",
         )
 
 
