@@ -599,17 +599,24 @@ const CaseBrowser = ({
   });
   const { fetchNextPage, hasNextPage, isError, isFetching } = query;
   const loadedPages = query.data?.pages.length ?? 0;
-  const restoring = loadedPages > 0 && loadedPages < restoreTo && hasNextPage && !isError;
-  useEffect(() => {
-    if (restoring && !isFetching) void fetchNextPage();
-  }, [restoring, isFetching, fetchNextPage, loadedPages]);
   const checked = query.data?.pages.flatMap((page) => page.cases) ?? [];
   const total = query.data?.pages[loadedPages - 1]?.total ?? 0;
   const supported = checked.filter((item) =>
     item.diagnostics?.sources.some((source) => source.runs.length),
   );
-  const selected =
-    supported.find((item) => item.record.id === caseId) ?? (restoring ? undefined : supported[0]);
+  const found = supported.find((item) => item.record.id === caseId);
+  // Stop as soon as the saved case is loaded, so a stale page never fetches extra pages.
+  const restoring =
+    Boolean(caseId) &&
+    !found &&
+    loadedPages > 0 &&
+    loadedPages < restoreTo &&
+    Boolean(hasNextPage) &&
+    !isError;
+  useEffect(() => {
+    if (restoring && !isFetching) void fetchNextPage();
+  }, [restoring, isFetching, fetchNextPage, loadedPages]);
+  const selected = found ?? (restoring ? undefined : supported[0]);
   const incomplete = checked.filter(
     (item) =>
       !item.diagnostics ||
@@ -661,7 +668,7 @@ const CaseBrowser = ({
               </Tooltip>
             </TooltipProvider>
           </div>
-          {query.isFetching ? (
+          {query.isFetching || restoring ? (
             <LoadingState
               kind="inline"
               label="Checking cases for supported diagnostics…"
@@ -777,7 +784,7 @@ const CaseBrowser = ({
             >
               Load more cases
             </Button>
-            <p className="text-xs text-muted-foreground" aria-live="polite">
+            <p className="text-xs text-muted-foreground" aria-live={restoring ? 'off' : 'polite'}>
               Checked {checked.length} of {total} cases · {supported.length} with diagnostics
             </p>
           </div>

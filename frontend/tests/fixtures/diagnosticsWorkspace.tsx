@@ -1347,8 +1347,9 @@ async function testViewer() {
   render('/diagnostics');
   await waitFor(() => document.getElementById('diagnostic-case-search'), 'search browser');
   check(
-    document
-      .querySelector('header p')
+    [...document.querySelectorAll('header')]
+      .find((header) => header.querySelector('h1')?.textContent === 'Compare diagnostics')
+      ?.querySelector('p')
       ?.textContent?.includes('select up to 12 runs of one kind, then choose Compare'),
     'Diagnostics page explains what to do',
   );
@@ -2449,6 +2450,35 @@ async function testDenseBrowser() {
     'Restore reloads earlier pages and keeps the third-page case selected',
   );
   check(!button('Load more cases'), 'Restored discovery is complete');
+
+  // A saved page past the saved case must not fetch extra pages.
+  render('/case/raw-only');
+  await waitFor(
+    () => document.querySelector('h1')?.textContent === 'Case raw-only',
+    'leave dense browser again',
+  );
+  localStorage.setItem(
+    'simboard.diagnostics-workspace',
+    JSON.stringify({
+      ...JSON.parse(localStorage.getItem('simboard.diagnostics-workspace')!),
+      caseId: 'dense-0',
+      page: 3,
+    }),
+  );
+  client.clear();
+  render('/diagnostics');
+  const firstCase = () =>
+    document.querySelector<HTMLButtonElement>('[aria-label="Browse cases"] li:first-child button');
+  await waitFor(
+    () => firstCase()?.getAttribute('aria-pressed') === 'true',
+    'first-page case restored',
+  );
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  check(
+    document.querySelector('[aria-label="Browse cases"] ul')?.children.length === 6 &&
+      button('Load more cases'),
+    'Restore stops once the saved case is loaded',
+  );
 }
 
 async function testComparisonGroups() {

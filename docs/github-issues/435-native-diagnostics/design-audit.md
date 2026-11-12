@@ -35,7 +35,7 @@ New patterns the design system does not cover. Each decision lists the docs and 
   - [x] Document it as the only fixed bottom bar: starts collapsed, uses `border-t bg-card shadow-sm`, and pads content so it never covers anything. Other features do not add fixed bars.
   - Keep the `document.body` padding. No layout shell exists to hold an in-flow spacer, and a spacer would need the same height measurement.
 - **D3. Discovery state storage.** Case browser search, selected case, page, and tool/analysis filters persist in `localStorage` (`workspaceState.ts`), not URL search params.
-  - **Decision:** Keep `localStorage` and document it as an exception to the URL-state rule. The case browser is a resumable workspace, not a shareable view. `/diagnostics` and `/diagnostics/compare` share `ComparePage`, and the browser also runs inside the "Edit runs" dialog, so discovery params would pollute the shareable comparison URL. "Back to Diagnostics" relies on stored state to restore the user's place. Comparison view state (runs, set, plot, variable filter) stays in the URL.
+  - **Decision:** Keep `localStorage` and document it as an exception to the URL-state rule. The case browser is a resumable workspace, not a shareable view. `/diagnostics` and `/diagnostics/compare` share `ComparePage`, so discovery params would mix with the shareable comparison URL's state. "Back to Diagnostics" relies on stored state to restore the user's place. Comparison view state (runs, set, plot, variable filter) stays in the URL.
   - [x] Fix restore of a case picked after "Load more". The saved `page` was used as `initialPageParam`, so page N loaded without pages 1 to N−1. The browser now starts at page 1 and loads pages up to the saved one, keeping the list complete and the case selected.
 - **D4. Case browser paging.** "Load more cases" differs from the Previous/Next pagination convention.
   - **Decision:** Keep "Load more". Each API page of 10 cases is filtered on the client to cases with supported runs, so Previous/Next would often show empty or short pages.
@@ -53,5 +53,5 @@ New patterns the design system does not cover. Each decision lists the docs and 
     | Plot set picker               | Diagnostic category   | **Plot set** (matches e3sm_diags "set" and the API's `sets`)          |
 
   - [x] Apply the terms in `ComparePage.tsx`, `RunEditor.tsx`, `DiagnosticsRunsCard.tsx`, and their tests. `ComparisonBar.tsx` already used them.
-  - [x] Show a hint under the variable list ("`j`/`k` or ↑/↓ to change variable", `text-xs text-muted-foreground`, keys in `<kbd>`). No `aria-keyshortcuts`: the listener is on `window`, not the list, and the visible hint is announced.
-  - [x] Add to `docs/design-system.md`: every keyboard shortcut has a visible hint and is ignored while focus is in an input or overlay. The guard at `ComparePage.tsx:235-244` already does the latter.
+  - [x] Show a hint under the variable list ("`j`/`k` or ↑/↓ to change variable", `text-xs text-muted-foreground`, keys in `<kbd>`). No `aria-keyshortcuts`: the listener is on `window`, not the list.
+  - [x] Add to `docs/design-system.md`: every keyboard shortcut has a visible hint and is ignored while focus is in an input or overlay. The `onKey` guard in `ComparePage.tsx` already does the latter.
