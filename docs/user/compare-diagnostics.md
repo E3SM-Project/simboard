@@ -31,7 +31,7 @@ or comparison types are selected.
 Resources keep their original output links. **View in Diagnostics**, when
 available, expands the matching structured diagnostics section.
 
-![A case's diagnostics runs, with two runs in the comparison bar](images/diagnostics-case-runs.png)
+![A case's diagnostics runs, with two runs in the comparison tray](images/diagnostics-case-runs.png)
 
 ## From the Diagnostics workspace
 
@@ -67,7 +67,7 @@ case name, for example `!ECwISC30to60E2r1.CRYO1850.N2dependent yrs 1-10`.
 
 ## The comparison
 
-![Two runs compared, with the shared reference beneath](images/diagnostics-compare.png)
+![Two runs compared, each with its reference beneath](images/diagnostics-compare.png)
 
 | Control             | What it does                                                                                                                                                                                                                                                                 |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
