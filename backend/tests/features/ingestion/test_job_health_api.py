@@ -6,7 +6,6 @@ from uuid import uuid4
 import pytest
 
 from app.api.version import API_BASE
-from app.features.ingestion.job_health import DEFAULT_THRESHOLD_MINUTES
 from app.features.ingestion.models import ScheduledJob, ScheduledJobRun
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
@@ -139,24 +138,33 @@ def test_only_the_bound_service_account_reports_runs(client, users, act_as, job,
     assert finish.status_code == 403
 
 
-@pytest.mark.parametrize(("action", "payload"), [("start", START), ("finish", SUCCESS)])
-def test_first_report_registers_the_job(client, db, users, act_as, action, payload):
+@pytest.mark.parametrize("action", ["start", "finish"])
+@pytest.mark.parametrize(
+    ("scan_mode", "thresholds"),
+    [("staging", (45, 60)), ("archive", (1560, 720)), ("diagnostics", (420, 300))],
+)
+def test_first_report_registers_the_job(
+    client, db, users, act_as, action, scan_mode, thresholds
+):
+    job_id = f"chrysalis-{scan_mode}"
+    payload = {**(START if action == "start" else SUCCESS), "scan_mode": scan_mode}
     act_as(users["reporter"])
 
-    response = client.put(_run_url(uuid4(), action), json=payload)
+    response = client.put(_run_url(uuid4(), action, job_id=job_id), json=payload)
 
-    registered = db.get(ScheduledJob, JOB_ID)
+    registered = db.get(ScheduledJob, job_id)
     assert response.status_code == 200
     assert registered.service_account_id == users["reporter"].id
     assert registered.machine.name == "chrysalis"
-    assert registered.scan_mode == "staging"
+    assert registered.scan_mode == scan_mode
     assert (
         registered.max_silence_minutes,
         registered.max_duration_minutes,
-    ) == DEFAULT_THRESHOLD_MINUTES["staging"]
+    ) == thresholds
     # The registering account owns the job.
     act_as(users["other"])
-    assert client.put(_run_url(uuid4(), "start"), json=START).status_code == 403
+    other = client.put(_run_url(uuid4(), "start", job_id=job_id), json=payload)
+    assert other.status_code == 403
 
 
 def test_unregistered_reports_need_a_service_account_and_known_machine(
@@ -176,13 +184,17 @@ def test_unregistered_reports_need_a_service_account_and_known_machine(
     assert db.get(ScheduledJob, JOB_ID) is None
 
 
+@pytest.mark.parametrize(("action", "payload"), [("start", START), ("finish", SUCCESS)])
 @pytest.mark.parametrize(
     "identity", [{"machine_name": "perlmutter"}, ARCHIVE], ids=["machine", "mode"]
 )
-def test_reports_for_another_machine_or_mode_conflict(client, job, identity):
-    response = client.put(_run_url(uuid4(), "start"), json={**START, **identity})
+def test_reports_for_another_machine_or_mode_conflict(
+    client, db, job, action, payload, identity
+):
+    response = client.put(_run_url(uuid4(), action), json={**payload, **identity})
 
     assert response.status_code == 409
+    assert db.query(ScheduledJobRun).count() == 0
 
 
 def test_reports_keep_preregistered_thresholds(client, db, job):

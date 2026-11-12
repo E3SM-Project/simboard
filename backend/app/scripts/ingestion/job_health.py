@@ -163,8 +163,12 @@ def _send_report(event: str, exit_code: int) -> None:
     # secrets already set SCAN_MODE; the launcher sets SIMBOARD_JOB_SCAN_MODE.
     payload: dict[str, Any] = {
         "machine_name": os.environ["MACHINE_NAME"],
-        "scan_mode": os.environ.get("SIMBOARD_JOB_SCAN_MODE")
-        or os.environ["SCAN_MODE"],
+        # Normalize as the ingestor does so accepted run settings also report.
+        "scan_mode": (
+            os.environ.get("SIMBOARD_JOB_SCAN_MODE") or os.environ["SCAN_MODE"]
+        )
+        .strip()
+        .lower(),
         "started_at": os.environ["SIMBOARD_JOB_STARTED_AT"],
     }
     if event == "finish":

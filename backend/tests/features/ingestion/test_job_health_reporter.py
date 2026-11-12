@@ -149,7 +149,7 @@ def test_start_report_targets_the_job_run(report_env, sent, events):
 
 def test_scan_mode_falls_back_to_the_ingestor_setting(report_env, sent, monkeypatch):
     monkeypatch.delenv("SIMBOARD_JOB_SCAN_MODE")
-    monkeypatch.setenv("SCAN_MODE", "archive")
+    monkeypatch.setenv("SCAN_MODE", " Archive ")
 
     main(["start"])
 
