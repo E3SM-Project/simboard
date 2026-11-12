@@ -947,8 +947,11 @@ def test_run_ingestor_returns_failure_when_checkpoint_fetch_fails(
         request_timeout_seconds=30,
         scan_mode="archive",
     )
+    status_file = tmp_path / "job-status.json"
+    monkeypatch.setenv("SIMBOARD_JOB_STATUS_FILE", str(status_file))
 
     assert _run_ingestor(config, metadata_locator=lambda *_: {}) == 1
+    assert json.loads(status_file.read_text())["reason"] == "api_request"
     assert (
         "archive_checkpoint_fetch_failed",
         {"status_code": 503, "error": "boom"},

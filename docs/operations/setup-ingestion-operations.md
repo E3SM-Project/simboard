@@ -250,12 +250,14 @@ is best effort: failures are logged as `job_report_failed` and never change the
 ingestion result. Dry runs and manual runs without a job ID do not report.
 
 Before enabling live runs, an administrator registers each job ID in each API
-environment. The service account is the one whose token that environment's
-`env.*.sh` file uses; only it may report the job's runs.
+environment with an administrator credential (see
+[HPC API token authentication](hpc-api-token-authentication.md)). The service
+account is the one whose token that environment's `env.*.sh` file uses; only it
+may report the job's runs.
 
 ```bash
 curl -X PUT "<api-base-url>/api/v1/ingestions/jobs/chrysalis-staging" \
-  -H "Authorization: Bearer <admin-token>" \
+  -H "Authorization: Bearer <ADMIN_TOKEN_OR_OAUTH>" \
   -H "Content-Type: application/json" \
   -d '{"machine_name": "chrysalis", "scan_mode": "staging",
        "service_account_email": "<service-account-email>",

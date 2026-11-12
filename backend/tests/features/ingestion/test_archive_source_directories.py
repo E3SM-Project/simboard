@@ -252,6 +252,28 @@ def test_source_submission_retries_same_batch(tmp_path, parsed_metadata):
     assert sleeps == [1]
 
 
+def test_final_source_submission_failure_is_recorded(
+    tmp_path, monkeypatch, parsed_metadata
+):
+    case_path = tmp_path / "case"
+    state = {"cases": {str(case_path): {"processed_execution_ids": ["100.1-1"]}}}
+    status_file = tmp_path / "job-status.json"
+    monkeypatch.setenv("SIMBOARD_JOB_STATUS_FILE", str(status_file))
+
+    def reject(*_args, **_kwargs):
+        raise IngestionRequestError("HTTP 422", status_code=422, transient=False)
+
+    assert not source_module._persist_visited_source_directories(
+        [(case_path, "100.1-1")], state, _config(tmp_path), lambda _: None, reject
+    )
+    assert json.loads(status_file.read_text()) == {
+        "reason": "api_request",
+        "message": "HTTP 422",
+        "status_code": 422,
+        "transient": False,
+    }
+
+
 @pytest.mark.parametrize("error_type", [FileNotFoundError, PermissionError])
 def test_source_file_errors_preserve_other_observations(
     tmp_path, monkeypatch, parsed_metadata, error_type

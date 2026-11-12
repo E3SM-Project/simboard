@@ -468,6 +468,36 @@ class _Client:
         return httpx.Response(204)
 
 
+def test_rejected_link_submission_is_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _case(tmp_path, "production/type/case")
+    client = _Client(httpx.Response(200, json=None))
+    client.post = lambda *_args, **_kwargs: httpx.Response(422)
+    monkeypatch.setattr(
+        "app.scripts.ingestion.diagnostics_link_scanner._resolve_archive",
+        lambda _machine: DiagnosticsArchive(str(tmp_path), BASE_URL),
+    )
+    monkeypatch.setattr(
+        "app.scripts.ingestion.diagnostics_link_scanner.httpx.Client",
+        lambda **_kwargs: client,
+    )
+    status_file = tmp_path.parent / f"{tmp_path.name}-job-status.json"
+    monkeypatch.setenv("SIMBOARD_JOB_STATUS_FILE", str(status_file))
+    monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://api.example.org")
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
+    monkeypatch.setenv("MACHINE_NAME", "perlmutter")
+    monkeypatch.setenv("DRY_RUN", "false")
+
+    assert run() == 1
+    assert json.loads(status_file.read_text()) == {
+        "reason": "api_request",
+        "message": "Diagnostics link submission failed.",
+        "status_code": 422,
+        "transient": False,
+    }
+
+
 def test_run_submits_exact_payload_and_bearer_auth(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -587,7 +617,7 @@ def test_run_defers_after_exhausted_state_lookup(
     monkeypatch.setenv("SIMBOARD_API_TOKEN", "token")
     monkeypatch.setenv("MACHINE_NAME", "perlmutter")
     monkeypatch.setenv("DRY_RUN", "false")
-    status_file = tmp_path.parent / "job-status.json"
+    status_file = tmp_path.parent / f"{tmp_path.name}-job-status.json"
     monkeypatch.setenv("SIMBOARD_JOB_STATUS_FILE", str(status_file))
     assert run() == 1
     assert json.loads(status_file.read_text()) == {

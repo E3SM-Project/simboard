@@ -136,13 +136,15 @@ def test_only_the_bound_service_account_reports_runs(client, users, act_as, job,
 
 
 def test_reports_for_unregistered_jobs_are_rejected(client, users, act_as):
+    url = _run_url(uuid4(), "start", job_id="unknown")
     act_as(users["reporter"])
+    unknown = client.put(url, json={"started_at": STARTED_AT})
+    # Other callers cannot probe whether a job ID exists.
+    act_as(users["user"])
+    probe = client.put(url, json={"started_at": STARTED_AT})
 
-    response = client.put(
-        _run_url(uuid4(), "start", job_id="unknown"), json={"started_at": STARTED_AT}
-    )
-
-    assert response.status_code == 404
+    assert unknown.status_code == 404
+    assert probe.status_code == 403
 
 
 def test_start_and_finish_persist_once_across_retries(client, db, job):

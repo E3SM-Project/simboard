@@ -278,7 +278,7 @@ report_job() {
 if [[ $job_reporting == true ]]; then
   SIMBOARD_JOB_RUN_ID="$("${PYTHON_BIN}" -c 'import uuid; print(uuid.uuid4())' 9>&-)" || true
   SIMBOARD_JOB_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  SIMBOARD_JOB_STATUS_FILE="${SIMBOARD_WORKDIR}/job-status-${SIMBOARD_JOB_ID}-$$.json"
+  SIMBOARD_JOB_STATUS_FILE="${SIMBOARD_WORKDIR}/job-status-${SIMBOARD_JOB_ID//[^a-zA-Z0-9_-]/_}-$$.json"
   export SIMBOARD_JOB_ID SIMBOARD_JOB_RUN_ID SIMBOARD_JOB_STARTED_AT SIMBOARD_JOB_STATUS_FILE
   rm -f "${SIMBOARD_JOB_STATUS_FILE}"
   report_job start

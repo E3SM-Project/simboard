@@ -121,6 +121,11 @@ def report_scheduled_job_finish(
 
 
 def _get_reporting_job(db: Session, job_id: str, user: User) -> ScheduledJob:
+    # Check the role first so other callers cannot probe which job IDs exist.
+    if user.role != UserRole.SERVICE_ACCOUNT:
+        raise HTTPException(
+            status_code=403, detail="Only service accounts may report job runs."
+        )
     job = db.get(ScheduledJob, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
