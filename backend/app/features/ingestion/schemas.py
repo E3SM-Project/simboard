@@ -1,8 +1,9 @@
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import (
+    AwareDatetime,
     BaseModel,
     ConfigDict,
     Field,
@@ -15,13 +16,20 @@ from app.features.ingestion.enums import (
     ExecutionDiscoveryOutcome,
     IngestionSourceType,
     IngestionStatus,
+    ScheduledJobFailureReason,
+    ScheduledJobHealth,
+    ScheduledJobRunStatus,
 )
+from app.features.ingestion.models import FAILURE_MESSAGE_MAX_LENGTH
 
 # PACE producers use either a bare timestamp or an opaque machine/project prefix.
 ARCHIVE_SNAPSHOT_NAME_PATTERN = (
     r"^performance_archive_(?:[A-Za-z0-9-]+(?:_[A-Za-z0-9-]+)+_)?"
     r"\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}$"
 )
+SCHEDULED_JOB_ID_PATTERN = r"^[a-z0-9][a-z0-9_-]{0,99}$"
+# One year keeps derived deadlines within datetime range.
+SCHEDULED_JOB_MAX_THRESHOLD_MINUTES = 525_600
 
 
 class IngestionExecutionSummary(BaseModel):
@@ -421,3 +429,82 @@ class IngestionRead(BaseModel):
             description="SHA256 hash of the ingested archive, if available",
         ),
     ]
+
+
+class ScheduledJobRegister(BaseModel):
+    """Admin registration of one scheduled job and its health thresholds."""
+
+    machine_name: str
+    scan_mode: Literal["staging", "archive", "diagnostics"]
+    service_account_email: str
+    max_silence_minutes: Annotated[
+        int, Field(gt=0, le=SCHEDULED_JOB_MAX_THRESHOLD_MINUTES)
+    ]
+    max_duration_minutes: Annotated[
+        int, Field(gt=0, le=SCHEDULED_JOB_MAX_THRESHOLD_MINUTES)
+    ]
+
+
+class ScheduledJobRunStart(BaseModel):
+    started_at: AwareDatetime
+
+
+class ScheduledJobFailure(BaseModel):
+    reason: ScheduledJobFailureReason
+    message: Annotated[str, Field(max_length=FAILURE_MESSAGE_MAX_LENGTH)]
+    status_code: Annotated[int, Field(ge=100, le=599)] | None = None
+    transient: bool | None = None
+
+
+class ScheduledJobRunFinish(BaseModel):
+    """Finish report; the start time lets a lost start report be recovered."""
+
+    started_at: AwareDatetime
+    finished_at: AwareDatetime
+    exit_code: Annotated[int, Field(ge=0, le=255)]
+    failure: ScheduledJobFailure | None = None
+
+    @model_validator(mode="after")
+    def _require_failure_for_nonzero_exit(self) -> "ScheduledJobRunFinish":
+        if (self.exit_code == 0) != (self.failure is None):
+            raise ValueError("A failure is required exactly when exit_code is nonzero.")
+
+        return self
+
+
+class ScheduledJobRunRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    status: ScheduledJobRunStatus
+    started_at: datetime
+    finished_at: datetime | None
+    reported_at: datetime
+    finish_reported_at: datetime | None
+    exit_code: int | None
+    failure_reason: ScheduledJobFailureReason | None
+    failure_message: str | None
+    failure_status_code: int | None
+    failure_transient: bool | None
+
+
+class ScheduledJobRead(BaseModel):
+    id: str
+    machine_name: str
+    scan_mode: str
+    max_silence_minutes: int
+    max_duration_minutes: int
+
+
+class ScheduledJobHealthRead(ScheduledJobRead):
+    """Latest completed outcome is kept separate from active-run state."""
+
+    health: ScheduledJobHealth
+    last_reported_at: datetime | None
+    latest_completed_run: ScheduledJobRunRead | None
+    active_run: ScheduledJobRunRead | None
+    active_run_count: int
+
+
+class ScheduledJobHealthResponse(BaseModel):
+    jobs: list[ScheduledJobHealthRead] = Field(default_factory=list)

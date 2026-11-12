@@ -30,6 +30,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _log_event,
     _utc_now_iso,
 )
+from app.scripts.ingestion.job_health import record_request_failure
 
 
 class _ReadableResponse(Protocol):
@@ -120,6 +121,8 @@ def _retry_failure_event_fields(
 ) -> tuple[bool, dict[str, Any]]:
     """Build stable retry failure fields and return whether to retry."""
     retrying = exc.transient and attempt < max_attempts
+    if not retrying:
+        record_request_failure(exc)
     fields: dict[str, Any] = {
         "attempt": attempt,
         "status_code": exc.status_code,

@@ -241,6 +241,37 @@ Unset or `true` performs an offline diagnostics scan. Set `DRY_RUN=false` only
 after validating both ingestion and diagnostics; it enables live submissions and
 linking for all jobs. Supply valid API credentials before enabling live mode.
 
+### Report scheduled job health
+
+Live cron commands (`DRY_RUN=false`) with `SIMBOARD_JOB_ID` report each run's
+start and finish to their API environment. Failed runs include a reason
+(`api_request`, `filesystem`, or `unexpected`) and a short message. Reporting
+is best effort: failures are logged as `job_report_failed` and never change the
+ingestion result. Dry runs and manual runs without a job ID do not report.
+
+Before enabling live runs, an administrator registers each job ID in each API
+environment with an administrator credential (see
+[HPC API token authentication](hpc-api-token-authentication.md)). The service
+account is the one whose token that environment's `env.*.sh` file uses; only it
+may report the job's runs.
+
+```bash
+curl -X PUT "<api-base-url>/api/v1/ingestions/jobs/chrysalis-staging" \
+  -H "Authorization: Bearer <ADMIN_TOKEN_OR_OAUTH>" \
+  -H "Content-Type: application/json" \
+  -d '{"machine_name": "chrysalis", "scan_mode": "staging",
+       "service_account_email": "<service-account-email>",
+       "max_silence_minutes": 45, "max_duration_minutes": 60}'
+```
+
+Set `max_duration_minutes` to the longest expected run and
+`max_silence_minutes` to at least the schedule interval plus a margin for
+skipped runs. `GET /api/v1/ingestions/jobs` (administrators and service
+accounts) returns each job's `healthy`, `failed`, `running`, or `stale` state.
+A job is `stale` when it has never reported, has been silent too long, or its
+newest run exceeded its allowed duration without finishing. Run records are
+kept for 90 days.
+
 ### Reference: configuration files and variables
 
 | Location                        | Configure                                                                                                                                                            |
@@ -253,7 +284,7 @@ linking for all jobs. Supply valid API credentials before enabling live mode.
 | `operations/env.dev.sh`         | Development `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`                                                                                                         |
 | `operations/env.prod.sh`        | Production `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`                                                                                                          |
 | Copied crontab                  | `SIMBOARD_ROOT`; optional `DRY_RUN`, `MAX_CASES_PER_RUN`, `ARCHIVE_YEAR_START`, and `ARCHIVE_YEAR_END`                                                               |
-| Each cron command               | `SIMBOARD_ENV_FILE` pointing to `env.dev.sh` or `env.prod.sh`                                                                                                        |
+| Each cron command               | `SIMBOARD_ENV_FILE` pointing to `env.dev.sh` or `env.prod.sh`; `SIMBOARD_JOB_ID` for [job health reporting](#report-scheduled-job-health)                            |
 
 Do not put tokens in the site config or crontab. `DRY_RUN_USE_REMOTE_STATE=false` is available only for a credential-free offline scan.
 

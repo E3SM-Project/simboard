@@ -34,6 +34,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _log_event,
 )
 from app.scripts.ingestion.archive_layout import _case_identity_key
+from app.scripts.ingestion.job_health import record_request_failure
 
 SourceDirectoryPost = Callable[..., IngestionRequestResponse]
 
@@ -163,6 +164,7 @@ def _persist_visited_source_directories(
                     {"attempt": attempt, "error": str(exc)},
                 )
                 if not exc.transient or attempt == config.max_attempts:
+                    record_request_failure(exc)
                     return False
                 sleep_fn(_retry_backoff_seconds(attempt))
     return True
