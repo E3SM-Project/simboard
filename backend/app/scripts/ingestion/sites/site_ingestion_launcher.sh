@@ -157,6 +157,8 @@ load_api_configuration() {
     fi
 }
 
+# Scheduled live runs that set SIMBOARD_JOB_ID report their start and finish.
+job_reporting=false
 shopt -s nocasematch
 if [[ $scan_mode == "diagnostics" ]]; then
   # Diagnostics dry runs are offline; export a canonical boolean for Python.
@@ -164,6 +166,7 @@ if [[ $scan_mode == "diagnostics" ]]; then
     0|false|no|off)
       load_api_configuration
       export DRY_RUN=false
+      [[ -z "${SIMBOARD_JOB_ID:-}" ]] || job_reporting=true
       ;;
     1|true|yes|on)
       export DRY_RUN=true
@@ -178,6 +181,7 @@ else
   case "${dry_run_normalized}" in
     0|false|no|off)
       load_api_configuration
+      [[ -z "${SIMBOARD_JOB_ID:-}" ]] || job_reporting=true
       ;;
     *)
       case "${remote_state_normalized}" in
@@ -265,6 +269,26 @@ fi
 # =============================================================================
 # Run the selected module and append its structured events to this invocation's log.
 cd "${SIMBOARD_MODULES}"
+
+# Best effort: a failed health report never stops ingestion or changes its exit code.
+report_job() {
+  "${PYTHON_BIN}" -m app.scripts.ingestion.job_health "$@" 9>&- || true
+}
+
+if [[ $job_reporting == true ]]; then
+  SIMBOARD_JOB_RUN_ID="$("${PYTHON_BIN}" -c 'import uuid; print(uuid.uuid4())' 9>&-)" || true
+  SIMBOARD_JOB_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  SIMBOARD_JOB_STATUS_FILE="${SIMBOARD_WORKDIR}/job-status-${SIMBOARD_JOB_ID}-$$.json"
+  export SIMBOARD_JOB_ID SIMBOARD_JOB_RUN_ID SIMBOARD_JOB_STARTED_AT SIMBOARD_JOB_STATUS_FILE
+  rm -f "${SIMBOARD_JOB_STATUS_FILE}"
+  report_job start
+fi
 printf '[%s] invoking %s: module=%s\n' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${module_label}" "${module}"
-"${PYTHON_BIN}" -m "${module}" 9>&-
+module_exit_code=0
+"${PYTHON_BIN}" -m "${module}" 9>&- || module_exit_code=$?
+if [[ $job_reporting == true ]]; then
+  report_job finish --exit-code "${module_exit_code}"
+  rm -f "${SIMBOARD_JOB_STATUS_FILE}"
+fi
+exit "${module_exit_code}"
