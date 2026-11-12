@@ -1060,7 +1060,7 @@ def _validate_v3_production_classification(
 
 
 def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
-    if error_count == 0 and created_count > 0:
+    if error_count == 0:
         return IngestionStatus.SUCCESS.value
 
     if error_count > 0 and created_count > 0:
