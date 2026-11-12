@@ -134,6 +134,13 @@ const RESOURCE_KIND_DESCRIPTIONS: Record<ExternalLinkOut['kind'], string> = {
 
 interface CaseDetailsPageProps {
   renderCompareSection?: (options: { caseId: string; onClose: () => void }) => React.ReactNode;
+  /** Diagnostics for a case with a diagnostics link; supplied by the routes layer. */
+  renderDiagnostics?: (options: {
+    caseId: string;
+    caseName: string;
+    directories: { url: string; label: string | null }[];
+  }) => React.ReactNode;
+  renderDiagnosticsResource?: (options: { caseId: string; url: string }) => React.ReactNode;
   selectedCaseExecutionIdsByCase: Record<string, string[]>;
   setSelectedCaseExecutionIdsForCase: (caseId: string, ids: string[]) => void;
 }
@@ -294,6 +301,8 @@ const mergeRowFieldErrors = (
 
 export const CaseDetailsPage = ({
   renderCompareSection,
+  renderDiagnostics,
+  renderDiagnosticsResource,
   selectedCaseExecutionIdsByCase,
   setSelectedCaseExecutionIdsForCase,
 }: CaseDetailsPageProps) => {
@@ -962,7 +971,15 @@ export const CaseDetailsPage = ({
                   />
                 ) : resourceLinks.length > 0 ? (
                   <div className="flex flex-wrap gap-x-3 gap-y-1">
-                    {resourceLinks.map(renderResourceLink)}
+                    {resourceLinks.map((link) => (
+                      <div key={link.id} className="flex min-w-0 max-w-full flex-wrap items-center">
+                        {renderResourceLink(link)}
+                        {renderDiagnostics &&
+                        caseRecord.links.some((resource) => resource.kind === 'diagnostic')
+                          ? renderDiagnosticsResource?.({ caseId: caseRecord.id, url: link.url })
+                          : null}
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">No linked resources yet.</p>
@@ -1533,6 +1550,16 @@ export const CaseDetailsPage = ({
           </div>
         </details>
       ) : null}
+
+      {renderDiagnostics && caseRecord.links.some((link) => link.kind === 'diagnostic')
+        ? renderDiagnostics({
+            caseId: caseRecord.id,
+            caseName: caseRecord.name,
+            directories: caseRecord.links
+              .filter((link) => link.kind === 'diagnostic')
+              .map(({ url, label }) => ({ url, label: label ?? null })),
+          })
+        : null}
 
       <section>
         <MetadataHistory

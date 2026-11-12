@@ -5,6 +5,11 @@ import { AuthCallback } from '@/auth/AuthCallback';
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
 import { aboutRoutes } from '@/features/about/routes';
 import { catalogRoutes } from '@/features/catalog/routes';
+import {
+  DiagnosticsResourceLink,
+  DiagnosticsRunsCard,
+} from '@/features/diagnostics/components/DiagnosticsRunsCard';
+import { diagnosticsRoutes } from '@/features/diagnostics/routes';
 import { homeRoutes } from '@/features/home/routes';
 import { uploadRoutes } from '@/features/upload/routes';
 import type { Machine } from '@/types/machine';
@@ -22,7 +27,19 @@ export const AppRoutes = (props: RoutesProps) => {
   const routes = [
     ...homeRoutes(props),
     ...aboutRoutes(),
-    ...catalogRoutes(props),
+    ...catalogRoutes({
+      ...props,
+      renderCaseDiagnostics: ({ caseId, caseName, directories }) => (
+        <DiagnosticsRunsCard
+          key={caseId}
+          caseId={caseId}
+          caseName={caseName}
+          directories={directories}
+        />
+      ),
+      renderDiagnosticsResource: (options) => <DiagnosticsResourceLink {...options} />,
+    }),
+    ...diagnosticsRoutes(),
 
     {
       element: <ProtectedRoute />,

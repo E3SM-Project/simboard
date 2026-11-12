@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html >
+<head>
+  <meta charset="UTF-8">
+  <title>Ocean Analysis</title>
+
+<link rel='stylesheet prefetch' href='https://cdnjs.cloudflare.com/ajax/libs/photoswipe/4.1.1/photoswipe.min.css'>
+<link rel='stylesheet prefetch' href='https://cdnjs.cloudflare.com/ajax/libs/photoswipe/4.1.1/default-skin/default-skin.min.css'>
+<link rel="stylesheet" href="../css/style.css">
+
+
+</head>
+
+<body>
+  <div class="content">
+    <div class="header">
+      <a href="../index.html"><img class="logo" src="../mpas_logo.png" height="120"></a>
+      <h1><a href="../index.html">MPAS-Analysis Diagnostics</a>: Ocean</h1>
+      <h3>Run: v3.LR.historical_0101 </h3>
+    </div>
+
+
+    <div class="gallery-title">
+      <h2>Quick Links</h2>
+    </div>
+
+
+    <div class="gallery-link small">
+      <a href="#global_mld">
+        <img class="small" src="thumbnails/fixed_mldHolteTalleyARGO_v3.LR.historical_0101_JFM_years1985-2014.png" alt="Global Mixed-Layer Depth">
+      </a>
+      <div class="desc-small">Global Mixed-Layer Depth</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#global_sst">
+        <img class="small" src="thumbnails/fixed_sstHADOI_v3.LR.historical_0101_JFM_years1985-2014.png" alt="Global Sea Surface Temperature">
+      </a>
+      <div class="desc-small">Global Sea Surface Temperature</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#global_sss">
+        <img class="small" src="thumbnails/fixed_sssAquarius_v3.LR.historical_0101_JFM_years1985-2014.png" alt="Global Sea Surface Salinity">
+      </a>
+      <div class="desc-small">Global Sea Surface Salinity</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#global_ssh">
+        <img class="small" src="thumbnails/fixed_sshAVISO_v3.LR.historical_0101_JFM_years1985-2014.png" alt="Global Sea Surface Height">
+      </a>
+      <div class="desc-small">Global Sea Surface Height</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#global_bsf">
+        <img class="small" src="thumbnails/fixed_barotropicStreamfunction_v3.LR.historical_0101_ANN_years1985-2014.png" alt="Global Horizontal Streamfunction">
+      </a>
+      <div class="desc-small">Global Horizontal Streamfunction</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#subpolar_north_atlantic_bsf">
+        <img class="small" src="thumbnails/fixed_barotropicStreamfunction_subpolar_north_atlantic_v3.LR.historical_0101_ANN_years1985-2014.png" alt="Subpolar North Atlantic Horizontal Streamfunction">
+      </a>
+      <div class="desc-small">Subpolar North Atlantic Horizontal Streamfunction</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#global_ohc_anom">
+        <img class="small" src="thumbnails/fixed_deltaOHC_0-10000m_v3.LR.historical_0101_ANN_years1985-2014.png" alt="Global OHC Anomaly">
+      </a>
+      <div class="desc-small">Global OHC Anomaly</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#global_temperature_woa">
+        <img class="small" src="thumbnails/fixed_temperatureWOA18_v3.LR.historical_0101_depth_top_ANN_years1985-2014.png" alt="Global Potential Temperature">
+      </a>
+      <div class="desc-small">Global Potential Temperature</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#global_salinity_woa">
+        <img class="small" src="thumbnails/fixed_salinityWOA18_v3.LR.historical_0101_depth_top_ANN_years1985-2014.png" alt="Global Salinity">
+      </a>
+      <div class="desc-small">Global Salinity</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#global_tempArgo">
+        <img class="small" src="thumbnails/fixed_tempArgo_v3.LR.historical_0101_depth_top_ANN_years1985-2014.png" alt="Global Argo Potential Temperature">
+      </a>
+      <div class="desc-small">Global Argo Potential Temperature</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#global_salinArgo">
+        <img class="small" src="thumbnails/fixed_salinArgo_v3.LR.historical_0101_depth_top_ANN_years1985-2014.png" alt="Global Argo Salinity">
+      </a>
+      <div class="desc-small">Global Argo Salinity</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#antarctic_seafloor">
+        <img class="small" src="thumbnails/fixed_temperatureSchmidtko_antarctic_v3.LR.historical_0101_depth_bot_ANN_years1985-2014.png" alt="Antarctic Seafloor Maps">
+      </a>
+      <div class="desc-small">Antarctic Seafloor Maps</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#timeseries">
+        <img class="small" src="thumbnails/fixed_conservation_v3.LR.historical_0101_absolute_energy_error_years1850-2014.png" alt="Time Series">
+      </a>
+      <div class="desc-small">Time Series</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#trendsvsdepth">
+        <img class="small" src="thumbnails/fixed_TAnomalyZ_global_v3.LR.historical_0101.png" alt="Trends vs Depth">
+      </a>
+      <div class="desc-small">Trends vs Depth</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#transporttime">
+        <img class="small" src="thumbnails/fixed_transport_Drake_Passage.png" alt="Transport Time Series">
+      </a>
+      <div class="desc-small">Transport Time Series</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#mht">
+        <img class="small" src="thumbnails/fixed_mht_v3.LR.historical_0101_years1985-2014.png" alt="Meridional Heat Transport">
+      </a>
+      <div class="desc-small">Meridional Heat Transport</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#moc">
+        <img class="small" src="thumbnails/fixed_mocGlobal_v3.LR.historical_0101_years1985-2014.png" alt="Meridional Overturning Streamfunction">
+      </a>
+      <div class="desc-small">Meridional Overturning Streamfunction</div>
+    </div>
+    <div class="gallery-link small">
+      <a href="#nino">
+        <img class="small" src="thumbnails/fixed_nino3.4_v3.LR.historical_0101.png" alt="El Ni&#241;o 3.4 Climate Index">
+      </a>
+      <div class="desc-small">El Ni&#241;o 3.4 Climate Index</div>
+    </div>
+
+
+    <div class="gallery-title">
+      <h2><a name="global_mld"></a>Global Mixed-Layer Depth</h2>
+
+    </div>
+
+
+
+      <h3>Observations: Holte-Talley ARGO</h3>
+
+    <div class="image-gallery" itemscope itemtype="http://schema.org/ImageGallery">
+
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="mldHolteTalleyARGO_v3.LR.historical_0101_JFM_years1985-2014.png" itemprop="contentUrl" data-size="1651x2265">
+            <img class="vert" src="thumbnails/mldHolteTalleyARGO_v3.LR.historical_0101_JFM_years1985-2014.png" itemprop="thumbnail" alt="JFM Mean Mixed-Layer Depth" width="233" height="320"/>
+        </a>
+        <figcaption itemprop="caption description">JFM Mean Mixed-Layer Depth</figcaption>
+        <div class="desc-small">JFM</div>
+      </figure>
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="mldHolteTalleyARGO_v3.LR.historical_0101_JAS_years1985-2014.png" itemprop="contentUrl" data-size="1651x2265">
+            <img class="vert" src="thumbnails/mldHolteTalleyARGO_v3.LR.historical_0101_JAS_years1985-2014.png" itemprop="thumbnail" alt="JAS Mean Mixed-Layer Depth" width="233" height="320"/>
+        </a>
+        <figcaption itemprop="caption description">JAS Mean Mixed-Layer Depth</figcaption>
+        <div class="desc-small">JAS</div>
+      </figure>
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="mldHolteTalleyARGO_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="contentUrl" data-size="1651x2265">
+            <img class="vert" src="thumbnails/mldHolteTalleyARGO_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="thumbnail" alt="ANN Mean Mixed-Layer Depth" width="233" height="320"/>
+        </a>
+        <figcaption itemprop="caption description">ANN Mean Mixed-Layer Depth</figcaption>
+        <div class="desc-small">ANN</div>
+      </figure>
+
+
+    </div>
+
+
+    <div class="gallery-title">
+      <h2><a name="global_sst"></a>Global Sea Surface Temperature</h2>
+
+    </div>
+
+
+
+      <h3>Observations: Hadley-NOAA-OI</h3>
+
+    <div class="image-gallery" itemscope itemtype="http://schema.org/ImageGallery">
+
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="sstHADOI_v3.LR.historical_0101_JFM_years1985-2014.png" itemprop="contentUrl" data-size="1651x2265">
+            <img class="vert" src="thumbnails/sstHADOI_v3.LR.historical_0101_JFM_years1985-2014.png" itemprop="thumbnail" alt="JFM Mean Sea Surface Temperature" width="233" height="320"/>
+        </a>
+        <figcaption itemprop="caption description">JFM Mean Sea Surface Temperature</figcaption>
+        <div class="desc-small">JFM</div>
+      </figure>
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="sstHADOI_v3.LR.historical_0101_JAS_years1985-2014.png" itemprop="contentUrl" data-size="1651x2265">
+            <img class="vert" src="thumbnails/sstHADOI_v3.LR.historical_0101_JAS_years1985-2014.png" itemprop="thumbnail" alt="JAS Mean Sea Surface Temperature" width="233" height="320"/>
+        </a>
+        <figcaption itemprop="caption description">JAS Mean Sea Surface Temperature</figcaption>
+        <div class="desc-small">JAS</div>
+      </figure>
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="sstHADOI_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="contentUrl" data-size="1651x2265">
+            <img class="vert" src="thumbnails/sstHADOI_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="thumbnail" alt="ANN Mean Sea Surface Temperature" width="233" height="320"/>
+        </a>
+        <figcaption itemprop="caption description">ANN Mean Sea Surface Temperature</figcaption>
+        <div class="desc-small">ANN</div>
+      </figure>
+
+
+    </div>
+
+
+    <div class="gallery-title">
+      <h2><a name="global_sss"></a>Global Sea Surface Salinity</h2>
+
+    </div>
+
+
+
+      <h3>Observations: Aquarius</h3>
+
+    <div class="image-gallery" itemscope itemtype="http://schema.org/ImageGallery">
+
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="sssAquarius_v3.LR.historical_0101_JFM_years1985-2014.png" itemprop="contentUrl" data-size="1651x2265">
+            <img class="vert" src="thumbnails/sssAquarius_v3.LR.historical_0101_JFM_years1985-2014.png" itemprop="thumbnail" alt="JFM Mean Sea Surface Salinity" width="233" height="320"/>
+        </a>
+        <figcaption itemprop="caption description">JFM Mean Sea Surface Salinity</figcaption>
+        <div class="desc-small">JFM</div>
+      </figure>
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="sssAquarius_v3.LR.historical_0101_JAS_years1985-2014.png" itemprop="contentUrl" data-size="1651x2265">
+            <img class="vert" src="thumbnails/sssAquarius_v3.LR.historical_0101_JAS_years1985-2014.png" itemprop="thumbnail" alt="JAS Mean Sea Surface Salinity" width="233" height="320"/>
+        </a>
+        <figcaption itemprop="caption description">JAS Mean Sea Surface Salinity</figcaption>
+        <div class="desc-small">JAS</div>
+      </figure>
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="sssAquarius_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="contentUrl" data-size="1651x2265">
+            <img class="vert" src="thumbnails/sssAquarius_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="thumbnail" alt="ANN Mean Sea Surface Salinity" width="233" height="320"/>
+        </a>
+        <figcaption itemprop="caption description">ANN Mean Sea Surface Salinity</figcaption>
+        <div class="desc-small">ANN</div>
+      </figure>
+
+
+    </div>
+
+
+    <div class="gallery-title">
+      <h2><a name="global_ssh"></a>Global Sea Surface Height</h2>
+
+    </div>
+
+
+
+      <h3>Observations: AVISO</h3>
+
+    <div class="image-gallery" itemscope itemtype="http://schema.org/ImageGallery">
+
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="sshAVISO_v3.LR.historical_0101_JFM_years1985-2014.png" itemprop="contentUrl" data-size="1651x2265">
+            <img class="vert" src="thumbnails/sshAVISO_v3.LR.historical_0101_JFM_years1985-2014.png" itemprop="thumbnail" alt="JFM Mean Sea Surface Height" width="233" height="320"/>
+        </a>
+        <figcaption itemprop="caption description">JFM Mean Sea Surface Height</figcaption>
+        <div class="desc-small">JFM</div>
+      </figure>
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="sshAVISO_v3.LR.historical_0101_JAS_years1985-2014.png" itemprop="contentUrl" data-size="1651x2265">
+            <img class="vert" src="thumbnails/sshAVISO_v3.LR.historical_0101_JAS_years1985-2014.png" itemprop="thumbnail" alt="JAS Mean Sea Surface Height" width="233" height="320"/>
+        </a>
+        <figcaption itemprop="caption description">JAS Mean Sea Surface Height</figcaption>
+        <div class="desc-small">JAS</div>
+      </figure>
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="sshAVISO_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="contentUrl" data-size="1651x2265">
+            <img class="vert" src="thumbnails/sshAVISO_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="thumbnail" alt="ANN Mean Sea Surface Height" width="233" height="320"/>
+        </a>
+        <figcaption itemprop="caption description">ANN Mean Sea Surface Height</figcaption>
+        <div class="desc-small">ANN</div>
+      </figure>
+
+
+    </div>
+
+
+    <div class="gallery-title">
+      <h2><a name="global_bsf"></a>Global Horizontal Streamfunction</h2>
+
+    </div>
+
+
+
+
+    <div class="image-gallery" itemscope itemtype="http://schema.org/ImageGallery">
+
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="barotropicStreamfunction_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="contentUrl" data-size="1651x854">
+            <img class="horiz" src="thumbnails/barotropicStreamfunction_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="thumbnail" alt="ANN Barotropic Streamfunction" width="232" height="120"/>
+        </a>
+        <figcaption itemprop="caption description">ANN Barotropic Streamfunction</figcaption>
+        <div class="desc-small">ANN</div>
+      </figure>
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="barotropicStreamfunction_0-2000m_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="contentUrl" data-size="1651x854">
+            <img class="horiz" src="thumbnails/barotropicStreamfunction_0-2000m_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="thumbnail" alt="ANN Streamfunction over 0-2000m" width="232" height="120"/>
+        </a>
+        <figcaption itemprop="caption description">ANN Streamfunction over 0-2000m</figcaption>
+        <div class="desc-small">ANN</div>
+      </figure>
+
+
+    </div>
+
+
+    <div class="gallery-title">
+      <h2><a name="subpolar_north_atlantic_bsf"></a>Subpolar North Atlantic Horizontal Streamfunction</h2>
+
+    </div>
+
+
+
+
+    <div class="image-gallery" itemscope itemtype="http://schema.org/ImageGallery">
+
+
+      <figure itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+        <a href="barotropicStreamfunction_subpolar_north_atlantic_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="contentUrl" data-size="1525x847">
+            <img class="horiz" src="thumbnails/barotropicStreamfunction_subpolar_north_atlantic_v3.LR.historical_0101_ANN_years1985-2014.png" itemprop="thumbnail" alt="ANN Barotropic Streamfunction" width="216" height="120"/>
+        </a>
+        <figcaption itemprop="caption description">ANN Barotropic Streamfunction</figcaption>
+        <div class="desc-small">ANN</div>
+      </figure></div></body></html>

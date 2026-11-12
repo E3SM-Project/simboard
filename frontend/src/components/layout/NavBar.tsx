@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 const navItems = [
   { label: 'Home', href: '/' },
   { label: 'Cases', href: '/cases' },
+  { label: 'Diagnostics', href: '/diagnostics' },
   { label: 'Upload', href: '/upload' },
   { label: 'About', href: '/about' },
   { label: 'Docs', href: 'https://simboard.readthedocs.io/en/latest/user/', external: true },

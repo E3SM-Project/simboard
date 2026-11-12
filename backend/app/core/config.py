@@ -156,6 +156,35 @@ class Settings(BaseSettings):
     assistant_llm_max_tokens: int = 2048
     assistant_snapshot_max_chars: int = 12000
 
+    # --- Diagnostics comparison ---
+    # SimBoard reads published diagnostics pages over HTTP and follows links
+    # they contain, so it only ever reads under these public E3SM web roots
+    # (m2136 and m3412 are E3SM's NERSC project allocations).
+    diagnostics_allowed_url_prefixes: str | list[str] = [
+        "https://portal.nersc.gov/cfs/e3sm",
+        "https://portal.nersc.gov/project/e3sm",
+        "https://portal.nersc.gov/project/m2136",
+        "https://portal.nersc.gov/project/m3412",
+        "https://web.lcrc.anl.gov/public/e3sm",
+    ]
+    # Per request, then for a whole read. Listing a case's runs is a dozen
+    # small directory indexes; reading a run's plots is about fifteen pages.
+    diagnostics_request_timeout_seconds: float = 5.0
+    diagnostics_discovery_deadline_seconds: float = 8.0
+    diagnostics_catalog_deadline_seconds: float = 20.0
+    diagnostics_max_requests: int = 64
+    diagnostics_max_concurrent_requests: int = 8
+    diagnostics_max_page_bytes: int = 2_000_000
+    diagnostics_cache_ttl_seconds: float = 600.0
+    diagnostics_cache_max_entries: int = 200
+
+    @property
+    def diagnostics_allowed_url_prefixes_list(self) -> list[str]:
+        prefixes = self.diagnostics_allowed_url_prefixes
+        if isinstance(prefixes, str):
+            prefixes = prefixes.split(",")
+        return _normalize_list(prefixes)
+
     @field_validator("assistant_livai_base_url", mode="before")
     @classmethod
     def _strip_livai_base_url(cls, value: str) -> str:

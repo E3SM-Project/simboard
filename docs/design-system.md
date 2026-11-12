@@ -59,6 +59,7 @@ Use `Button size="sm"` in toolbars and tables. Override primitive classes with `
 - Expandable rows: an icon `Button` with `aria-expanded` toggles a full-width detail row. See `features/catalog/CasesPage.tsx`.
 - Long tables use a sticky header inside a height-limited scroll area.
 - Pagination sits below the table: result count on the left, `Previous`/`Next` and the page number on the right.
+- When the client filters each fetched page (so pages come back short or empty), use a "Load more" button below the list instead, with progress beside it ("Checked 30 of 212 cases · 4 with diagnostics"). See the case browser in `features/diagnostics/components/RunEditor.tsx`.
 
 ## Filters and search
 
@@ -67,7 +68,7 @@ Canonical: the filter panel in `features/catalog/CasesPage.tsx`.
 - A labeled search input with a leading `Search` icon, followed by the most-used filters.
 - Secondary filters go in a `Collapsible` behind "More filters", which shows the active count.
 - Show active filters as removable pills, plus a "Clear all" action.
-- Keep filter, sort, and pagination state in URL search params so views can be shared.
+- Keep filter, sort, and pagination state in URL search params so views can be shared. Exception: a resumable workspace that is not a shareable view, such as the diagnostics case browser, may keep its state in `localStorage` (`features/diagnostics/workspaceState.ts`).
 - Use `Select` for short option lists and `SearchableFilterSelect` for long ones.
 - Reset pagination when a filter changes.
 
@@ -78,7 +79,9 @@ Canonical: execution selection in `features/catalog/CaseDetailsPage.tsx` and `fe
 - Select rows with labeled `Checkbox`es. Disable unselected rows at the selection limit (`MAX_CASE_EXECUTIONS` in `lib/catalog/executionDiscovery.ts`).
 - Show a live selection count, a "Clear selection" action, and a primary action with the count (`Compare (N)`).
 - Tell users when selected items are hidden by filters.
-- Comparison opens in a large `Dialog` (up to 1600px wide) that focuses its title on open and returns focus to the trigger on close.
+- A comparison of a few items opens in a large `Dialog` (up to 1600px wide) that focuses its title on open and returns focus to the trigger on close.
+- A comparison meant to be bookmarked or shared, or with a large media grid, is its own route with all view state in the URL, an outline back button, and "Copy link" (`features/diagnostics/ComparePage.tsx`).
+- Selections that span pages live in the comparison tray (`features/diagnostics/components/ComparisonBar.tsx`), the only fixed bottom bar. It starts collapsed, uses `border-t bg-card shadow-sm`, pads the page so it never covers content, and hides where the page shows the same selection inline. Do not add other fixed bars.
 - Comparison grids keep field labels sticky on the left and execution headers sticky on top (`features/compare/ComparePage.tsx`).
 
 ## Metadata presentation
@@ -133,6 +136,7 @@ Apply these to new and changed UI.
 - Show focus on custom controls with `focus-visible:ring-2 focus-visible:ring-ring`.
 - Give icon-only buttons an `aria-label`. Lucide icons are `aria-hidden` by default unless given an accessible name; mark custom SVG icons `aria-hidden="true"`.
 - Use `aria-pressed` for toggles, `aria-expanded` for disclosures, `aria-sort` for sorted headers, and `aria-live="polite"` for counts.
+- Give every keyboard shortcut a visible hint (keys in `<kbd>`), and ignore it while focus is in an input or overlay. See the variable list in `features/diagnostics/ComparePage.tsx`.
 - Meet WCAG 2.2 AA contrast (4.5:1 for text; 3:1 for icons that identify controls). Do not convey state by color alone.
 
 ## Known deviations
