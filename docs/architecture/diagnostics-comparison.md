@@ -34,7 +34,7 @@ regions into one row.
 
 `POST /diagnostics/compare` reads the runs' catalogs in parallel, returns all
 shared sets as a summary and one set in detail (each plot's path in every run),
-and is gzipped with an ETag. Parsers are tested against excerpts of real pages
+and is gzipped. Parsers are tested against excerpts of real pages
 in `tests/fixtures/diagnostics/`.
 
 ## Frontend: `src/features/diagnostics/`

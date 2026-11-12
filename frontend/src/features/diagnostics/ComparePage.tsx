@@ -705,8 +705,8 @@ interface PlotsProps {
 
 /**
  * One cell per run. E3SM Diags images stack run, reference and difference
- * panels; in "Run" view the shared reference panel is shown once, after the
- * runs, instead of once per run.
+ * panels; in "Run" view each run's reference panel follows the runs, labeled
+ * with its reference and run, and identical images are shown once.
  */
 const Plots = ({ data, detail, plot, view }: PlotsProps) => {
   const panel = plot.singlePanel ? undefined : detail.panels[view];

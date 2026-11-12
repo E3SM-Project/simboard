@@ -1,8 +1,7 @@
-import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 
 from app.common.dependencies import get_database_session
@@ -63,7 +62,7 @@ def get_case_diagnostics_runs(
 
 
 @router.post("/diagnostics/compare", response_model=CompareOut)
-def compare_runs(payload: CompareRequest, request: Request, response: Response):
+def compare_runs(payload: CompareRequest):
     """Line up the plots several diagnostics runs published.
 
     Returns every plot set the runs share and, for one of them (``set``, or
@@ -80,7 +79,7 @@ def compare_runs(payload: CompareRequest, request: Request, response: Response):
     active = next(
         (s for s in shared if s.name == payload.set), shared[0] if shared else None
     )
-    result = CompareOut(
+    return CompareOut(
         runs=[
             CompareRunOut(
                 url=c.url,
@@ -95,13 +94,6 @@ def compare_runs(payload: CompareRequest, request: Request, response: Response):
         sets=[_summary(s) for s in shared],
         set=_detail(active, catalogs) if active else None,
     )
-
-    # Catalogs change rarely; let the browser revalidate instead of re-reading.
-    etag = f'"{hashlib.sha256(result.model_dump_json().encode()).hexdigest()[:32]}"'
-    if request.headers.get("if-none-match") == etag:
-        return Response(status_code=304, headers={"ETag": etag})
-    response.headers["ETag"] = etag
-    return result
 
 
 def _summary(shared: compare.SharedSet) -> SetSummaryOut:

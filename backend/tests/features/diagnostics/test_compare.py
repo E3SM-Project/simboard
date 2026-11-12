@@ -83,12 +83,12 @@ def test_mpas_runs_have_no_panels():
 
 
 class TestCompareEndpoint:
-    def _post(self, client, catalogs: dict[str, Catalog], body: dict, **kwargs):
+    def _post(self, client, catalogs: dict[str, Catalog], body: dict):
         def fake(url, label=""):
             return catalogs[url]
 
         with patch("app.features.diagnostics.api.read_catalog_cached", fake):
-            return client.post(f"{API_BASE}/diagnostics/compare", json=body, **kwargs)
+            return client.post(f"{API_BASE}/diagnostics/compare", json=body)
 
     def test_returns_shared_sets_and_the_first_in_detail(self, client):
         mvm_a = "lat_lon/model_vs_model/v3.LR.piControl-PRECT-ANN-global.png"
@@ -139,13 +139,6 @@ class TestCompareEndpoint:
         ).json()
         assert body["runs"][1]["error"] == "url_not_allowed"
         assert body["set"]["groups"][0]["plots"][0]["paths"][1] is None
-
-    def test_supports_conditional_requests(self, client):
-        catalogs = {HIST: run(HIST, e3sm(LAT_LON))}
-        body = {"runs": [{"url": HIST}]}
-        etag = self._post(client, catalogs, body).headers["etag"]
-        again = self._post(client, catalogs, body, headers={"If-None-Match": etag})
-        assert again.status_code == 304
 
     @pytest.mark.parametrize(
         "body", [{"runs": []}, {"runs": [{"url": HIST}] * 13}, {"runs": [{"url": ""}]}]
