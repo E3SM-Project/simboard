@@ -417,16 +417,8 @@ completed archive snapshots remain skipped, and dry runs do not write source pat
    - Set `DRY_RUN=false` in each secret after validation; an unset `DRY_RUN` runs a dry run.
 
 7. **Enable job health reporting**
-   - Register each job ID in this namespace's API, as described in [Report scheduled job health](setup-ingestion-operations.md#report-scheduled-job-health). Use the service account whose token is in the job's secret. Starting thresholds:
-
-     | Job ID                        | `scan_mode`   | `max_silence_minutes` | `max_duration_minutes` |
-     | ----------------------------- | ------------- | --------------------- | ---------------------- |
-     | `spin-perlmutter-staging`     | `staging`     | `45`                  | `60`                   |
-     | `spin-perlmutter-archive`     | `archive`     | `1560`                | `720`                  |
-     | `spin-perlmutter-diagnostics` | `diagnostics` | `420`                 | `300`                  |
-
-     Adjust them to observed run times.
-   - Add `SIMBOARD_JOB_ID` to each secret. The wrapper reports only live runs (`DRY_RUN=false`) with a job ID; it always exits with the module's exit code, and report failures appear only as `job_report_failed` log events.
+   - Add `SIMBOARD_JOB_ID` to each secret, and `SIMBOARD_JOB_SCAN_MODE=diagnostics` to the diagnostics secret (the ingestion secrets already set `SCAN_MODE`). The wrapper reports only live runs (`DRY_RUN=false`) with a job ID; it always exits with the module's exit code, and report failures appear only as `job_report_failed` log events.
+   - Each job registers itself on its first report with default thresholds; no admin step is needed. See [Report scheduled job health](setup-ingestion-operations.md#report-scheduled-job-health) to change thresholds.
    - Trigger a one-off job and confirm `job_report_sent` events and the job in `GET /api/v1/ingestions/jobs`.
 
 8. **Verify steady-state behavior**
@@ -673,7 +665,8 @@ Under **Storage -> Secrets**, create the **Opaque** secret
 | `DRY_RUN` | `false` |
 | `SIMBOARD_API_BASE_URL` | `http://backend:8000` |
 | `SIMBOARD_API_TOKEN` | Ingestion service-account token authorized for diagnostics |
-| `SIMBOARD_JOB_ID` | `spin-perlmutter-diagnostics`; register it to enable [job health reporting](#workload-3-nersc-archive-collection-cronjobs) (Workload 3, step 7) |
+| `SIMBOARD_JOB_ID` | `spin-perlmutter-diagnostics`; enables [job health reporting](#workload-3-nersc-archive-collection-cronjobs) (Workload 3, step 7) |
+| `SIMBOARD_JOB_SCAN_MODE` | `diagnostics`; required with `SIMBOARD_JOB_ID` |
 
 Use the same namespace's backend image and API credentials. Keep `DRY_RUN=false`
 for linking; `true` is an optional offline scan. Omitting it defaults to dry run.

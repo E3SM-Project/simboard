@@ -43,6 +43,8 @@ def report_env(monkeypatch: pytest.MonkeyPatch, status_file: Path) -> None:
     monkeypatch.setenv("SIMBOARD_JOB_ID", "chrysalis-staging")
     monkeypatch.setenv("SIMBOARD_JOB_RUN_ID", RUN_ID)
     monkeypatch.setenv("SIMBOARD_JOB_STARTED_AT", "2026-01-02T00:00:00Z")
+    monkeypatch.setenv("MACHINE_NAME", "chrysalis")
+    monkeypatch.setenv("SIMBOARD_JOB_SCAN_MODE", "staging")
 
 
 @pytest.fixture
@@ -136,9 +138,22 @@ def test_start_report_targets_the_job_run(report_env, sent, events):
         f"/runs/{RUN_ID}/start"
     )
     assert request.get_header("Authorization") == f"Bearer {TOKEN}"
-    assert json.loads(request.data) == {"started_at": "2026-01-02T00:00:00Z"}
+    assert json.loads(request.data) == {
+        "machine_name": "chrysalis",
+        "scan_mode": "staging",
+        "started_at": "2026-01-02T00:00:00Z",
+    }
     assert timeout == job_health.REQUEST_TIMEOUT_SECONDS
     assert events == [("job_report_sent", {"report": "start"})]
+
+
+def test_scan_mode_falls_back_to_the_ingestor_setting(report_env, sent, monkeypatch):
+    monkeypatch.delenv("SIMBOARD_JOB_SCAN_MODE")
+    monkeypatch.setenv("SCAN_MODE", "archive")
+
+    main(["start"])
+
+    assert json.loads(sent[0][0].data)["scan_mode"] == "archive"
 
 
 def test_successful_finish_has_no_failure(report_env, sent, status_file):
@@ -298,6 +313,8 @@ def test_run_forwards_termination_to_the_module(tmp_path: Path, monkeypatch):
         "PYTHONPATH": str(tmp_path),
         "DRY_RUN": "false",
         "SIMBOARD_JOB_ID": "spin-perlmutter-staging",
+        "MACHINE_NAME": "perlmutter",
+        "SCAN_MODE": "staging",
         "SIMBOARD_API_TOKEN": TOKEN,
         "SIMBOARD_API_BASE_URL": f"http://127.0.0.1:{server.server_port}",
     }

@@ -249,11 +249,23 @@ start and finish to their API environment. Failed runs include a reason
 is best effort: failures are logged as `job_report_failed` and never change the
 ingestion result. Dry runs and manual runs without a job ID do not report.
 
-Before enabling live runs, an administrator registers each job ID in each API
-environment with an administrator credential (see
-[HPC API token authentication](hpc-api-token-authentication.md)). The service
-account is the one whose token that environment's `env.*.sh` file uses; only it
-may report the job's runs.
+A job registers itself on its first report. Its owner is the service account
+whose token that environment's `env.*.sh` file uses, and only that account may
+report the job's runs. New jobs get default thresholds for their scan mode:
+
+| Scan mode     | `max_silence_minutes` | `max_duration_minutes` |
+| ------------- | --------------------- | ---------------------- |
+| `staging`     | `45`                  | `60`                   |
+| `archive`     | `1560`                | `720`                  |
+| `diagnostics` | `420`                 | `300`                  |
+
+Reports for a registered job ID from another machine or scan mode are rejected,
+so give each job a unique ID per API environment.
+
+Optionally, an administrator can register a job to change its thresholds or
+service account, or so it shows `stale` before its first run (see
+[HPC API token authentication](hpc-api-token-authentication.md) for the
+administrator credential):
 
 ```bash
 curl -X PUT "<api-base-url>/api/v1/ingestions/jobs/chrysalis-staging" \
