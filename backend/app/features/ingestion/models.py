@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -25,7 +26,11 @@ from app.features.ingestion.enums import (
     ExecutionDiscoveryOutcome,
     IngestionSourceType,
     IngestionStatus,
+    ScheduledJobFailureReason,
+    ScheduledJobRunStatus,
 )
+
+FAILURE_MESSAGE_MAX_LENGTH = 500
 
 if TYPE_CHECKING:
     from app.features.catalog.models import Execution
@@ -170,3 +175,88 @@ class ArchiveScanCheckpoint(Base):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class ScheduledJob(Base):
+    """Registered scheduled job, its reporting account, and health thresholds."""
+
+    __tablename__ = "scheduled_jobs"
+
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    machine_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("machines.id"), nullable=False, index=True
+    )
+    scan_mode: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Only this service account may report runs for the job.
+    service_account_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    max_silence_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    machine = relationship("Machine")
+
+
+class ScheduledJobRun(Base):
+    """One scheduled job run, identified by a client-generated run ID."""
+
+    __tablename__ = "scheduled_job_runs"
+    __table_args__ = (
+        Index("ix_scheduled_job_runs_job_reported", "job_id", "reported_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    job_id: Mapped[str] = mapped_column(
+        String(100), ForeignKey("scheduled_jobs.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[ScheduledJobRunStatus] = mapped_column(
+        SAEnum(
+            ScheduledJobRunStatus,
+            name="scheduled_job_run_status_enum",
+            native_enum=False,
+            values_callable=lambda obj: [e.value for e in obj],
+            validate_strings=True,
+        ),
+        nullable=False,
+    )
+    # Client-supplied execution times.
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Server-observed report times; health freshness uses only these.
+    reported_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    finish_reported_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    exit_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    failure_reason: Mapped[ScheduledJobFailureReason | None] = mapped_column(
+        SAEnum(
+            ScheduledJobFailureReason,
+            name="scheduled_job_failure_reason_enum",
+            native_enum=False,
+            values_callable=lambda obj: [e.value for e in obj],
+            validate_strings=True,
+        ),
+        nullable=True,
+    )
+    failure_message: Mapped[str | None] = mapped_column(
+        String(FAILURE_MESSAGE_MAX_LENGTH), nullable=True
+    )
+    failure_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    failure_transient: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

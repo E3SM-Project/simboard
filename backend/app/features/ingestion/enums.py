@@ -23,3 +23,28 @@ class ExecutionDiscoveryOutcome(StrEnum):
     ACCEPTED = "accepted"
     REJECTED_INCOMPLETE = "rejected_incomplete"
     REJECTED_INVALID = "rejected_invalid"
+
+
+class ScheduledJobRunStatus(StrEnum):
+    """Lifecycle state of one scheduled job run."""
+
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class ScheduledJobFailureReason(StrEnum):
+    """Coarse cause reported for a failed scheduled job run."""
+
+    API_REQUEST = "api_request"
+    FILESYSTEM = "filesystem"
+    UNEXPECTED = "unexpected"
+
+
+class ScheduledJobHealth(StrEnum):
+    """Derived health of a scheduled job."""
+
+    HEALTHY = "healthy"
+    FAILED = "failed"
+    RUNNING = "running"
+    STALE = "stale"
