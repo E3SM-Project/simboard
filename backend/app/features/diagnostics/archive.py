@@ -192,7 +192,8 @@ def http_fetcher(client: httpx.Client) -> Fetcher:
                 )
                 return FAILED
             try:
-                # The client's timeout is per operation; never wait past the deadline.
+                # httpx times each step (connect, read) separately; cap each step
+                # at the time left. A late answer is FAILED in _answer.
                 with client.stream(
                     "GET",
                     target,

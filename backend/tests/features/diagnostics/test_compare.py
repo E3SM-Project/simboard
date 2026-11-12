@@ -155,6 +155,9 @@ class TestReadCatalogCached:
     def setup_method(self):
         catalog_module._cache.clear()
 
+    def teardown_method(self):
+        catalog_module._cache.clear()
+
     def test_dispatches_by_url(self):
         assert catalog_module.read_catalog(
             "https://h.test/x", lambda *_: None

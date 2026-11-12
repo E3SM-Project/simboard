@@ -170,9 +170,10 @@ class TestHttpFetcher:
             timeouts.append(request.extensions["timeout"])
             return self._html()
 
-        self._fetch(handler, remaining=remaining)
+        with patch(CLOCK, return_value=0.0):
+            self._fetch(handler, remaining=remaining)
         (timeout,) = timeouts
-        assert list(timeout.values()) == pytest.approx([expected] * 4, abs=0.05)
+        assert list(timeout.values()) == [expected] * 4
 
     def test_a_response_after_the_deadline_fails(self):
         clock = {"now": 0.0}
