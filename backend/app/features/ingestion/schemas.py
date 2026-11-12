@@ -28,6 +28,8 @@ ARCHIVE_SNAPSHOT_NAME_PATTERN = (
     r"\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}$"
 )
 SCHEDULED_JOB_ID_PATTERN = r"^[a-z0-9][a-z0-9_-]{0,99}$"
+# One year keeps derived deadlines within datetime range.
+SCHEDULED_JOB_MAX_THRESHOLD_MINUTES = 525_600
 
 
 class IngestionExecutionSummary(BaseModel):
@@ -435,8 +437,12 @@ class ScheduledJobRegister(BaseModel):
     machine_name: str
     scan_mode: Literal["staging", "archive", "diagnostics"]
     service_account_email: str
-    max_silence_minutes: Annotated[int, Field(gt=0)]
-    max_duration_minutes: Annotated[int, Field(gt=0)]
+    max_silence_minutes: Annotated[
+        int, Field(gt=0, le=SCHEDULED_JOB_MAX_THRESHOLD_MINUTES)
+    ]
+    max_duration_minutes: Annotated[
+        int, Field(gt=0, le=SCHEDULED_JOB_MAX_THRESHOLD_MINUTES)
+    ]
 
 
 class ScheduledJobRunStart(BaseModel):
@@ -446,7 +452,7 @@ class ScheduledJobRunStart(BaseModel):
 class ScheduledJobFailure(BaseModel):
     reason: ScheduledJobFailureReason
     message: Annotated[str, Field(max_length=FAILURE_MESSAGE_MAX_LENGTH)]
-    status_code: int | None = None
+    status_code: Annotated[int, Field(ge=100, le=599)] | None = None
     transient: bool | None = None
 
 
@@ -455,7 +461,7 @@ class ScheduledJobRunFinish(BaseModel):
 
     started_at: AwareDatetime
     finished_at: AwareDatetime
-    exit_code: int
+    exit_code: Annotated[int, Field(ge=0, le=255)]
     failure: ScheduledJobFailure | None = None
 
     @model_validator(mode="after")

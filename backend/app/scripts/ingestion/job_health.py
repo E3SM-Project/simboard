@@ -59,7 +59,8 @@ def record_failure(
 
     failure = {
         "reason": reason,
-        "message": message[:MESSAGE_MAX_LENGTH],
+        # Redact before truncating so no token prefix survives the cut.
+        "message": _redact(message)[:MESSAGE_MAX_LENGTH],
         "status_code": status_code,
         "transient": transient,
     }
@@ -163,7 +164,7 @@ def _send_report(event: str, exit_code: int) -> None:
         payload.update(
             finished_at=_utc_now(),
             exit_code=exit_code,
-            failure=_read_failure(exit_code, token),
+            failure=_read_failure(exit_code),
         )
 
     base_url = os.environ["SIMBOARD_API_BASE_URL"].rstrip("/")
@@ -184,7 +185,7 @@ def _send_report(event: str, exit_code: int) -> None:
         pass
 
 
-def _read_failure(exit_code: int, token: str) -> dict[str, Any] | None:
+def _read_failure(exit_code: int) -> dict[str, Any] | None:
     if exit_code == 0:
         return None
 
@@ -201,12 +202,15 @@ def _read_failure(exit_code: int, token: str) -> dict[str, Any] | None:
         pass
 
     # Never send credentials, even if an error message echoed them.
-    message = str(failure.get("message", ""))
-    if token:
-        message = message.replace(token, "[redacted]")
-    failure["message"] = message[:MESSAGE_MAX_LENGTH]
+    failure["message"] = _redact(str(failure.get("message", ""))[:MESSAGE_MAX_LENGTH])
 
     return failure
+
+
+def _redact(message: str) -> str:
+    token = os.environ.get("SIMBOARD_API_TOKEN")
+
+    return message.replace(token, "[redacted]") if token else message
 
 
 def _utc_now() -> str:

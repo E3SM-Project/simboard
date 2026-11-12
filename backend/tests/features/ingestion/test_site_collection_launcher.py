@@ -482,18 +482,20 @@ def test_cron_template_schedules_diagnostics_independently() -> None:
         assert "&&" not in job
 
 
+@pytest.mark.parametrize("scan_mode", ["staging", "diagnostics"])
 @pytest.mark.parametrize(
     ("dry_run", "job_id", "reporter_exit_code", "reported"),
     [
-        ("false", "chrysalis-staging", 0, True),
+        ("false", "chrysalis-job", 0, True),
         # Failed or timed-out reports must not change the ingestion exit code.
-        ("false", "chrysalis-staging", 1, True),
-        ("true", "chrysalis-staging", 0, False),
+        ("false", "chrysalis-job", 1, True),
+        ("true", "chrysalis-job", 0, False),
         ("false", None, 0, False),
     ],
 )
 def test_launcher_reports_scheduled_live_runs(
     tmp_path: Path,
+    scan_mode: str,
     dry_run: str,
     job_id: str | None,
     reporter_exit_code: int,
@@ -549,7 +551,7 @@ def test_launcher_reports_scheduled_live_runs(
         env["SIMBOARD_JOB_ID"] = job_id
 
     result = subprocess.run(
-        [_launcher_path(), "chrysalis", "staging"],
+        [_launcher_path(), "chrysalis", scan_mode],
         capture_output=True,
         check=False,
         env=env,
@@ -559,8 +561,8 @@ def test_launcher_reports_scheduled_live_runs(
     assert result.returncode == 3, result.stderr
     if reported:
         assert reports.read_text().splitlines() == [
-            "start|chrysalis-staging|run-123|",
-            "finish --exit-code 3|chrysalis-staging|run-123|failure",
+            "start|chrysalis-job|run-123|",
+            "finish --exit-code 3|chrysalis-job|run-123|failure",
         ]
     else:
         assert not reports.exists()

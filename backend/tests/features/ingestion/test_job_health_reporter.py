@@ -5,9 +5,11 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -93,6 +95,15 @@ def test_first_bounded_failure_wins(status_file: Path):
         "status_code": 503,
         "transient": True,
     }
+
+
+def test_tokens_are_redacted_before_truncation(monkeypatch, status_file: Path):
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", TOKEN)
+
+    record_failure("api_request", "x" * 495 + TOKEN)
+
+    message = json.loads(status_file.read_text())["message"]
+    assert message == "x" * 495 + "[reda"
 
 
 @pytest.mark.parametrize(
@@ -260,7 +271,21 @@ def test_run_keeps_the_module_exit_code_when_reports_fail(
     assert [event for event, _ in events] == ["job_report_failed"] * 2
 
 
-def test_run_forwards_termination_to_the_module(tmp_path: Path):
+def test_run_forwards_termination_to_the_module(tmp_path: Path, monkeypatch):
+    received: list[tuple[str, dict]] = []
+
+    class _Handler(BaseHTTPRequestHandler):
+        def do_PUT(self):
+            body = self.rfile.read(int(self.headers["Content-Length"]))
+            received.append((self.path, json.loads(body)))
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
     ready = tmp_path / "ready"
     (tmp_path / "sleeper.py").write_text(
         "import pathlib, sys, time\n"
@@ -269,11 +294,13 @@ def test_run_forwards_termination_to_the_module(tmp_path: Path):
     )
     backend_dir = Path(__file__).resolve().parents[3]
     env = {
-        key: value
-        for key, value in os.environ.items()
-        if key not in {"SIMBOARD_JOB_ID", "DRY_RUN"}
+        **os.environ,
+        "PYTHONPATH": str(tmp_path),
+        "DRY_RUN": "false",
+        "SIMBOARD_JOB_ID": "spin-perlmutter-staging",
+        "SIMBOARD_API_TOKEN": TOKEN,
+        "SIMBOARD_API_BASE_URL": f"http://127.0.0.1:{server.server_port}",
     }
-    env["PYTHONPATH"] = str(tmp_path)
     process = subprocess.Popen(
         [sys.executable, "-m", "app.scripts.ingestion.job_health", "run", "sleeper"],
         cwd=backend_dir,
@@ -285,4 +312,10 @@ def test_run_forwards_termination_to_the_module(tmp_path: Path):
 
     process.send_signal(signal.SIGTERM)
 
-    assert process.wait(timeout=20) == 128 + signal.SIGTERM
+    try:
+        assert process.wait(timeout=20) == 128 + signal.SIGTERM
+    finally:
+        server.shutdown()
+    assert [path.rsplit("/", 1)[-1] for path, _ in received] == ["start", "finish"]
+    assert received[1][1]["exit_code"] == 143
+    assert received[1][1]["failure"]["reason"] == "unexpected"

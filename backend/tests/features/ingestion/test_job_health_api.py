@@ -113,6 +113,10 @@ def test_only_admins_register_jobs_for_known_service_accounts(client, users, act
     )
     assert unknown_machine.status_code == 404
     assert _register(client, act_as, users["admin"], "Bad ID").status_code == 422
+    too_long = _register(
+        client, act_as, users["admin"], JOB_ID, max_duration_minutes=2**31
+    )
+    assert too_long.status_code == 422
     assert (
         _register(client, act_as, users["admin"], JOB_ID, scan_mode="other").status_code
         == 422
@@ -213,8 +217,18 @@ def test_reports_cannot_change_an_outcome_or_another_jobs_run(
         {**FAILURE, "failure": {**FAILURE["failure"], "message": "x" * 501}},
         {**FAILURE, "failure": {**FAILURE["failure"], "reason": "other"}},
         {**SUCCESS, "finished_at": "2026-01-02T00:05:00"},
+        {**FAILURE, "exit_code": 256},
+        {**FAILURE, "failure": {**FAILURE["failure"], "status_code": 2**31}},
     ],
-    ids=["missing-failure", "unexpected-failure", "long-message", "reason", "naive"],
+    ids=[
+        "missing-failure",
+        "unexpected-failure",
+        "long-message",
+        "reason",
+        "naive",
+        "exit-code-range",
+        "status-code-range",
+    ],
 )
 def test_invalid_finish_reports_are_rejected(client, job, payload):
     response = client.put(_run_url(uuid4(), "finish"), json=payload)
@@ -222,18 +236,27 @@ def test_invalid_finish_reports_are_rejected(client, job, payload):
     assert response.status_code == 422
 
 
-def test_new_runs_prune_records_past_retention(client, db, job):
-    old_run_id = uuid4()
+@pytest.mark.parametrize("action", ["start", "finish"])
+def test_new_runs_prune_only_their_jobs_records_past_retention(
+    client, db, users, act_as, job, action
+):
+    _register(client, act_as, users["admin"], "chrysalis-archive", scan_mode="archive")
+    act_as(users["reporter"])
+    old_run_id, other_job_run_id = uuid4(), uuid4()
     client.put(_run_url(old_run_id, "finish"), json=SUCCESS)
-    old_run = db.get(ScheduledJobRun, old_run_id)
-    old_run.reported_at -= timedelta(days=91)
+    client.put(
+        _run_url(other_job_run_id, "finish", job_id="chrysalis-archive"), json=SUCCESS
+    )
+    for run_id in (old_run_id, other_job_run_id):
+        db.get(ScheduledJobRun, run_id).reported_at -= timedelta(days=91)
     db.commit()
 
-    client.put(_run_url(uuid4(), "start"), json={"started_at": STARTED_AT})
+    payload = {"started_at": STARTED_AT} if action == "start" else SUCCESS
+    client.put(_run_url(uuid4(), action), json=payload)
 
     db.expire_all()
     assert db.get(ScheduledJobRun, old_run_id) is None
-    assert db.query(ScheduledJobRun).count() == 1
+    assert db.get(ScheduledJobRun, other_job_run_id) is not None
 
 
 def test_health_is_protected_and_filterable(client, users, act_as, job):

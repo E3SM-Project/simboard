@@ -63,12 +63,7 @@ def record_run_start(
             reported_at=now,
         )
         db.add(run)
-        db.execute(
-            delete(ScheduledJobRun).where(
-                ScheduledJobRun.job_id == job.id,
-                ScheduledJobRun.reported_at < now - RUN_RETENTION,
-            )
-        )
+        _prune_runs(db, job, now)
 
     return run
 
@@ -87,6 +82,7 @@ def record_run_finish(
             id=run_id, job_id=job.id, started_at=payload.started_at, reported_at=now
         )
         db.add(run)
+        _prune_runs(db, job, now)
     elif run.status != ScheduledJobRunStatus.RUNNING:
         if _finish_values(payload) != _recorded_finish_values(run):
             raise JobRunConflictError(f"Run {run_id} already has a different outcome.")
@@ -132,6 +128,15 @@ def to_job_read(job: ScheduledJob) -> ScheduledJobRead:
         scan_mode=job.scan_mode,
         max_silence_minutes=job.max_silence_minutes,
         max_duration_minutes=job.max_duration_minutes,
+    )
+
+
+def _prune_runs(db: Session, job: ScheduledJob, now: datetime) -> None:
+    db.execute(
+        delete(ScheduledJobRun).where(
+            ScheduledJobRun.job_id == job.id,
+            ScheduledJobRun.reported_at < now - RUN_RETENTION,
+        )
     )
 
 
