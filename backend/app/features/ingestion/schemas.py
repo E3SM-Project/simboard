@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -295,6 +295,37 @@ class IngestionStateResponse(BaseModel):
             description="Normalized case identity to discovery results",
         ),
     ]
+
+
+class IngestionSummaryRow(BaseModel):
+    day: date
+    machine: str
+    case_id: UUID
+    case_name: str
+    hpc_username: str
+    new_executions: int
+
+
+class IngestionSummaryTotals(BaseModel):
+    new_executions: int = 0
+    distinct_cases: int = 0
+
+
+class IngestionSummaryDayTotals(IngestionSummaryTotals):
+    day: date
+
+
+class IngestionSummaryMachineTotals(IngestionSummaryDayTotals):
+    machine: str
+
+
+class IngestionSummaryResponse(BaseModel):
+    rows: list[IngestionSummaryRow] = Field(default_factory=list)
+    daily_machine_totals: list[IngestionSummaryMachineTotals] = Field(
+        default_factory=list
+    )
+    daily_totals: list[IngestionSummaryDayTotals] = Field(default_factory=list)
+    totals: IngestionSummaryTotals = Field(default_factory=IngestionSummaryTotals)
 
 
 class IngestionCreate(BaseModel):
