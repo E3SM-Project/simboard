@@ -13,6 +13,8 @@ from app.features.diagnostics.plots import Catalog, Plot, PlotSet
 LCRC = "https://web.lcrc.anl.gov/public/e3sm/diagnostic_output"
 HIST = f"{LCRC}/x/v3.LR.historical/e3sm_diags/a/model_vs_obs_1985-2014/viewer/"
 PICTL = f"{LCRC}/x/v3.LR.piControl/e3sm_diags/a/model_vs_obs_1985-2014/viewer/"
+# urlsplit raises "Invalid IPv6 URL" for this address.
+BAD_URL = "https://[/viewer/"
 
 
 def e3sm(paths: list[str]) -> PlotSet:
@@ -195,6 +197,34 @@ class TestReadCatalogCached:
                 catalog_module.read_catalog_cached(self.MPAS, label)
         # "!a" read once; the two plain labels share the unlabelled entry.
         assert calls == ["!a", "!b", "plain"]
+
+    def test_malformed_urls_are_unrecognized_without_fetching(self):
+        def no_fetch(_read):
+            raise AssertionError("fetched a malformed URL")
+
+        with patch.object(catalog_module, "with_http_fetcher", no_fetch):
+            assert catalog_module.read_catalog_cached(BAD_URL).error == (
+                "unrecognized_url"
+            )
+        assert (
+            catalog_module.read_catalog(BAD_URL, lambda *_: None).error
+            == "unrecognized_url"
+        )
+
+    def test_a_malformed_url_fails_only_its_run(self, client):
+        def fake(url, fetch, label=""):
+            return run(url, e3sm(LAT_LON))
+
+        with (
+            patch.object(catalog_module, "read_catalog", fake),
+            patch.object(catalog_module, "with_http_fetcher", lambda read: read(None)),
+        ):
+            res = client.post(
+                f"{API_BASE}/diagnostics/compare",
+                json={"runs": [{"url": HIST}, {"url": BAD_URL}]},
+            )
+        assert res.status_code == 200
+        assert [r["error"] for r in res.json()["runs"]] == [None, "unrecognized_url"]
 
 
 def test_plot_defaults():
