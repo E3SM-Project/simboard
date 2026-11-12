@@ -280,9 +280,10 @@ Set `max_duration_minutes` to the longest expected run and
 `max_silence_minutes` to at least the schedule interval plus a margin for
 skipped runs. `GET /api/v1/ingestions/jobs` (administrators and service
 accounts) returns each job's `healthy`, `failed`, `running`, or `stale` state.
-A job is `stale` when it has never reported, has been silent too long, or its
-newest run exceeded its allowed duration without finishing. Run records are
-kept for 90 days.
+A job is `stale` when it has been silent too long, its newest run exceeded its
+allowed duration without finishing, or it was pre-registered but has never
+reported. Other jobs appear only after their first report, so confirm each new
+job is listed after its first scheduled run. Run records are kept for 90 days.
 
 ### Reference: configuration files and variables
 
