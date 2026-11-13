@@ -94,6 +94,10 @@ def list_cases(
         False,
         description="Only cases with a completed run in the last six calendar months.",
     ),
+    has_diagnostics: bool = Query(
+        False,
+        description="Only cases that link to published diagnostics.",
+    ),
     sort_by: str = Query(
         "updated_at",
         pattern=(
@@ -120,6 +124,10 @@ def list_cases(
         created_by=created_by,
         simulation_type=simulation_type,
     )
+    if has_diagnostics:
+        query = query.filter(
+            Case.links.any(ExternalLink.kind == ExternalLinkKind.DIAGNOSTIC)
+        )
     latest_execution = _completed_execution_summary_subquery(db)
     execution_count = _case_execution_count_subquery(db)
     rows_query = _case_list_projection(query, execution_count, latest_execution)

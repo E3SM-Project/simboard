@@ -569,6 +569,7 @@ const CaseBrowser = ({
         page: pageParam,
         pageSize: 10,
         sortBy: 'name',
+        hasDiagnostics: true,
       });
       const cases: DiscoveredCase[] = [];
       // Limit archive discovery fan-out; never crawl the entire catalog automatically.

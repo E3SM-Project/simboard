@@ -56,10 +56,12 @@ Object.defineProperty(navigator, 'clipboard', {
     },
   },
 });
+const caseListFilters: Array<string | null> = [];
 api.defaults.adapter = async (config) => {
   const endpoint = config.url ?? '';
   let data: unknown;
   if (endpoint === '/cases') {
+    caseListFilters.push(config.params.get('has_diagnostics'));
     const search = String(config.params.get('search') ?? '');
     if (search === 'search-failed') throw new Error('Case search unavailable');
     const records = ['alpha', 'beta', 'raw-only'].filter((id) => id.includes(search));
@@ -2374,6 +2376,10 @@ async function testDenseBrowser() {
   check(
     document.body.textContent?.includes('Checked 6 of 18 cases · 6 with diagnostics'),
     'Discovery progress shows checked and supported counts',
+  );
+  check(
+    caseListFilters.length > 0 && caseListFilters.every((value) => value === 'true'),
+    'Browse only lists cases that link to diagnostics',
   );
   click(button('Load more cases'), 'second dense page');
   await waitFor(
