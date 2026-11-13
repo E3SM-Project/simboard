@@ -27,13 +27,11 @@ const OUTCOME_LABELS = {
 
 interface RejectedExecutionsSectionProps {
   query: UseQueryResult<RejectedExecutionsResponse>;
-  onResetFilters?: () => void;
+  /** Whether filters that apply to this section are active. */
+  filtered: boolean;
 }
 
-export const RejectedExecutionsSection = ({
-  query,
-  onResetFilters,
-}: RejectedExecutionsSectionProps) => (
+export const RejectedExecutionsSection = ({ query, filtered }: RejectedExecutionsSectionProps) => (
   <OperationsSection
     title="Rejected Executions"
     description="Executions currently rejected as incomplete or invalid by the latest validation."
@@ -67,11 +65,10 @@ export const RejectedExecutionsSection = ({
             <EmptyRow
               colSpan={COLUMNS.length}
               message={
-                onResetFilters
+                filtered
                   ? 'No rejected executions match these filters.'
                   : 'No executions are currently rejected.'
               }
-              onResetFilters={onResetFilters}
             />
           ) : null}
         </OperationsTable>

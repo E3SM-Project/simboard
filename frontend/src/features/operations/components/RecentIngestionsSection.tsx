@@ -24,13 +24,14 @@ const COLUMNS = [
 interface RecentIngestionsSectionProps {
   query: UseQueryResult<IngestionSummaryResponse>;
   rangeDays: number;
-  onResetFilters?: () => void;
+  /** Whether filters that apply to this section are active. */
+  filtered: boolean;
 }
 
 export const RecentIngestionsSection = ({
   query,
   rangeDays,
-  onResetFilters,
+  filtered,
 }: RecentIngestionsSectionProps) => (
   <OperationsSection
     title="Recent Ingestions"
@@ -75,11 +76,10 @@ export const RecentIngestionsSection = ({
             <EmptyRow
               colSpan={COLUMNS.length}
               message={
-                onResetFilters
+                filtered
                   ? 'No new executions match these filters.'
                   : `No new executions in the last ${rangeDays} days.`
               }
-              onResetFilters={onResetFilters}
             />
           ) : null}
         </OperationsTable>

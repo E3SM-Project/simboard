@@ -31,7 +31,8 @@ interface FailedUploadsSectionProps {
   jobType?: JobType;
   dateWindow: { startDate: string; endDate: string };
   rangeDays: number;
-  onResetFilters?: () => void;
+  /** Whether filters that apply to this section are active. */
+  filtered: boolean;
 }
 
 export const FailedUploadsSection = ({
@@ -39,7 +40,7 @@ export const FailedUploadsSection = ({
   jobType,
   dateWindow,
   rangeDays,
-  onResetFilters,
+  filtered,
 }: FailedUploadsSectionProps) => (
   <OperationsSection
     title="Failed Uploads"
@@ -67,11 +68,10 @@ export const FailedUploadsSection = ({
         return (
           <EmptyPanel
             message={
-              onResetFilters
+              filtered
                 ? 'No failed uploads match these filters.'
                 : `No failed uploads in the latest runs or the last ${rangeDays} days.`
             }
-            onResetFilters={onResetFilters}
           />
         );
       }
@@ -99,11 +99,10 @@ export const FailedUploadsSection = ({
                 <EmptyRow
                   colSpan={CASE_COLUMNS.length}
                   message={
-                    onResetFilters
+                    filtered
                       ? 'No failed uploads match these filters.'
                       : 'No failed uploads in the latest runs.'
                   }
-                  onResetFilters={onResetFilters}
                 />
               ) : null}
             </OperationsTable>

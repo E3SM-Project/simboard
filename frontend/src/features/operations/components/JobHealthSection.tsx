@@ -34,10 +34,11 @@ const COLUMNS = [
 interface JobHealthSectionProps {
   query: UseQueryResult<ScheduledJobHealthResponse>;
   jobType?: JobType;
-  onResetFilters?: () => void;
+  /** Whether filters that apply to this section are active. */
+  filtered: boolean;
 }
 
-export const JobHealthSection = ({ query, jobType, onResetFilters }: JobHealthSectionProps) => (
+export const JobHealthSection = ({ query, jobType, filtered }: JobHealthSectionProps) => (
   <OperationsSection
     title="Job Health"
     description="Latest status of each scheduled ingestion job."
@@ -85,11 +86,8 @@ export const JobHealthSection = ({ query, jobType, onResetFilters }: JobHealthSe
               <EmptyRow
                 colSpan={COLUMNS.length}
                 message={
-                  onResetFilters
-                    ? 'No jobs match these filters.'
-                    : 'No scheduled jobs have reported yet.'
+                  filtered ? 'No jobs match these filters.' : 'No scheduled jobs have reported yet.'
                 }
-                onResetFilters={onResetFilters}
               />
             ) : null}
           </OperationsTable>

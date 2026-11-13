@@ -134,40 +134,19 @@ export const OperationsTable = ({ columns, children, className }: OperationsTabl
   </div>
 );
 
-interface EmptyPanelProps {
-  message: string;
-  /** Shown when filters may explain the empty result. */
-  onResetFilters?: () => void;
-}
+// Empty states explain filtered results; the page header holds the one Reset control.
 
 /** Dashed block for a section with nothing to show. */
-export const EmptyPanel = ({ message, onResetFilters }: EmptyPanelProps) => (
+export const EmptyPanel = ({ message }: { message: string }) => (
   <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
     {message}
-    {onResetFilters ? (
-      <Button type="button" variant="link" size="sm" onClick={onResetFilters}>
-        Reset filters
-      </Button>
-    ) : null}
   </div>
 );
 
-interface EmptyRowProps {
-  colSpan: number;
-  message: string;
-  /** Shown when filters may explain the empty result. */
-  onResetFilters?: () => void;
-}
-
-export const EmptyRow = ({ colSpan, message, onResetFilters }: EmptyRowProps) => (
+export const EmptyRow = ({ colSpan, message }: { colSpan: number; message: string }) => (
   <TableRow className="hover:bg-transparent">
     <TableCell colSpan={colSpan} className="py-6 text-center text-muted-foreground">
       {message}
-      {onResetFilters ? (
-        <Button type="button" variant="link" size="sm" onClick={onResetFilters}>
-          Reset filters
-        </Button>
-      ) : null}
     </TableCell>
   </TableRow>
 );

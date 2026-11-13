@@ -74,8 +74,6 @@ const OperationsDashboard = ({ sites }: OperationsDashboardPageProps) => {
     setSearchParams(next, { replace: true });
   };
   const resetFilters = () => setSearchParams({}, { replace: true });
-  const resetJobFilters = jobType || siteName ? resetFilters : undefined;
-  const resetSiteFilter = siteName ? resetFilters : undefined;
   const filtersActive = Boolean(jobType || siteName) || rangeDays !== RANGE_DAYS[0];
 
   const queries = [jobsQuery, summaryQuery, rejectedQuery];
@@ -177,20 +175,24 @@ const OperationsDashboard = ({ sites }: OperationsDashboardPageProps) => {
         </div>
       </div>
 
-      <JobHealthSection query={jobsQuery} jobType={jobType} onResetFilters={resetJobFilters} />
+      <JobHealthSection
+        query={jobsQuery}
+        jobType={jobType}
+        filtered={Boolean(jobType || siteName)}
+      />
       <FailedUploadsSection
         query={jobsQuery}
         jobType={jobType}
         dateWindow={dateWindow}
         rangeDays={rangeDays}
-        onResetFilters={resetJobFilters}
+        filtered={Boolean(jobType || siteName)}
       />
       <RecentIngestionsSection
         query={summaryQuery}
         rangeDays={rangeDays}
-        onResetFilters={resetSiteFilter}
+        filtered={Boolean(siteName)}
       />
-      <RejectedExecutionsSection query={rejectedQuery} onResetFilters={resetSiteFilter} />
+      <RejectedExecutionsSection query={rejectedQuery} filtered={Boolean(siteName)} />
     </main>
   );
 };

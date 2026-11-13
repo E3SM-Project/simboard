@@ -360,7 +360,8 @@ test('job type and site filters narrow sections and offer a reset', async () => 
   assert.match(html, /border-dashed[^>]*>No failed uploads match these filters\./);
   assert.doesNotMatch(html, /Daily failure counts/);
   assert.match(html, /No rejected executions match these filters\./);
-  assert.match(html, /Reset filters/);
+  // Sections share the header's filters, so only the header offers a reset.
+  assert.equal(html.match(/Reset filters/g).length, 1);
 });
 
 test('sections show the API error detail when loading fails', async () => {
