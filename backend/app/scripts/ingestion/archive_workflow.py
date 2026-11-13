@@ -22,6 +22,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     DiscoveryResultsPersistenceCallback,
     DiscoveryStats,
     ExecutionDiscoveryResult,
+    IngestionAttemptResult,
     IngestionCandidate,
     IngestionRequestError,
     IngestorConfig,
@@ -30,6 +31,11 @@ from app.scripts.ingestion.archive_ingestor_core import (
     StructuredLogCallback,
     _log_event,
     _record_successful_case,
+)
+from app.scripts.ingestion.job_health import (
+    UploadFailure,
+    record_failure,
+    record_upload_failures,
 )
 
 
@@ -197,10 +203,13 @@ def _handle_ingest_run(
     log_event_fn = log_event_fn or _log_event
     success_count = 0
     failure_count = 0
+    upload_failures: list[UploadFailure] = []
 
     for candidate in tqdm(
         candidates, desc="Ingesting cases", unit="case", disable=not sys.stderr.isatty()
     ):
+        result: IngestionAttemptResult
+        upload_attempted = True
         try:
             submission = (
                 nullcontext(post_request_fn)
@@ -219,6 +228,9 @@ def _handle_ingest_run(
                     post_request_fn=submit_case,
                 )
         except (IngestionRequestError, OSError, tarfile.TarError) as exc:
+            # Request errors are retried inside; these come from preparing the case.
+            upload_attempted = False
+            record_failure("filesystem", f"{type(exc).__name__}: {exc}")
             result = {
                 "ok": False,
                 "attempts": 0,
@@ -260,7 +272,17 @@ def _handle_ingest_run(
                 "error": result["error"],
             },
         )
+        if upload_attempted:
+            upload_failures.append(
+                {
+                    "case_path": candidate.case_path,
+                    "status_code": result["status_code"],
+                    "attempts": result["attempts"],
+                    "message": result["error"] or "",
+                }
+            )
 
+    record_upload_failures(upload_failures)
     # Observed before suppression; completion is independent of success.
     log_event_fn("run_completed", None)
 

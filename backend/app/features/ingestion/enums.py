@@ -48,3 +48,14 @@ class ScheduledJobHealth(StrEnum):
     FAILED = "failed"
     RUNNING = "running"
     STALE = "stale"
+
+
+class ScheduledJobUploadFailureCategory(StrEnum):
+    """Coarse category of a case upload's final HTTP status or network error."""
+
+    AUTH = "auth"
+    BAD_UPLOAD = "bad_upload"
+    CONFLICT = "conflict"
+    SERVER = "server"
+    UNAVAILABLE = "unavailable"
+    OTHER = "other"

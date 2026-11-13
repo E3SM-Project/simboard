@@ -30,6 +30,25 @@ FAILURE = {
         "transient": True,
     },
 }
+UPLOAD_FAILURES = {
+    "counts": {"413": 2, "network": 1, "404": 1},
+    "cases": [
+        {
+            "case_path": "/archive/case-a",
+            "status_code": 413,
+            "attempts": 1,
+            "message": "HTTP 413: <html>413 Request Entity Too Large</html>",
+        },
+        {
+            "case_path": "/archive/case-b",
+            "status_code": None,
+            "attempts": 3,
+            "message": "Request timed out",
+        },
+    ],
+    "truncated": True,
+}
+UPLOAD_FAILURE = UPLOAD_FAILURES["cases"][0]
 
 
 @pytest.fixture
@@ -85,6 +104,15 @@ def _register(client, act_as, admin, job_id, **overrides):
 
 def _run_url(run_id, action, job_id=JOB_ID):
     return f"{JOBS_URL}/{job_id}/runs/{run_id}/{action}"
+
+
+def _daily_count(day, machine_name, category, count):
+    return {
+        "day": day,
+        "machine_name": machine_name,
+        "category": category,
+        "count": count,
+    }
 
 
 def test_only_admins_register_jobs_for_known_service_accounts(client, users, act_as):
@@ -279,6 +307,21 @@ def test_reports_cannot_change_an_outcome_or_another_jobs_run(
         {**SUCCESS, "finished_at": "2026-01-02T00:05:00"},
         {**FAILURE, "exit_code": 256},
         {**FAILURE, "failure": {**FAILURE["failure"], "status_code": 2**31}},
+        {
+            **FAILURE,
+            "upload_failures": {**UPLOAD_FAILURES, "cases": [UPLOAD_FAILURE] * 51},
+        },
+        {**FAILURE, "upload_failures": {**UPLOAD_FAILURES, "counts": {"timeout": 1}}},
+        {**FAILURE, "upload_failures": {**UPLOAD_FAILURES, "counts": {"413": 0}}},
+        {**FAILURE, "upload_failures": {**UPLOAD_FAILURES, "counts": {"413": 1}}},
+        {**FAILURE, "upload_failures": {**UPLOAD_FAILURES, "truncated": False}},
+        {
+            **FAILURE,
+            "upload_failures": {
+                **UPLOAD_FAILURES,
+                "cases": [{**UPLOAD_FAILURE, "message": "x" * 201}],
+            },
+        },
     ],
     ids=[
         "missing-failure",
@@ -288,6 +331,12 @@ def test_reports_cannot_change_an_outcome_or_another_jobs_run(
         "naive",
         "exit-code-range",
         "status-code-range",
+        "too-many-upload-cases",
+        "upload-count-key",
+        "upload-count-value",
+        "uncounted-upload-cases",
+        "untruncated-upload-cases",
+        "long-upload-message",
     ],
 )
 def test_invalid_finish_reports_are_rejected(client, job, payload):
@@ -334,5 +383,84 @@ def test_health_is_protected_and_filterable(client, users, act_as, job):
     assert listed["machine_name"] == "chrysalis"
     assert listed["health"] == "stale"
     assert listed["last_reported_at"] is None
-    assert filtered.json() == {"jobs": []}
+    assert filtered.json() == {"jobs": [], "upload_failure_daily_counts": []}
     assert client.get(JOBS_URL, params={"machine_name": "x"}).status_code == 404
+
+
+def test_latest_upload_run_lists_failed_uploads_until_they_succeed(client, db, job):
+    run_id = uuid4()
+    failed = {**FAILURE, "upload_failures": UPLOAD_FAILURES}
+
+    first = client.put(_run_url(run_id, "finish"), json=failed)
+    retry = client.put(_run_url(run_id, "finish"), json=failed)
+    changed = client.put(
+        _run_url(run_id, "finish"),
+        json={
+            **failed,
+            "upload_failures": {**UPLOAD_FAILURES, "counts": {"413": 3, "network": 1}},
+        },
+    )
+    [listed] = client.get(JOBS_URL).json()["jobs"]
+
+    assert first.json()["upload_failures"] == UPLOAD_FAILURES
+    assert retry.status_code == 200
+    assert changed.status_code == 409
+    assert listed["latest_upload_run"]["upload_failures"] == UPLOAD_FAILURES
+
+    # A run that ends before uploading keeps the stuck cases listed.
+    client.put(_run_url(uuid4(), "finish"), json=FAILURE)
+
+    [listed] = client.get(JOBS_URL).json()["jobs"]
+    assert listed["latest_completed_run"]["upload_failures"] is None
+    assert listed["latest_upload_run"]["id"] == str(run_id)
+    assert (
+        db.query(ScheduledJobRun)
+        .filter(ScheduledJobRun.upload_failures.is_(None))
+        .count()
+        == 1
+    )
+
+    no_failures = {"counts": {}, "cases": [], "truncated": False}
+    client.put(
+        _run_url(uuid4(), "finish"), json={**SUCCESS, "upload_failures": no_failures}
+    )
+
+    [listed] = client.get(JOBS_URL).json()["jobs"]
+    assert listed["latest_upload_run"]["upload_failures"] == no_failures
+
+
+def test_daily_upload_failure_counts_by_category_and_machine(
+    client, db, users, act_as, job
+):
+    def finish(counts, reported_at, job_id=JOB_ID, machine_name="chrysalis"):
+        run_id = uuid4()
+        truncated = sum(counts.values()) > len(UPLOAD_FAILURES["cases"])
+        uploads = {**UPLOAD_FAILURES, "counts": counts, "truncated": truncated}
+        payload = {**FAILURE, "machine_name": machine_name, "upload_failures": uploads}
+        assert client.put(_run_url(run_id, "finish", job_id), json=payload).is_success
+        db.get(ScheduledJobRun, run_id).finish_reported_at = reported_at
+
+    day_1 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    finish({"413": 2, "network": 1, "404": 1}, day_1 + timedelta(hours=23.5))
+    finish({"503": 2, "409": 1}, day_1 + timedelta(hours=24.5))
+    client.put(_run_url(uuid4(), "finish"), json=SUCCESS)
+    act_as(users["other"])
+    finish({"401": 1, "500": 1}, day_1, "perlmutter-staging", "perlmutter")
+    db.commit()
+
+    counts = client.get(JOBS_URL).json()["upload_failure_daily_counts"]
+    filtered = client.get(JOBS_URL, params={"machine_name": "perlmutter"}).json()
+
+    perlmutter = [
+        _daily_count("2026-01-01", "perlmutter", "auth", 1),
+        _daily_count("2026-01-01", "perlmutter", "server", 1),
+    ]
+    assert counts == [
+        _daily_count("2026-01-01", "chrysalis", "bad_upload", 2),
+        _daily_count("2026-01-01", "chrysalis", "other", 1),
+        _daily_count("2026-01-01", "chrysalis", "unavailable", 1),
+        *perlmutter,
+        _daily_count("2026-01-02", "chrysalis", "conflict", 1),
+        _daily_count("2026-01-02", "chrysalis", "unavailable", 2),
+    ]
+    assert filtered["upload_failure_daily_counts"] == perlmutter

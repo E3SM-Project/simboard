@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -260,3 +260,7 @@ class ScheduledJobRun(Base):
     )
     failure_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     failure_transient: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Client-reported case uploads that failed after retries; NULL when none.
+    upload_failures: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )

@@ -1,6 +1,7 @@
 """Tests for shared archive ingestion HTTP client behavior."""
 
 import json
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -848,6 +849,12 @@ def test_post_ingestion_request_selects_discovered_execution_ids(
         ),
         (urllib.error.URLError("network down"), "URL error: network down", None),
         (TimeoutError(), "Request timed out", None),
+        (ConnectionResetError("reset"), "Connection error: reset", None),
+        (
+            ssl.SSLEOFError(8, "EOF occurred in violation of protocol"),
+            "Connection error: .*EOF occurred",
+            None,
+        ),
     ],
 )
 def test_post_ingestion_request_maps_transport_errors(

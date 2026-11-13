@@ -1,5 +1,8 @@
 """Tests for shared archive ingestion workflow phases."""
 
+import json
+import tarfile
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 from io import StringIO
 from pathlib import Path
@@ -190,6 +193,122 @@ def test_ingestion_failure_preserves_state_and_records_completion(
     assert state["cases"] == {}
     assert report.ingestion_failure_count == 1
     assert report.ingestion_success_count == 0
+
+
+def test_ingest_run_records_failed_uploads_for_the_job_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    upload_failures_file = tmp_path / "upload-failures.json"
+    monkeypatch.setenv("SIMBOARD_JOB_UPLOAD_FAILURES_FILE", str(upload_failures_file))
+    rejected, ingested, dropped, unreadable, missing = (
+        _candidate(tmp_path / name)
+        for name in ("rejected", "ingested", "dropped", "unreadable", "missing")
+    )
+    upload_errors = {
+        rejected.case_path: IngestionRequestError(
+            "HTTP 413: <html><title>Request Entity Too Large</title></html>",
+            status_code=413,
+            transient=False,
+        ),
+        dropped.case_path: IngestionRequestError(
+            "Connection error: Remote end closed connection",
+            status_code=None,
+            transient=True,
+        ),
+    }
+    # Errors preparing a case archive are not upload failures.
+    preparation_errors: dict[str, Exception] = {
+        unreadable.case_path: PermissionError("denied"),
+        missing.case_path: IngestionRequestError(
+            "Case path is not a directory", status_code=None, transient=False
+        ),
+    }
+
+    def post(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        if args[2] in upload_errors:
+            raise upload_errors[args[2]]
+        return {"status_code": 201, "body": {"created_count": 1}}
+
+    def prepare(candidate: IngestionCandidate) -> AbstractContextManager[Any]:
+        if candidate.case_path in preparation_errors:
+            raise preparation_errors[candidate.case_path]
+        return nullcontext(post)
+
+    exit_code = _handle_ingest_run(
+        [rejected, ingested, dropped, unreadable, missing],
+        _config(tmp_path),
+        "http://backend:8000/api/v1/ingestions/from-path",
+        _fresh_state(),
+        sleep_fn=lambda *_: None,
+        post_request_fn=post,
+        log_event_fn=lambda *_args: None,
+        candidate_preparer=prepare,
+    )
+
+    assert exit_code == 1
+    assert json.loads(upload_failures_file.read_text()) == {
+        "counts": {"413": 1, "network": 1},
+        "cases": [
+            {
+                "case_path": rejected.case_path,
+                "status_code": 413,
+                "attempts": 1,
+                "message": "HTTP 413: Request Entity Too Large",
+            },
+            {
+                "case_path": dropped.case_path,
+                "status_code": None,
+                "attempts": 1,
+                "message": "Connection error: Remote end closed connection",
+            },
+        ],
+        "truncated": False,
+    }
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        PermissionError("denied"),
+        tarfile.TarError("denied"),
+        IngestionRequestError("denied", status_code=None, transient=False),
+    ],
+)
+def test_case_preparation_failure_is_the_runs_filesystem_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, error: Exception
+) -> None:
+    status_file = tmp_path / "status.json"
+    upload_failures_file = tmp_path / "upload-failures.json"
+    monkeypatch.setenv("SIMBOARD_JOB_STATUS_FILE", str(status_file))
+    monkeypatch.setenv("SIMBOARD_JOB_UPLOAD_FAILURES_FILE", str(upload_failures_file))
+
+    def prepare(candidate: IngestionCandidate) -> AbstractContextManager[Any]:
+        raise error
+
+    exit_code = _handle_ingest_run(
+        [_candidate(tmp_path / "case")],
+        _config(tmp_path),
+        "http://backend:8000/api/v1/ingestions/from-path",
+        _fresh_state(),
+        sleep_fn=lambda *_: None,
+        post_request_fn=lambda *_args, **_kwargs: {"status_code": 201, "body": {}},
+        log_event_fn=lambda *_args: None,
+        candidate_preparer=prepare,
+    )
+
+    assert exit_code == 1
+    assert json.loads(status_file.read_text()) == {
+        "reason": "filesystem",
+        "message": f"{type(error).__name__}: denied",
+        "status_code": None,
+        "transient": None,
+    }
+    # The upload step ran, so the report records that no upload failed.
+    assert json.loads(upload_failures_file.read_text()) == {
+        "counts": {},
+        "cases": [],
+        "truncated": False,
+    }
 
 
 @pytest.mark.parametrize("interactive", [True, False])

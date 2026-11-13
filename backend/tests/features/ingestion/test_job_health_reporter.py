@@ -22,6 +22,7 @@ from app.scripts.ingestion.job_health import (
     record_exception,
     record_failure,
     record_request_failure,
+    record_upload_failures,
 )
 
 TOKEN = "sbk_secret"
@@ -37,7 +38,17 @@ def status_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
-def report_env(monkeypatch: pytest.MonkeyPatch, status_file: Path) -> None:
+def upload_failures_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    path = tmp_path / "job-upload-failures.json"
+    monkeypatch.setenv("SIMBOARD_JOB_UPLOAD_FAILURES_FILE", str(path))
+
+    return path
+
+
+@pytest.fixture
+def report_env(
+    monkeypatch: pytest.MonkeyPatch, status_file: Path, upload_failures_file: Path
+) -> None:
     monkeypatch.setenv("SIMBOARD_API_BASE_URL", "https://api.example.org/")
     monkeypatch.setenv("SIMBOARD_API_TOKEN", TOKEN)
     monkeypatch.setenv("SIMBOARD_JOB_ID", "chrysalis-staging")
@@ -108,6 +119,19 @@ def test_tokens_are_redacted_before_truncation(monkeypatch, status_file: Path):
     assert message == "x" * 495 + "[reda"
 
 
+def test_failure_messages_reduce_proxy_pages_to_text(status_file: Path):
+    record_request_failure(
+        IngestionRequestError(
+            "HTTP 413: <html>\n<title>413 Request Entity Too Large</title>\n</html>",
+            status_code=413,
+            transient=False,
+        )
+    )
+
+    message = json.loads(status_file.read_text())["message"]
+    assert message == "HTTP 413: 413 Request Entity Too Large"
+
+
 @pytest.mark.parametrize(
     ("exc", "reason"),
     [(PermissionError("denied"), "filesystem"), (ValueError(), "unexpected")],
@@ -126,6 +150,61 @@ def test_only_final_request_failures_are_recorded(status_file: Path):
 
     _retry_failure_event_fields(exc, 3, 3, include_transient=True)
     assert json.loads(status_file.read_text())["status_code"] == 503
+
+
+def test_upload_failures_keep_complete_counts_and_bounded_cases(
+    monkeypatch, upload_failures_file: Path
+):
+    monkeypatch.setenv("SIMBOARD_API_TOKEN", TOKEN)
+    timed_out = {
+        "case_path": "/archive/timed-out",
+        "status_code": None,
+        "attempts": 3,
+        "message": f"URL error: {TOKEN} " + "x" * 300,
+    }
+    rejected = {
+        "case_path": "/archive/too-large",
+        "status_code": 413,
+        "attempts": 1,
+        "message": "HTTP 413: <html>\n  <title>Too Large</title>\n</html>",
+    }
+
+    record_upload_failures([timed_out] + [rejected] * 50)
+
+    report = json.loads(upload_failures_file.read_text())
+    assert report["counts"] == {"network": 1, "413": 50}
+    assert report["truncated"] is True
+    assert len(report["cases"]) == 50
+    assert report["cases"][0] == {
+        **timed_out,
+        "message": ("URL error: [redacted] " + "x" * 300)[:200],
+    }
+    assert report["cases"][1] == {
+        **rejected,
+        "message": "HTTP 413: Too Large",
+    }
+
+
+def test_upload_step_without_failures_records_an_empty_report(
+    upload_failures_file: Path,
+):
+    record_upload_failures([])
+
+    assert json.loads(upload_failures_file.read_text()) == {
+        "counts": {},
+        "cases": [],
+        "truncated": False,
+    }
+
+
+def test_upload_failures_are_a_no_op_without_a_file(monkeypatch, tmp_path: Path):
+    monkeypatch.delenv("SIMBOARD_JOB_UPLOAD_FAILURES_FILE", raising=False)
+
+    record_upload_failures(
+        [{"case_path": "/c", "status_code": 500, "attempts": 3, "message": "x"}]
+    )
+
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_start_report_targets_the_job_run(report_env, sent, events):
@@ -164,6 +243,7 @@ def test_successful_finish_has_no_failure(report_env, sent, status_file):
     payload = json.loads(sent[0][0].data)
     assert payload["exit_code"] == 0
     assert payload["failure"] is None
+    assert payload["upload_failures"] is None
     assert payload["finished_at"]
 
 
@@ -190,6 +270,19 @@ def test_failed_finish_sends_recorded_failure_without_credentials(
         "message": "HTTP 401: bad token [redacted]",
         "status_code": 401,
         "transient": False,
+    }
+
+
+def test_failed_finish_sends_recorded_upload_failures(report_env, sent):
+    failure = {"case_path": "/c", "status_code": 422, "attempts": 1, "message": "x"}
+    record_upload_failures([failure])
+
+    main(["finish", "--exit-code", "1"])
+
+    assert json.loads(sent[0][0].data)["upload_failures"] == {
+        "counts": {"422": 1},
+        "cases": [failure],
+        "truncated": False,
     }
 
 
@@ -232,6 +325,11 @@ def fake_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
         "if path:\n"
         "    with open(path, 'x') as status_file:\n"
         '        status_file.write(\'{"reason": "filesystem", "message": "disk"}\')\n'
+        "path = os.environ.get('SIMBOARD_JOB_UPLOAD_FAILURES_FILE')\n"
+        "if path:\n"
+        "    with open(path, 'w') as upload_failures_file:\n"
+        "        upload_failures_file.write("
+        '\'{"counts": {"500": 1}, "cases": [], "truncated": true}\')\n'
         "sys.exit(3)\n"
     )
     monkeypatch.setenv("PYTHONPATH", str(module_dir))
@@ -254,7 +352,13 @@ def test_run_reports_a_live_scheduled_module(
     assert finish["started_at"] == start["started_at"]
     assert finish["exit_code"] == 3
     assert finish["failure"] == {"reason": "filesystem", "message": "disk"}
-    assert not Path(job_health.os.environ["SIMBOARD_JOB_STATUS_FILE"]).exists()
+    assert finish["upload_failures"] == {
+        "counts": {"500": 1},
+        "cases": [],
+        "truncated": True,
+    }
+    for env in ("SIMBOARD_JOB_STATUS_FILE", "SIMBOARD_JOB_UPLOAD_FAILURES_FILE"):
+        assert not Path(job_health.os.environ[env]).exists()
 
 
 @pytest.mark.parametrize(

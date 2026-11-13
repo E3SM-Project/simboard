@@ -19,6 +19,7 @@ from app.features.ingestion.enums import (
     ScheduledJobFailureReason,
     ScheduledJobHealth,
     ScheduledJobRunStatus,
+    ScheduledJobUploadFailureCategory,
 )
 from app.features.ingestion.models import FAILURE_MESSAGE_MAX_LENGTH
 
@@ -31,6 +32,10 @@ SCHEDULED_JOB_ID_PATTERN = r"^[a-z0-9][a-z0-9_-]{0,99}$"
 # One year keeps derived deadlines within datetime range.
 SCHEDULED_JOB_MAX_THRESHOLD_MINUTES = 525_600
 ScheduledJobScanMode = Literal["staging", "archive", "diagnostics"]
+UPLOAD_FAILURE_CASES_MAX = 50
+UPLOAD_FAILURE_MESSAGE_MAX_LENGTH = 200
+# Failure counts are keyed by HTTP status, or "network" for errors and timeouts.
+UploadFailureKey = Annotated[str, Field(pattern=r"^(?:network|[1-5]\d\d)$")]
 
 
 class IngestionExecutionSummary(BaseModel):
@@ -464,6 +469,34 @@ class ScheduledJobFailure(BaseModel):
     transient: bool | None = None
 
 
+class ScheduledJobUploadFailure(BaseModel):
+    """One case upload that failed after retries."""
+
+    case_path: Annotated[str, Field(max_length=4096)]
+    # None for network errors and timeouts.
+    status_code: Annotated[int, Field(ge=100, le=599)] | None
+    attempts: Annotated[int, Field(ge=0)]
+    message: Annotated[str, Field(max_length=UPLOAD_FAILURE_MESSAGE_MAX_LENGTH)]
+
+
+class ScheduledJobUploadFailures(BaseModel):
+    """Complete failure counts with a bounded list of failed cases."""
+
+    counts: dict[UploadFailureKey, Annotated[int, Field(gt=0)]]
+    cases: Annotated[
+        list[ScheduledJobUploadFailure], Field(max_length=UPLOAD_FAILURE_CASES_MAX)
+    ]
+    truncated: bool
+
+    @model_validator(mode="after")
+    def _require_cases_to_match_counts(self) -> "ScheduledJobUploadFailures":
+        total = sum(self.counts.values())
+        if total < len(self.cases) or self.truncated != (total > len(self.cases)):
+            raise ValueError("Counts must cover all cases; truncated when more failed.")
+
+        return self
+
+
 class ScheduledJobRunFinish(ScheduledJobReport):
     """Finish report; the start time lets a lost start report be recovered."""
 
@@ -471,6 +504,7 @@ class ScheduledJobRunFinish(ScheduledJobReport):
     finished_at: AwareDatetime
     exit_code: Annotated[int, Field(ge=0, le=255)]
     failure: ScheduledJobFailure | None = None
+    upload_failures: ScheduledJobUploadFailures | None = None
 
     @model_validator(mode="after")
     def _require_failure_for_nonzero_exit(self) -> "ScheduledJobRunFinish":
@@ -494,6 +528,7 @@ class ScheduledJobRunRead(BaseModel):
     failure_message: str | None
     failure_status_code: int | None
     failure_transient: bool | None
+    upload_failures: ScheduledJobUploadFailures | None
 
 
 class ScheduledJobRead(BaseModel):
@@ -512,7 +547,22 @@ class ScheduledJobHealthRead(ScheduledJobRead):
     latest_completed_run: ScheduledJobRunRead | None
     active_run: ScheduledJobRunRead | None
     active_run_count: int
+    # Runs that end before the upload step report no uploads, so the latest run
+    # that reached it holds the cases whose uploads still fail.
+    latest_upload_run: ScheduledJobRunRead | None
+
+
+class ScheduledJobUploadFailureDailyCount(BaseModel):
+    """Failed case uploads on one UTC day, by machine and category."""
+
+    day: date
+    machine_name: str
+    category: ScheduledJobUploadFailureCategory
+    count: int
 
 
 class ScheduledJobHealthResponse(BaseModel):
     jobs: list[ScheduledJobHealthRead] = Field(default_factory=list)
+    upload_failure_daily_counts: list[ScheduledJobUploadFailureDailyCount] = Field(
+        default_factory=list
+    )
