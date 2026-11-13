@@ -562,7 +562,8 @@ def _send_hpc_upload_request(
         raise _url_request_error(exc) from exc
     except TimeoutError as exc:
         raise _timeout_request_error() from exc
-    except ConnectionError as exc:
+    # urllib wraps only send errors; response read errors arrive as OSError.
+    except OSError as exc:
         raise _connection_request_error(exc) from exc
 
 

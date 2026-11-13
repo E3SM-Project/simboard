@@ -32,7 +32,11 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _log_event,
     _record_successful_case,
 )
-from app.scripts.ingestion.job_health import UploadFailure, record_upload_failures
+from app.scripts.ingestion.job_health import (
+    UploadFailure,
+    record_failure,
+    record_upload_failures,
+)
 
 
 def _validate_run_preconditions(
@@ -226,6 +230,7 @@ def _handle_ingest_run(
         except (IngestionRequestError, OSError, tarfile.TarError) as exc:
             # Request errors are retried inside; these come from preparing the case.
             upload_attempted = False
+            record_failure("filesystem", f"{type(exc).__name__}: {exc}")
             result = {
                 "ok": False,
                 "attempts": 0,
