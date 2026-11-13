@@ -332,6 +332,8 @@ test('admins see every section with status counts, details, and empty states', a
   assert.match(html, /href="\/cases\/chrysalis\/ac.user\/v3.LR.piControl"/);
   assert.match(html, /2 new executions/);
   assert.match(html, /No executions are currently rejected\./);
+  // Count pills are hidden at zero; the empty state says so.
+  assert.doesNotMatch(html, /0 rejected/);
 });
 
 test('job type and site filters narrow sections and offer a reset', async () => {

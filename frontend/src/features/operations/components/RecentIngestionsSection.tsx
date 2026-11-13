@@ -38,7 +38,7 @@ export const RecentIngestionsSection = ({
     description="New executions by UTC day, machine, and case."
     icon={Database}
     query={query}
-    badge={(data) => <CountPill>{data.totals.new_executions} new executions</CountPill>}
+    badge={(data) => <CountPill count={data.totals.new_executions} label="new executions" />}
   >
     {(data) => {
       const rows = [...data.rows].sort(

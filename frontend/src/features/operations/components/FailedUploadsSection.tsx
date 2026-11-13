@@ -48,7 +48,10 @@ export const FailedUploadsSection = ({
     icon={CloudAlert}
     query={query}
     badge={(data) => (
-      <CountPill>{getFailedUploads(filterJobs(data.jobs, jobType)).total} failed uploads</CountPill>
+      <CountPill
+        count={getFailedUploads(filterJobs(data.jobs, jobType)).total}
+        label="failed uploads"
+      />
     )}
   >
     {(data) => {

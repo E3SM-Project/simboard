@@ -98,14 +98,16 @@ const getErrorDetail = (error: unknown) => {
   return typeof detail === 'string' ? detail : null;
 };
 
-export const CountPill = ({ children }: { children: ReactNode }) => (
-  <span
-    aria-live="polite"
-    className="whitespace-nowrap rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground"
-  >
-    {children}
-  </span>
-);
+/** Section total; hidden at zero because the empty state already says so. */
+export const CountPill = ({ count, label }: { count: number; label: string }) =>
+  count > 0 ? (
+    <span
+      aria-live="polite"
+      className="whitespace-nowrap rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground"
+    >
+      {count} {label}
+    </span>
+  ) : null;
 
 interface OperationsTableProps {
   columns: { label: string; className?: string }[];

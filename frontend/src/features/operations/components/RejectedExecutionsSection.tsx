@@ -37,7 +37,7 @@ export const RejectedExecutionsSection = ({ query, filtered }: RejectedExecution
     description="Executions currently rejected as incomplete or invalid by the latest validation."
     icon={FileWarning}
     query={query}
-    badge={(data) => <CountPill>{data.total} rejected</CountPill>}
+    badge={(data) => <CountPill count={data.total} label="rejected" />}
   >
     {(data) => (
       <div className="space-y-2">
