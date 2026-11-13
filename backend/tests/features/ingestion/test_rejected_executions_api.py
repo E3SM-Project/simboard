@@ -1,5 +1,7 @@
 """Rejected execution listing, authorization, filters, and limits."""
 
+from datetime import datetime, timezone
+
 import pytest
 
 from app.api import rejected_executions
@@ -13,6 +15,8 @@ from app.main import app
 
 REJECTED_URL = f"{API_BASE}/ingestions/rejected-executions"
 ERROR = {"field": "case_name", "code": "missing", "message": "case_name is required."}
+# First-seen day per execution ID; listings are newest first.
+FIRST_SEEN_DAY = {"1": 1, "2": 3, "3": 4, "4": 2}
 
 
 @pytest.fixture
@@ -63,6 +67,9 @@ def results(db, reader):
                 execution_id=execution_id,
                 outcome=outcome,
                 errors=errors,
+                created_at=datetime(
+                    2026, 11, FIRST_SEEN_DAY[execution_id], tzinfo=timezone.utc
+                ),
             )
         )
     db.commit()
@@ -94,14 +101,14 @@ def test_rejected_executions_require_ingestion_access(
     assert response.status_code == status_code, response.text
 
 
-def test_lists_only_current_rejections_in_order(client, db, results):
+def test_lists_only_current_rejections_newest_first(client, db, results):
     response = client.get(REJECTED_URL)
     assert response.status_code == 200, response.text
     assert response.json() == {
         "executions": [
+            _rejected("perlmutter", "user/case-b", "2", "rejected_invalid", [ERROR]),
             _rejected("chrysalis", "user/case-c", "4", "rejected_invalid", [ERROR]),
             _rejected("perlmutter", "user/case-a", "1", "rejected_incomplete", []),
-            _rejected("perlmutter", "user/case-b", "2", "rejected_invalid", [ERROR]),
         ],
         "total": 3,
     }
@@ -117,9 +124,9 @@ def test_lists_only_current_rejections_in_order(client, db, results):
 @pytest.mark.parametrize(
     "filters,execution_ids",
     [
-        ({"machine_name": "pm-cpu"}, ["1", "2"]),
+        ({"machine_name": "pm-cpu"}, ["2", "1"]),
         ({"site_name": "LCRC"}, ["4"]),
-        ({"site_name": "nersc"}, ["1", "2"]),
+        ({"site_name": "nersc"}, ["2", "1"]),
         ({"site_name": "LCRC", "machine_name": "perlmutter"}, []),
     ],
 )

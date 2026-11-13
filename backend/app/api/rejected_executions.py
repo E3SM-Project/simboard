@@ -48,7 +48,7 @@ def get_rejected_executions(
     machine_name: str | None = None,
     site_name: str | None = None,
 ) -> RejectedExecutionsResponse:
-    """Return up to 200 currently rejected executions and the full count."""
+    """Return up to 200 currently rejected executions, newest first, and the full count."""
     _require_ingestion_state_access(user, action="read rejected executions")
     machine_ids = _resolve_machine_ids(db, machine_name, site_name)
 
@@ -62,7 +62,9 @@ def get_rejected_executions(
 
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     rows = db.execute(
+        # Newest first, so one machine's backlog cannot hide new rejections.
         query.order_by(
+            ExecutionDiscoveryResult.created_at.desc(),
             Machine.name,
             ExecutionDiscoveryResult.case_identity,
             ExecutionDiscoveryResult.execution_id,

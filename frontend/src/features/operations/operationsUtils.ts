@@ -150,13 +150,13 @@ export interface DailyFailureRow {
 /** Pivot daily counts in the window to one row per day and machine, newest first. */
 export const getDailyFailureRows = (
   counts: UploadFailureDailyCount[],
-  window: { startDate: string; endDate: string },
+  dateWindow: { startDate: string; endDate: string },
 ) => {
   const rowsByKey = new Map<string, DailyFailureRow>();
   const present = new Set<UploadFailureCategory>();
 
   for (const { day, machine_name, category, count } of counts) {
-    if (day < window.startDate || day >= window.endDate) continue;
+    if (day < dateWindow.startDate || day >= dateWindow.endDate) continue;
 
     const key = `${day}|${machine_name}`;
     const row = rowsByKey.get(key) ?? { day, machineName: machine_name, counts: {}, total: 0 };

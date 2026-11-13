@@ -117,12 +117,7 @@ test('date windows cover whole UTC days through today', () => {
 });
 
 test('never-reported, stale, and failed jobs are distinct statuses', () => {
-  assert.deepEqual(JOBS.map(utils.getJobStatus), [
-    'healthy',
-    'failed',
-    'stale',
-    'never_reported',
-  ]);
+  assert.deepEqual(JOBS.map(utils.getJobStatus), ['healthy', 'failed', 'stale', 'never_reported']);
   assert.equal(
     utils.getJobDetails(JOBS[1]),
     'API request failed (HTTP 503): State request failed.',
@@ -137,7 +132,10 @@ test('never-reported, stale, and failed jobs are distinct statuses', () => {
   // An archive job that reported recently is stale only because its run overran.
   assert.equal(
     utils.getJobDetails(
-      job('x-archive', 'archive', 'stale', { max_silence_minutes: 1560, max_duration_minutes: 720 }),
+      job('x-archive', 'archive', 'stale', {
+        max_silence_minutes: 1560,
+        max_duration_minutes: 720,
+      }),
       now,
     ),
     'Run exceeded 12 h without finishing',
@@ -166,9 +164,10 @@ test('failed uploads use full counts and flag truncated case lists', () => {
     ],
   );
   assert.deepEqual(truncatedJobs, [{ jobId: 'chrysalis-staging', shown: 2, total: 3 }]);
-  assert.deepEqual(utils.filterJobs(JOBS, 'archive').map((item) => item.id), [
-    'chrysalis-archive',
-  ]);
+  assert.deepEqual(
+    utils.filterJobs(JOBS, 'archive').map((item) => item.id),
+    ['chrysalis-archive'],
+  );
 });
 
 test('daily failure counts are limited to the window and pivoted by category', () => {
@@ -239,9 +238,9 @@ const renderPage = async ({ role, query = '', seed }) => {
   return { html, client };
 };
 
-const seedData = (client, keys, siteName) => {
+const seedData = (client, keys, siteName, jobs = JOBS) => {
   const { startDate, endDate } = utils.utcDateWindow(7);
-  client.setQueryData(keys.jobs(siteName), { jobs: JOBS, upload_failure_daily_counts: [] });
+  client.setQueryData(keys.jobs(siteName), { jobs, upload_failure_daily_counts: [] });
   client.setQueryData(keys.summary(siteName, startDate, endDate), {
     rows: [
       {
@@ -293,15 +292,26 @@ test('non-admins see an access notice and the page creates no data queries', asy
 });
 
 test('admins see every section with status counts, details, and empty states', async () => {
-  const { html } = await renderPage({ role: 'admin', seed: (client, keys) => seedData(client, keys) });
-  for (const heading of ['Job Health', 'Failed Uploads', 'Recent Ingestions', 'Rejected Executions'])
+  const { html } = await renderPage({
+    role: 'admin',
+    seed: (client, keys) => seedData(client, keys),
+  });
+  for (const heading of [
+    'Job Health',
+    'Failed Uploads',
+    'Recent Ingestions',
+    'Rejected Executions',
+  ])
     assert.match(html, new RegExp(`<h2[^>]*>${heading}</h2>`));
 
   const tile = (label) => html.match(new RegExp(`<dt[^>]*>${label}</dt><dd[^>]*>(\\d+)</dd>`))[1];
-  assert.deepEqual(
-    ['Healthy', 'Running', 'Failed', 'Stale', 'Never reported'].map(tile),
-    ['1', '0', '1', '1', '1'],
-  );
+  assert.deepEqual(['Healthy', 'Running', 'Failed', 'Stale', 'Never reported'].map(tile), [
+    '1',
+    '0',
+    '1',
+    '1',
+    '1',
+  ]);
   assert.match(html, /API request failed \(HTTP 503\): State request failed\./);
   assert.match(html, /3 failed uploads/);
   assert.match(html, /Showing 2 of 3 failed cases for/);
@@ -314,8 +324,15 @@ test('admins see every section with status counts, details, and empty states', a
 test('job type and site filters narrow sections and offer a reset', async () => {
   const { html, client } = await renderPage({
     role: 'admin',
-    query: '?job_type=diagnostics&site=LCRC',
-    seed: (queryClient, keys) => seedData(queryClient, keys, 'LCRC'),
+    query: '?job_type=archive&site=LCRC',
+    // The API filters by site, so seed only LCRC (chrysalis) jobs.
+    seed: (queryClient, keys) =>
+      seedData(
+        queryClient,
+        keys,
+        'LCRC',
+        JOBS.filter((item) => item.machine_name === 'chrysalis'),
+      ),
   });
   assert.deepEqual(
     client
@@ -324,9 +341,33 @@ test('job type and site filters narrow sections and offer a reset', async () => 
       .map((query) => query.queryKey[2]),
     ['LCRC', 'LCRC', 'LCRC'],
   );
-  assert.match(html, /perlmutter-diagnostics/);
-  assert.doesNotMatch(html, /chrysalis-archive/);
+  assert.match(html, /chrysalis-archive/);
+  assert.doesNotMatch(html, /chrysalis-staging/);
   assert.match(html, /No failed uploads match these filters\./);
   assert.match(html, /No rejected executions match these filters\./);
   assert.match(html, /Reset filters/);
+});
+
+test('sections show the API error detail when loading fails', async () => {
+  const { OperationsSection } = await server.ssrLoadModule(
+    '/src/features/operations/components/OperationsSection.tsx',
+  );
+  const { Activity } = await server.ssrLoadModule('lucide-react');
+  const html = renderToStaticMarkup(
+    createElement(OperationsSection, {
+      title: 'Job Health',
+      description: 'Latest status.',
+      icon: Activity,
+      query: {
+        data: undefined,
+        isError: true,
+        isFetching: false,
+        refetch: () => {},
+        error: { isAxiosError: true, response: { data: { detail: "Site 'X' not found." } } },
+      },
+      children: () => null,
+    }),
+  );
+  assert.match(html, /Could not load job health\. Site &#x27;X&#x27; not found\./);
+  assert.match(html, /Retry/);
 });

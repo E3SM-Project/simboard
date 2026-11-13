@@ -59,10 +59,10 @@ const OperationsDashboard = ({ sites }: OperationsDashboardPageProps) => {
   const { jobType, siteName, rangeDays } = parseOperationsFilters(searchParams, siteNames);
   // Recompute each render so the window advances past UTC midnight; query keys
   // change only when its dates do.
-  const window = utcDateWindow(rangeDays);
+  const dateWindow = utcDateWindow(rangeDays);
 
   const jobsQuery = useJobHealth(siteName);
-  const summaryQuery = useIngestionSummary(siteName, window.startDate, window.endDate);
+  const summaryQuery = useIngestionSummary(siteName, dateWindow.startDate, dateWindow.endDate);
   const rejectedQuery = useRejectedExecutions(siteName);
 
   const setFilter = (key: string, value: string, defaultValue = ALL) => {
@@ -148,7 +148,7 @@ const OperationsDashboard = ({ sites }: OperationsDashboardPageProps) => {
       <FailedUploadsSection
         query={jobsQuery}
         jobType={jobType}
-        window={window}
+        dateWindow={dateWindow}
         rangeDays={rangeDays}
         onResetFilters={resetJobFilters}
       />

@@ -28,7 +28,7 @@ const CASE_COLUMNS = [
 interface FailedUploadsSectionProps {
   query: UseQueryResult<ScheduledJobHealthResponse>;
   jobType?: JobType;
-  window: { startDate: string; endDate: string };
+  dateWindow: { startDate: string; endDate: string };
   rangeDays: number;
   onResetFilters?: () => void;
 }
@@ -36,7 +36,7 @@ interface FailedUploadsSectionProps {
 export const FailedUploadsSection = ({
   query,
   jobType,
-  window,
+  dateWindow,
   rangeDays,
   onResetFilters,
 }: FailedUploadsSectionProps) => (
@@ -51,7 +51,7 @@ export const FailedUploadsSection = ({
   >
     {(data) => {
       const { rows, truncatedJobs } = getFailedUploads(filterJobs(data.jobs, jobType));
-      const daily = getDailyFailureRows(data.upload_failure_daily_counts, window);
+      const daily = getDailyFailureRows(data.upload_failure_daily_counts, dateWindow);
       const dailyColumns = [
         { label: 'Date (UTC)' },
         { label: 'Machine' },

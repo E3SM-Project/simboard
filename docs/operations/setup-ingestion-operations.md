@@ -318,9 +318,10 @@ never reported appear separately from `stale` and `failed` jobs.
 
 `GET /api/v1/ingestions/rejected-executions` (administrators and service
 accounts) returns up to 200 executions that the latest validation rejected as
-incomplete or invalid, with their errors and the full `total`. It accepts
-`machine_name` and `site_name`, like `GET /api/v1/ingestions/jobs` and
-`GET /api/v1/ingestions/summary`.
+incomplete or invalid, newest first, with their errors and the full `total`. It
+accepts `machine_name` and `site_name`, like `GET /api/v1/ingestions/jobs` and
+`GET /api/v1/ingestions/summary`. A rejection is updated only when a scan visits
+its execution again, so one whose directory was removed stays listed.
 
 ### Reference: configuration files and variables
 

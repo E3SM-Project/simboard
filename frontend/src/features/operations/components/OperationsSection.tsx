@@ -1,4 +1,5 @@
 import type { UseQueryResult } from '@tanstack/react-query';
+import axios from 'axios';
 import type { LucideIcon } from 'lucide-react';
 import { type ReactNode, useId } from 'react';
 
@@ -19,7 +20,7 @@ interface OperationsSectionProps<T> {
   title: string;
   description: string;
   icon: LucideIcon;
-  query: Pick<UseQueryResult<T>, 'data' | 'isError' | 'isFetching' | 'refetch'>;
+  query: Pick<UseQueryResult<T>, 'data' | 'error' | 'isError' | 'isFetching' | 'refetch'>;
   badge?: (data: T) => ReactNode;
   children: (data: T) => ReactNode;
   className?: string;
@@ -37,6 +38,7 @@ export const OperationsSection = <T,>({
 }: OperationsSectionProps<T>) => {
   const headingId = useId();
   const { data, isError, isFetching } = query;
+  const errorDetail = getErrorDetail(query.error);
   const retry = (
     <Button type="button" size="sm" variant="outline" onClick={() => void query.refetch()}>
       Retry
@@ -80,7 +82,9 @@ export const OperationsSection = <T,>({
         children(data)
       ) : isError ? (
         <Alert variant="error" className="rounded-xl p-6 text-center">
-          <p className="mb-3">Could not load {title.toLowerCase()}.</p>
+          <p className="mb-3">
+            Could not load {title.toLowerCase()}.{errorDetail ? ` ${errorDetail}` : null}
+          </p>
           {retry}
         </Alert>
       ) : (
@@ -88,6 +92,13 @@ export const OperationsSection = <T,>({
       )}
     </section>
   );
+};
+
+/** Return the API's message, such as "Site 'X' not found.", when it sent one. */
+const getErrorDetail = (error: unknown) => {
+  const detail = axios.isAxiosError(error) ? error.response?.data?.detail : undefined;
+
+  return typeof detail === 'string' ? detail : null;
 };
 
 export const CountPill = ({ children }: { children: ReactNode }) => (
