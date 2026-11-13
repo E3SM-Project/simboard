@@ -1139,6 +1139,45 @@ class TestListCases:
             == data["recentCases"][0]["latestExecution"]
         )
 
+    def test_has_diagnostics_lists_only_cases_with_diagnostic_links(
+        self, client, db: Session
+    ):
+        with_diagnostic = _create_case(db, "with_diagnostic")
+        with_other_link = _create_case(db, "with_other_link")
+        _create_case(db, "without_links")
+        db.add_all(
+            [
+                ExternalLink(
+                    case_id=with_diagnostic.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/diagnostic-a",
+                ),
+                ExternalLink(
+                    case_id=with_diagnostic.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/diagnostic-b",
+                ),
+                ExternalLink(
+                    case_id=with_other_link.id,
+                    kind=ExternalLinkKind.DOCS,
+                    url="https://example.com/docs",
+                ),
+            ]
+        )
+        db.commit()
+
+        everything = client.get(f"{API_BASE}/cases", params={"page_size": 100}).json()
+        filtered = client.get(
+            f"{API_BASE}/cases",
+            params={"has_diagnostics": True, "page_size": 1, "sort_by": "name"},
+        ).json()
+
+        assert {"with_other_link", "without_links"} <= {
+            item["name"] for item in everything["items"]
+        }
+        assert filtered["total"] == 1
+        assert [item["name"] for item in filtered["items"]] == ["with_diagnostic"]
+
 
 class TestListCaseNames:
     def test_endpoint_returns_empty_list(self, client):
