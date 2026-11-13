@@ -44,6 +44,7 @@ from app.scripts.ingestion.archive_client import (
     _build_archive_checkpoints_endpoint_url,
     _build_discovery_results_endpoint_url,
     _build_state_endpoint_url,
+    _connection_request_error,
     _fetch_archive_checkpoints,
     _fetch_ingestion_state,
     _http_request_error,
@@ -561,6 +562,8 @@ def _send_hpc_upload_request(
         raise _url_request_error(exc) from exc
     except TimeoutError as exc:
         raise _timeout_request_error() from exc
+    except ConnectionError as exc:
+        raise _connection_request_error(exc) from exc
 
 
 if __name__ == "__main__":

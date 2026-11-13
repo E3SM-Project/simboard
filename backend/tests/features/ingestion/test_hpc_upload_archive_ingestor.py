@@ -508,6 +508,33 @@ def test_post_hpc_upload_ingestion_request_handles_timeout(
         )
 
 
+def test_post_hpc_upload_ingestion_request_retries_dropped_connections(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    case_dir = tmp_path / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+
+    monkeypatch.setattr(
+        upload_ingestor_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ConnectionResetError("reset")),
+    )
+
+    with pytest.raises(IngestionRequestError, match="Connection error: reset") as exc:
+        _post_hpc_upload_ingestion_request(
+            "http://backend:8000/api/v1/ingestions/from-hpc-upload",
+            "token",
+            str(case_dir),
+            "pm",
+            processed_execution_ids=["100.1-1"],
+            timeout_seconds=12,
+        )
+
+    assert exc.value.status_code is None
+    assert exc.value.transient is True
+
+
 def test_run_ingestor_uploads_once_then_second_run_is_noop(
     tmp_path: Path,
     monkeypatch,

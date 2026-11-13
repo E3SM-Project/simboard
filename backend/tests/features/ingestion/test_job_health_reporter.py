@@ -168,7 +168,7 @@ def test_upload_failures_keep_complete_counts_and_bounded_cases(
     }
     assert report["cases"][1] == {
         **rejected,
-        "message": "HTTP 413: <html> <title>Too Large</title> </html>",
+        "message": "HTTP 413: Too Large",
     }
 
 
@@ -305,7 +305,8 @@ def fake_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
         "path = os.environ.get('SIMBOARD_JOB_UPLOAD_FAILURES_FILE')\n"
         "if path:\n"
         "    with open(path, 'w') as upload_failures_file:\n"
-        '        upload_failures_file.write(\'{"counts": {"500": 1}}\')\n'
+        "        upload_failures_file.write("
+        '\'{"counts": {"500": 1}, "cases": [], "truncated": true}\')\n'
         "sys.exit(3)\n"
     )
     monkeypatch.setenv("PYTHONPATH", str(module_dir))
@@ -328,7 +329,11 @@ def test_run_reports_a_live_scheduled_module(
     assert finish["started_at"] == start["started_at"]
     assert finish["exit_code"] == 3
     assert finish["failure"] == {"reason": "filesystem", "message": "disk"}
-    assert finish["upload_failures"] == {"counts": {"500": 1}}
+    assert finish["upload_failures"] == {
+        "counts": {"500": 1},
+        "cases": [],
+        "truncated": True,
+    }
     for env in ("SIMBOARD_JOB_STATUS_FILE", "SIMBOARD_JOB_UPLOAD_FAILURES_FILE"):
         assert not Path(job_health.os.environ[env]).exists()
 

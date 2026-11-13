@@ -101,6 +101,15 @@ def _timeout_request_error() -> IngestionRequestError:
     )
 
 
+def _connection_request_error(exc: ConnectionError) -> IngestionRequestError:
+    """Convert a connection dropped while reading the response."""
+    return IngestionRequestError(
+        f"Connection error: {exc}",
+        status_code=None,
+        transient=True,
+    )
+
+
 def _checkpoint_request_error(
     exc: urllib.error.URLError | TimeoutError,
 ) -> IngestionRequestError:
@@ -523,6 +532,8 @@ def _post_ingestion_request(
         raise _url_request_error(exc) from exc
     except TimeoutError as exc:
         raise _timeout_request_error() from exc
+    except ConnectionError as exc:
+        raise _connection_request_error(exc) from exc
 
 
 def _persist_archive_checkpoints_with_retries(

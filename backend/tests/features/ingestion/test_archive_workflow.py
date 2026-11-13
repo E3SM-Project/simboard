@@ -1,6 +1,7 @@
 """Tests for shared archive ingestion workflow phases."""
 
 import json
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import replace
 from io import StringIO
 from pathlib import Path
@@ -198,34 +199,49 @@ def test_ingest_run_records_failed_uploads_for_the_job_report(
 ) -> None:
     upload_failures_file = tmp_path / "upload-failures.json"
     monkeypatch.setenv("SIMBOARD_JOB_UPLOAD_FAILURES_FILE", str(upload_failures_file))
-    rejected, ingested, dropped, unreadable = (
+    rejected, ingested, dropped, unreadable, missing = (
         _candidate(tmp_path / name)
-        for name in ("rejected", "ingested", "dropped", "unreadable")
+        for name in ("rejected", "ingested", "dropped", "unreadable", "missing")
     )
-    errors: dict[str, Exception] = {
+    upload_errors = {
         rejected.case_path: IngestionRequestError(
-            "HTTP 413: <html>Request Entity Too Large</html>",
+            "HTTP 413: <html><title>Request Entity Too Large</title></html>",
             status_code=413,
             transient=False,
         ),
-        dropped.case_path: ConnectionResetError("Remote end closed connection"),
-        # Local archive errors are not upload failures.
+        dropped.case_path: IngestionRequestError(
+            "Connection error: Remote end closed connection",
+            status_code=None,
+            transient=True,
+        ),
+    }
+    # Errors preparing a case archive are not upload failures.
+    preparation_errors: dict[str, Exception] = {
         unreadable.case_path: PermissionError("denied"),
+        missing.case_path: IngestionRequestError(
+            "Case path is not a directory", status_code=None, transient=False
+        ),
     }
 
     def post(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
-        if args[2] in errors:
-            raise errors[args[2]]
+        if args[2] in upload_errors:
+            raise upload_errors[args[2]]
         return {"status_code": 201, "body": {"created_count": 1}}
 
+    def prepare(candidate: IngestionCandidate) -> AbstractContextManager[Any]:
+        if candidate.case_path in preparation_errors:
+            raise preparation_errors[candidate.case_path]
+        return nullcontext(post)
+
     exit_code = _handle_ingest_run(
-        [rejected, ingested, dropped, unreadable],
+        [rejected, ingested, dropped, unreadable, missing],
         _config(tmp_path),
         "http://backend:8000/api/v1/ingestions/from-path",
         _fresh_state(),
         sleep_fn=lambda *_: None,
         post_request_fn=post,
         log_event_fn=lambda *_args: None,
+        candidate_preparer=prepare,
     )
 
     assert exit_code == 1
@@ -236,13 +252,13 @@ def test_ingest_run_records_failed_uploads_for_the_job_report(
                 "case_path": rejected.case_path,
                 "status_code": 413,
                 "attempts": 1,
-                "message": "HTTP 413: <html>Request Entity Too Large</html>",
+                "message": "HTTP 413: Request Entity Too Large",
             },
             {
                 "case_path": dropped.case_path,
                 "status_code": None,
-                "attempts": 0,
-                "message": "Remote end closed connection",
+                "attempts": 1,
+                "message": "Connection error: Remote end closed connection",
             },
         ],
         "truncated": False,

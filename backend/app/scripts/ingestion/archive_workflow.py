@@ -205,7 +205,7 @@ def _handle_ingest_run(
         candidates, desc="Ingesting cases", unit="case", disable=not sys.stderr.isatty()
     ):
         result: IngestionAttemptResult
-        request_failed = True
+        upload_attempted = True
         try:
             submission = (
                 nullcontext(post_request_fn)
@@ -224,9 +224,8 @@ def _handle_ingest_run(
                     post_request_fn=submit_case,
                 )
         except (IngestionRequestError, OSError, tarfile.TarError) as exc:
-            # A dropped response connection escapes urllib as ConnectionError;
-            # other errors come from preparing the case archive, not its upload.
-            request_failed = isinstance(exc, (IngestionRequestError, ConnectionError))
+            # Request errors are retried inside; these come from preparing the case.
+            upload_attempted = False
             result = {
                 "ok": False,
                 "attempts": 0,
@@ -268,7 +267,7 @@ def _handle_ingest_run(
                 "error": result["error"],
             },
         )
-        if request_failed:
+        if upload_attempted:
             upload_failures.append(
                 {
                     "case_path": candidate.case_path,

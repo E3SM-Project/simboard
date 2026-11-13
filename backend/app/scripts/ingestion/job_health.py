@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -110,13 +111,7 @@ def record_upload_failures(failures: list[UploadFailure]) -> None:
         for failure in failures
     )
     cases = [
-        {
-            **failure,
-            # Redact before truncating so no token prefix survives the cut.
-            "message": _redact(" ".join(failure["message"].split()))[
-                :UPLOAD_FAILURE_MESSAGE_MAX_LENGTH
-            ],
-        }
+        {**failure, "message": _upload_failure_message(failure["message"])}
         for failure in failures[:UPLOAD_FAILURE_CASES_MAX]
     ]
     report = {
@@ -280,6 +275,14 @@ def _read_upload_failures() -> dict[str, Any] | None:
         return None
 
     return recorded if isinstance(recorded, dict) else None
+
+
+def _upload_failure_message(message: str) -> str:
+    # Reduce proxy error pages to their text on one line.
+    text = " ".join(re.sub(r"<[^>]*>", " ", message).split())
+
+    # Redact before truncating so no token prefix survives the cut.
+    return _redact(text)[:UPLOAD_FAILURE_MESSAGE_MAX_LENGTH]
 
 
 def _redact(message: str) -> str:

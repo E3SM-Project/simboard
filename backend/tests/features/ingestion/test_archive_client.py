@@ -848,6 +848,7 @@ def test_post_ingestion_request_selects_discovered_execution_ids(
         ),
         (urllib.error.URLError("network down"), "URL error: network down", None),
         (TimeoutError(), "Request timed out", None),
+        (ConnectionResetError("reset"), "Connection error: reset", None),
     ],
 )
 def test_post_ingestion_request_maps_transport_errors(
