@@ -75,8 +75,7 @@ def record_failure(
 
     failure = {
         "reason": reason,
-        # Redact before truncating so no token prefix survives the cut.
-        "message": _redact(message)[:MESSAGE_MAX_LENGTH],
+        "message": _clean_message(message, MESSAGE_MAX_LENGTH),
         "status_code": status_code,
         "transient": transient,
     }
@@ -114,7 +113,12 @@ def record_upload_failures(failures: list[UploadFailure]) -> None:
         for failure in failures
     )
     cases = [
-        {**failure, "message": _upload_failure_message(failure["message"])}
+        {
+            **failure,
+            "message": _clean_message(
+                failure["message"], UPLOAD_FAILURE_MESSAGE_MAX_LENGTH
+            ),
+        }
         for failure in failures[:UPLOAD_FAILURE_CASES_MAX]
     ]
     report = {
@@ -280,12 +284,12 @@ def _read_upload_failures() -> dict[str, Any] | None:
     return recorded if isinstance(recorded, dict) else None
 
 
-def _upload_failure_message(message: str) -> str:
+def _clean_message(message: str, max_length: int) -> str:
     # Reduce proxy error pages to their text on one line.
     text = " ".join(re.sub(r"<[^>]*>", " ", message).split())
 
     # Redact before truncating so no token prefix survives the cut.
-    return _redact(text)[:UPLOAD_FAILURE_MESSAGE_MAX_LENGTH]
+    return _redact(text)[:max_length]
 
 
 def _redact(message: str) -> str:

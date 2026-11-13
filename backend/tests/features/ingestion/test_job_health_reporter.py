@@ -119,6 +119,19 @@ def test_tokens_are_redacted_before_truncation(monkeypatch, status_file: Path):
     assert message == "x" * 495 + "[reda"
 
 
+def test_failure_messages_reduce_proxy_pages_to_text(status_file: Path):
+    record_request_failure(
+        IngestionRequestError(
+            "HTTP 413: <html>\n<title>413 Request Entity Too Large</title>\n</html>",
+            status_code=413,
+            transient=False,
+        )
+    )
+
+    message = json.loads(status_file.read_text())["message"]
+    assert message == "HTTP 413: 413 Request Entity Too Large"
+
+
 @pytest.mark.parametrize(
     ("exc", "reason"),
     [(PermissionError("denied"), "filesystem"), (ValueError(), "unexpected")],
