@@ -280,9 +280,10 @@ if [[ $job_reporting == true ]]; then
   SIMBOARD_JOB_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   SIMBOARD_JOB_SCAN_MODE="${scan_mode}"
   SIMBOARD_JOB_STATUS_FILE="${SIMBOARD_WORKDIR}/job-status-${SIMBOARD_JOB_ID//[^a-zA-Z0-9_-]/_}-$$.json"
+  SIMBOARD_JOB_UPLOAD_FAILURES_FILE="${SIMBOARD_WORKDIR}/job-upload-failures-${SIMBOARD_JOB_ID//[^a-zA-Z0-9_-]/_}-$$.json"
   export SIMBOARD_JOB_ID SIMBOARD_JOB_RUN_ID SIMBOARD_JOB_STARTED_AT
-  export SIMBOARD_JOB_SCAN_MODE SIMBOARD_JOB_STATUS_FILE
-  rm -f "${SIMBOARD_JOB_STATUS_FILE}"
+  export SIMBOARD_JOB_SCAN_MODE SIMBOARD_JOB_STATUS_FILE SIMBOARD_JOB_UPLOAD_FAILURES_FILE
+  rm -f "${SIMBOARD_JOB_STATUS_FILE}" "${SIMBOARD_JOB_UPLOAD_FAILURES_FILE}"
   report_job start
 fi
 printf '[%s] invoking %s: module=%s\n' \
@@ -291,6 +292,6 @@ module_exit_code=0
 "${PYTHON_BIN}" -m "${module}" 9>&- || module_exit_code=$?
 if [[ $job_reporting == true ]]; then
   report_job finish --exit-code "${module_exit_code}"
-  rm -f "${SIMBOARD_JOB_STATUS_FILE}"
+  rm -f "${SIMBOARD_JOB_STATUS_FILE}" "${SIMBOARD_JOB_UPLOAD_FAILURES_FILE}"
 fi
 exit "${module_exit_code}"

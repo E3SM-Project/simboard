@@ -1,5 +1,6 @@
 """Tests for shared archive ingestion workflow phases."""
 
+import json
 from dataclasses import replace
 from io import StringIO
 from pathlib import Path
@@ -190,6 +191,62 @@ def test_ingestion_failure_preserves_state_and_records_completion(
     assert state["cases"] == {}
     assert report.ingestion_failure_count == 1
     assert report.ingestion_success_count == 0
+
+
+def test_ingest_run_records_failed_uploads_for_the_job_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    upload_failures_file = tmp_path / "upload-failures.json"
+    monkeypatch.setenv("SIMBOARD_JOB_UPLOAD_FAILURES_FILE", str(upload_failures_file))
+    rejected, ingested, dropped, unreadable = (
+        _candidate(tmp_path / name)
+        for name in ("rejected", "ingested", "dropped", "unreadable")
+    )
+    errors: dict[str, Exception] = {
+        rejected.case_path: IngestionRequestError(
+            "HTTP 413: <html>Request Entity Too Large</html>",
+            status_code=413,
+            transient=False,
+        ),
+        dropped.case_path: ConnectionResetError("Remote end closed connection"),
+        # Local archive errors are not upload failures.
+        unreadable.case_path: PermissionError("denied"),
+    }
+
+    def post(*args: Any, **kwargs: Any) -> IngestionRequestResponse:
+        if args[2] in errors:
+            raise errors[args[2]]
+        return {"status_code": 201, "body": {"created_count": 1}}
+
+    exit_code = _handle_ingest_run(
+        [rejected, ingested, dropped, unreadable],
+        _config(tmp_path),
+        "http://backend:8000/api/v1/ingestions/from-path",
+        _fresh_state(),
+        sleep_fn=lambda *_: None,
+        post_request_fn=post,
+        log_event_fn=lambda *_args: None,
+    )
+
+    assert exit_code == 1
+    assert json.loads(upload_failures_file.read_text()) == {
+        "counts": {"413": 1, "network": 1},
+        "cases": [
+            {
+                "case_path": rejected.case_path,
+                "status_code": 413,
+                "attempts": 1,
+                "message": "HTTP 413: <html>Request Entity Too Large</html>",
+            },
+            {
+                "case_path": dropped.case_path,
+                "status_code": None,
+                "attempts": 0,
+                "message": "Remote end closed connection",
+            },
+        ],
+        "truncated": False,
+    }
 
 
 @pytest.mark.parametrize("interactive", [True, False])

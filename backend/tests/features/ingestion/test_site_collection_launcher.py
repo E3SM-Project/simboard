@@ -513,13 +513,15 @@ def test_launcher_reports_scheduled_live_runs(
         "#!/usr/bin/env bash\n"
         "if [[ $1 == -c ]]; then echo run-123; exit 0; fi\n"
         "if [[ $2 == app.scripts.ingestion.job_health ]]; then\n"
-        '  printf "%s|%s|%s|%s|%s\\n" "${*:3}" "$SIMBOARD_JOB_ID" "$SIMBOARD_JOB_SCAN_MODE" '
-        '"$SIMBOARD_JOB_RUN_ID" "$(cat "$SIMBOARD_JOB_STATUS_FILE" 2>/dev/null)" '
-        '>> "$REPORTS"\n'
+        '  printf "%s|%s|%s|%s|%s|%s\\n" "${*:3}" "$SIMBOARD_JOB_ID" '
+        '"$SIMBOARD_JOB_SCAN_MODE" "$SIMBOARD_JOB_RUN_ID" '
+        '"$(cat "$SIMBOARD_JOB_STATUS_FILE" 2>/dev/null)" '
+        '"$(cat "$SIMBOARD_JOB_UPLOAD_FAILURES_FILE" 2>/dev/null)" >> "$REPORTS"\n'
         '  exit "$REPORTER_EXIT_CODE"\n'
         "fi\n"
         "if [[ -n ${SIMBOARD_JOB_STATUS_FILE:-} ]]; then\n"
         '  printf failure > "$SIMBOARD_JOB_STATUS_FILE"\n'
+        '  printf uploads > "$SIMBOARD_JOB_UPLOAD_FAILURES_FILE"\n'
         "fi\n"
         "exit 3\n",
     )
@@ -561,12 +563,13 @@ def test_launcher_reports_scheduled_live_runs(
     assert result.returncode == 3, result.stderr
     if reported:
         assert reports.read_text().splitlines() == [
-            f"start|chrysalis-job|{scan_mode}|run-123|",
-            f"finish --exit-code 3|chrysalis-job|{scan_mode}|run-123|failure",
+            f"start|chrysalis-job|{scan_mode}|run-123||",
+            f"finish --exit-code 3|chrysalis-job|{scan_mode}|run-123|failure|uploads",
         ]
     else:
         assert not reports.exists()
     assert not list(operations.glob("job-status-*"))
+    assert not list(operations.glob("job-upload-failures-*"))
 
 
 @pytest.mark.parametrize(

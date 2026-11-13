@@ -1,11 +1,12 @@
 """Scheduled job failure details and start/finish health reports.
 
 Ingestion modules call ``record_failure`` to leave the run's first failure in
-``SIMBOARD_JOB_STATUS_FILE``. The site launcher reports the run start and
-finish with ``start`` and ``finish``; NERSC Spin CronJobs wrap their module with
-``run``, which reports live runs when ``SIMBOARD_JOB_ID`` is set and exits with
-the module's exit code. Report failures are logged and never stop ingestion or
-replace its exit code.
+``SIMBOARD_JOB_STATUS_FILE`` and ``record_upload_failures`` to leave the run's
+failed case uploads in ``SIMBOARD_JOB_UPLOAD_FAILURES_FILE``. The site launcher
+reports the run start and finish with ``start`` and ``finish``; NERSC Spin
+CronJobs wrap their module with ``run``, which reports live runs when
+``SIMBOARD_JOB_ID`` is set and exits with the module's exit code. Report
+failures are logged and never stop ingestion or replace its exit code.
 
 Usage:
     python -m app.scripts.ingestion.job_health start
@@ -25,10 +26,11 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import Counter
 from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 from uuid import uuid4
 
 from app.api.version import API_BASE
@@ -41,8 +43,21 @@ from app.scripts.ingestion.archive_ingestor_core import (
 FailureReason = Literal["api_request", "filesystem", "unexpected"]
 
 STATUS_FILE_ENV = "SIMBOARD_JOB_STATUS_FILE"
+UPLOAD_FAILURES_FILE_ENV = "SIMBOARD_JOB_UPLOAD_FAILURES_FILE"
 MESSAGE_MAX_LENGTH = 500
+UPLOAD_FAILURE_CASES_MAX = 50
+UPLOAD_FAILURE_MESSAGE_MAX_LENGTH = 200
 REQUEST_TIMEOUT_SECONDS = 10
+
+
+class UploadFailure(TypedDict):
+    """One case upload that failed after retries."""
+
+    case_path: str
+    # None for network errors and timeouts.
+    status_code: int | None
+    attempts: int
+    message: str
 
 
 def record_failure(
@@ -84,6 +99,38 @@ def record_exception(exc: BaseException, message: str) -> None:
     record_failure("filesystem" if isinstance(exc, OSError) else "unexpected", message)
 
 
+def record_upload_failures(failures: list[UploadFailure]) -> None:
+    """Record complete failure counts and a bounded case list for the finish report."""
+    path = os.environ.get(UPLOAD_FAILURES_FILE_ENV)
+    if not path or not failures:
+        return
+
+    counts = Counter(
+        "network" if failure["status_code"] is None else str(failure["status_code"])
+        for failure in failures
+    )
+    cases = [
+        {
+            **failure,
+            # Redact before truncating so no token prefix survives the cut.
+            "message": _redact(" ".join(failure["message"].split()))[
+                :UPLOAD_FAILURE_MESSAGE_MAX_LENGTH
+            ],
+        }
+        for failure in failures[:UPLOAD_FAILURE_CASES_MAX]
+    ]
+    report = {
+        "counts": dict(counts),
+        "cases": cases,
+        "truncated": len(failures) > UPLOAD_FAILURE_CASES_MAX,
+    }
+    try:
+        with open(path, "w", encoding="utf-8") as upload_failures_file:
+            json.dump(report, upload_failures_file)
+    except OSError:
+        pass
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -109,16 +156,20 @@ def run_module(module: str) -> int:
         return _run_child(module)
 
     run_id = str(uuid4())
-    status_path = Path(tempfile.gettempdir()) / f"simboard-job-status-{run_id}.json"
+    temp_dir = Path(tempfile.gettempdir())
+    status_path = temp_dir / f"simboard-job-status-{run_id}.json"
+    upload_failures_path = temp_dir / f"simboard-job-upload-failures-{run_id}.json"
     os.environ.update(
         SIMBOARD_JOB_RUN_ID=run_id,
         SIMBOARD_JOB_STARTED_AT=_utc_now(),
         SIMBOARD_JOB_STATUS_FILE=str(status_path),
+        SIMBOARD_JOB_UPLOAD_FAILURES_FILE=str(upload_failures_path),
     )
     _report("start")
     exit_code = _run_child(module)
     _report("finish", exit_code)
     status_path.unlink(missing_ok=True)
+    upload_failures_path.unlink(missing_ok=True)
 
     return exit_code
 
@@ -176,6 +227,7 @@ def _send_report(event: str, exit_code: int) -> None:
             finished_at=_utc_now(),
             exit_code=exit_code,
             failure=_read_failure(exit_code),
+            upload_failures=_read_upload_failures(),
         )
 
     base_url = os.environ["SIMBOARD_API_BASE_URL"].rstrip("/")
@@ -216,6 +268,18 @@ def _read_failure(exit_code: int) -> dict[str, Any] | None:
     failure["message"] = _redact(str(failure.get("message", ""))[:MESSAGE_MAX_LENGTH])
 
     return failure
+
+
+def _read_upload_failures() -> dict[str, Any] | None:
+    try:
+        with open(
+            os.environ[UPLOAD_FAILURES_FILE_ENV], encoding="utf-8"
+        ) as upload_failures_file:
+            recorded = json.load(upload_failures_file)
+    except (KeyError, OSError, ValueError):
+        return None
+
+    return recorded if isinstance(recorded, dict) else None
 
 
 def _redact(message: str) -> str:
