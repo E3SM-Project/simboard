@@ -24,12 +24,14 @@ const navItems = [
   { label: 'About', href: '/about' },
   { label: 'Docs', href: 'https://simboard.readthedocs.io/en/latest/user/', external: true },
 ];
+const ADMIN_NAV_ITEM = { label: 'Operations', href: '/admin/operations', external: false };
 
 export const NavBar = () => {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { user, isAuthenticated, loginWithGithub, logout, loading } = useAuth();
+  const visibleNavItems = user?.role === 'admin' ? [...navItems, ADMIN_NAV_ITEM] : navItems;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -57,7 +59,7 @@ export const NavBar = () => {
         </div>
 
         <nav className="hidden md:flex gap-3 ml-6">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive =
               !item.external &&
               (item.href === '/'
@@ -91,7 +93,7 @@ export const NavBar = () => {
 
         <div className="flex items-center gap-3" ref={dropdownRef}>
           <MobileMenu
-            navItems={navItems}
+            navItems={visibleNavItems}
             isAuthenticated={isAuthenticated}
             user={user}
             loginWithGithub={loginWithGithub}

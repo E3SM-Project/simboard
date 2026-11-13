@@ -11,6 +11,7 @@ import {
 } from '@/features/diagnostics/components/DiagnosticsRunsCard';
 import { diagnosticsRoutes } from '@/features/diagnostics/routes';
 import { homeRoutes } from '@/features/home/routes';
+import { operationsRoutes } from '@/features/operations/routes';
 import { uploadRoutes } from '@/features/upload/routes';
 import type { Machine } from '@/types/machine';
 import type { Site } from '@/types/site';
@@ -43,7 +44,7 @@ export const AppRoutes = (props: RoutesProps) => {
 
     {
       element: <ProtectedRoute />,
-      children: uploadRoutes(props),
+      children: [...uploadRoutes(props), ...operationsRoutes(props)],
     },
 
     {
