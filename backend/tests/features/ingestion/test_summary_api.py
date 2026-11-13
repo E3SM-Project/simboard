@@ -201,8 +201,28 @@ def test_summary_filters_on_case_machine(client, summary_data, machine_name):
     ]
 
 
-def test_summary_rejects_unknown_machine(client, summary_user):
-    response = client.get(SUMMARY_URL, params={**RANGE, "machine_name": "unknown"})
+@pytest.mark.parametrize(
+    "filters,machines,new_executions",
+    [
+        ({"site_name": "NERSC"}, {"perlmutter"}, 4),
+        ({"site_name": "lcrc"}, {"chrysalis"}, 1),
+        ({"site_name": "NERSC", "machine_name": "perlmutter"}, {"perlmutter"}, 4),
+        ({"site_name": "LCRC", "machine_name": "perlmutter"}, set(), 0),
+    ],
+)
+def test_summary_filters_on_case_site(
+    client, summary_data, filters, machines, new_executions
+):
+    response = client.get(SUMMARY_URL, params={**RANGE, **filters})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert {row["machine"] for row in body["rows"]} == machines
+    assert body["totals"]["new_executions"] == new_executions
+
+
+@pytest.mark.parametrize("filters", [{"machine_name": "x"}, {"site_name": "x"}])
+def test_summary_rejects_unknown_machine_or_site(client, summary_user, filters):
+    response = client.get(SUMMARY_URL, params={**RANGE, **filters})
     assert response.status_code == 404
 
 

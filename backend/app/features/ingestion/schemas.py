@@ -247,6 +247,23 @@ class ExecutionDiscoveryResultsResponse(BaseModel):
     existing_count: int
 
 
+class RejectedExecutionRead(BaseModel):
+    """One execution whose latest validation rejected it."""
+
+    machine_name: str
+    case_identity: str
+    execution_id: str
+    outcome: ExecutionDiscoveryOutcome
+    errors: list[dict[str, str]]
+
+
+class RejectedExecutionsResponse(BaseModel):
+    """A bounded list of rejected executions with the full count."""
+
+    executions: list[RejectedExecutionRead] = Field(default_factory=list)
+    total: int = 0
+
+
 class ArchiveCheckpointEntry(BaseModel):
     """One completed immutable archive snapshot."""
 

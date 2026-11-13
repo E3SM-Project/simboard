@@ -1,6 +1,7 @@
 """Scheduled job registration, run reporting, and derived health."""
 
 from collections import Counter
+from collections.abc import Collection
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from uuid import UUID
@@ -158,7 +159,7 @@ def record_run_finish(
 
 
 def summarize_job_health(
-    db: Session, now: datetime, machine_id: UUID | None = None
+    db: Session, now: datetime, machine_ids: Collection[UUID] | None = None
 ) -> list[ScheduledJobHealthRead]:
     """Derive health for every registered job from server-observed report times."""
     query = (
@@ -166,14 +167,14 @@ def summarize_job_health(
         .options(joinedload(ScheduledJob.machine))
         .order_by(ScheduledJob.id)
     )
-    if machine_id is not None:
-        query = query.where(ScheduledJob.machine_id == machine_id)
+    if machine_ids is not None:
+        query = query.where(ScheduledJob.machine_id.in_(machine_ids))
 
     return [_job_health(db, job, now) for job in db.scalars(query)]
 
 
 def summarize_upload_failures(
-    db: Session, machine_id: UUID | None = None
+    db: Session, machine_ids: Collection[UUID] | None = None
 ) -> list[ScheduledJobUploadFailureDailyCount]:
     """Sum stored failed upload counts by UTC report day, machine, and category."""
     query = (
@@ -186,8 +187,8 @@ def summarize_upload_failures(
         .join(Machine, ScheduledJob.machine_id == Machine.id)
         .where(ScheduledJobRun.upload_failures.is_not(None))
     )
-    if machine_id is not None:
-        query = query.where(ScheduledJob.machine_id == machine_id)
+    if machine_ids is not None:
+        query = query.where(ScheduledJob.machine_id.in_(machine_ids))
 
     totals: Counter[tuple[date, str, ScheduledJobUploadFailureCategory]] = Counter()
     for reported_at, machine_name, counts in db.execute(query):
