@@ -285,6 +285,23 @@ allowed duration without finishing, or it was pre-registered but has never
 reported. Other jobs appear only after their first report, so confirm each new
 job is listed after its first scheduled run. Run records are kept for 90 days.
 
+Finish reports also include case uploads that failed after retries, including
+errors returned by a proxy (for example, an NGINX `413`). In the response, each
+job's `latest_completed_run.upload_failures` has complete `counts` by HTTP status
+(or `network`) and up to 50 failed `cases`; `truncated` is `true` when more cases
+failed. Every run retries failed cases, so this list is the current set of stuck
+cases. `upload_failure_daily_counts` sums failures by UTC day, machine, and
+category:
+
+| Category      | Status                                     |
+| ------------- | ------------------------------------------ |
+| `auth`        | `401`, `403`                               |
+| `bad_upload`  | `400`, `413`, `422`                        |
+| `conflict`    | `409`                                      |
+| `server`      | `500`                                      |
+| `unavailable` | `408`, `429`, `502`, `503`, `504`, network |
+| `other`       | Any other status                           |
+
 ### Reference: configuration files and variables
 
 | Location                        | Configure                                                                                                                                                            |
