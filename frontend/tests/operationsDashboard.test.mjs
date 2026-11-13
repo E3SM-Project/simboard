@@ -127,7 +127,21 @@ test('never-reported, stale, and failed jobs are distinct statuses', () => {
     utils.getJobDetails(JOBS[1]),
     'API request failed (HTTP 503): State request failed.',
   );
-  assert.equal(utils.getJobDetails(JOBS[2]), 'No report for over 45 min');
+  // JOBS last reported at 00:05; the staging silence limit is 45 minutes.
+  const now = new Date('2026-11-13T03:00:00Z');
+  assert.equal(utils.getJobDetails(JOBS[2], now), 'No report for over 45 min');
+  assert.equal(
+    utils.getJobDetails({ ...JOBS[2], latest_completed_run: JOBS[1].latest_completed_run }, now),
+    'No report for over 45 min; last run: API request failed (HTTP 503): State request failed.',
+  );
+  // An archive job that reported recently is stale only because its run overran.
+  assert.equal(
+    utils.getJobDetails(
+      job('x-archive', 'archive', 'stale', { max_silence_minutes: 1560, max_duration_minutes: 720 }),
+      now,
+    ),
+    'Run exceeded 12 h without finishing',
+  );
   assert.equal(utils.getJobDetails(JOBS[3]), 'No report received');
   assert.equal(utils.getJobDetails(JOBS[0]), null);
   assert.equal(
@@ -243,6 +257,33 @@ const seedData = (client, keys, siteName) => {
   });
   client.setQueryData(keys.rejected(siteName), { executions: [], total: 0 });
 };
+
+test('only admins see the Operations navigation item', async () => {
+  const { AuthContext } = await server.ssrLoadModule('/src/auth/context.ts');
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const { NavBar } = await server.ssrLoadModule('/src/components/layout/NavBar.tsx');
+  const render = (role) =>
+    renderToStaticMarkup(
+      createElement(
+        AuthContext.Provider,
+        {
+          value: {
+            user: { id: '1', email: 'a@example.test', role, is_active: true },
+            loading: false,
+            isAuthenticated: true,
+            loginWithGithub: () => {},
+            logout: async () => {},
+            refreshUser: async () => true,
+          },
+        },
+        createElement(MemoryRouter, null, createElement(NavBar)),
+      ),
+    );
+
+  assert.match(render('admin'), /href="\/admin\/operations"/);
+  for (const role of ['user', 'service_account'])
+    assert.doesNotMatch(render(role), /\/admin\/operations/);
+});
 
 test('non-admins see an access notice and the page creates no data queries', async () => {
   const { html, client } = await renderPage({ role: 'user' });

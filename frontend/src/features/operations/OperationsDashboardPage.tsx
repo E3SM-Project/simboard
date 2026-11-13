@@ -57,7 +57,9 @@ const OperationsDashboard = ({ sites }: OperationsDashboardPageProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const siteNames = useMemo(() => sites.map((site) => site.name).sort(), [sites]);
   const { jobType, siteName, rangeDays } = parseOperationsFilters(searchParams, siteNames);
-  const window = useMemo(() => utcDateWindow(rangeDays), [rangeDays]);
+  // Recompute each render so the window advances past UTC midnight; query keys
+  // change only when its dates do.
+  const window = utcDateWindow(rangeDays);
 
   const jobsQuery = useJobHealth(siteName);
   const summaryQuery = useIngestionSummary(siteName, window.startDate, window.endDate);

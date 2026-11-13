@@ -16,7 +16,7 @@ const JOB_STATUS_STYLES: Record<
   running: {
     label: 'Running',
     Icon: CirclePlay,
-    className: 'border-blue-200 bg-blue-50 text-blue-900',
+    className: 'border-amber-300 bg-amber-50 text-amber-900',
   },
   failed: { label: 'Failed', Icon: CircleX, className: 'border-red-200 bg-red-50 text-red-800' },
   stale: { label: 'Stale', Icon: Clock, className: 'border-amber-300 bg-amber-50 text-amber-900' },

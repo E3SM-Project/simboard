@@ -17,6 +17,9 @@ ERROR = {"field": "case_name", "code": "missing", "message": "case_name is requi
 
 @pytest.fixture
 def reader(client, db, admin_user_sync):
+    # Other tests commit discovery rows on separate connections; start empty.
+    # The deletion rolls back with this test's transaction.
+    db.query(ExecutionDiscoveryResult).delete()
     user = db.get(User, admin_user_sync["id"])
     app.dependency_overrides[current_active_user] = lambda: user
     yield user

@@ -63,24 +63,37 @@ const FAILURE_REASON_LABELS: Record<string, string> = {
 const formatMinutes = (minutes: number) =>
   minutes % 60 === 0 ? `${minutes / 60} h` : `${minutes} min`;
 
-export const getJobDetails = (job: ScheduledJobHealthOut): string | null => {
+/** Explain a job's status, mirroring how the API derives health. */
+export const getJobDetails = (job: ScheduledJobHealthOut, now = new Date()): string | null => {
   const status = getJobStatus(job);
+  const failure = describeFailure(job.latest_completed_run);
   if (status === 'never_reported') return 'No report received';
-  if (status === 'stale') return `No report for over ${formatMinutes(job.max_silence_minutes)}`;
+  if (status === 'stale') {
+    const silentMinutes = (now.getTime() - Date.parse(job.last_reported_at ?? '')) / 60_000;
+    // Stale without exceeding the silence limit means the newest run overran.
+    const reason =
+      silentMinutes > job.max_silence_minutes
+        ? `No report for over ${formatMinutes(job.max_silence_minutes)}`
+        : `Run exceeded ${formatMinutes(job.max_duration_minutes)} without finishing`;
+
+    return failure ? `${reason}; last run: ${failure}` : reason;
+  }
   if (status === 'running' && job.active_run) {
     const extra = job.active_run_count > 1 ? ` (${job.active_run_count} active runs)` : '';
 
     return `Started ${formatUtc(job.active_run.started_at)} UTC${extra}`;
   }
-  const run = job.latest_completed_run;
-  if (status === 'failed' && run?.failure_reason) {
-    const httpStatus = run.failure_status_code ? ` (HTTP ${run.failure_status_code})` : '';
-    const message = run.failure_message ? `: ${run.failure_message}` : '';
 
-    return `${FAILURE_REASON_LABELS[run.failure_reason]}${httpStatus}${message}`;
-  }
+  return status === 'failed' ? failure : null;
+};
 
-  return null;
+const describeFailure = (run: ScheduledJobHealthOut['latest_completed_run']) => {
+  if (!run?.failure_reason) return null;
+
+  const httpStatus = run.failure_status_code ? ` (HTTP ${run.failure_status_code})` : '';
+  const message = run.failure_message ? `: ${run.failure_message}` : '';
+
+  return `${FAILURE_REASON_LABELS[run.failure_reason]}${httpStatus}${message}`;
 };
 
 export const filterJobs = (jobs: ScheduledJobHealthOut[], jobType?: JobType) =>
