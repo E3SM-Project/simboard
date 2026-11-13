@@ -387,6 +387,21 @@ def test_health_is_protected_and_filterable(client, users, act_as, job):
     assert client.get(JOBS_URL, params={"machine_name": "x"}).status_code == 404
 
 
+def test_health_filters_by_site(client, users, act_as, job):
+    act_as(users["admin"])
+
+    def job_ids(**params):
+        response = client.get(JOBS_URL, params=params)
+        assert response.status_code == 200, response.text
+
+        return [listed["id"] for listed in response.json()["jobs"]]
+
+    assert job_ids(site_name="LCRC") == [JOB_ID]
+    assert job_ids(site_name="NERSC") == []
+    assert job_ids(site_name="NERSC", machine_name="chrysalis") == []
+    assert client.get(JOBS_URL, params={"site_name": "x"}).status_code == 404
+
+
 def test_latest_upload_run_lists_failed_uploads_until_they_succeed(client, db, job):
     run_id = uuid4()
     failed = {**FAILURE, "upload_failures": UPLOAD_FAILURES}
@@ -464,3 +479,5 @@ def test_daily_upload_failure_counts_by_category_and_machine(
         _daily_count("2026-01-02", "chrysalis", "unavailable", 2),
     ]
     assert filtered["upload_failure_daily_counts"] == perlmutter
+    by_site = client.get(JOBS_URL, params={"site_name": "NERSC"}).json()
+    assert by_site["upload_failure_daily_counts"] == perlmutter

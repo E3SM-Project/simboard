@@ -63,7 +63,9 @@ from app.features.ingestion.v3_classification import (
     CHRYSALIS_MACHINE_NAME,
     V3_CASE_NAMES,
 )
+from app.features.machine.models import Machine
 from app.features.machine.utils import resolve_machine_by_name
+from app.features.site.models import Site
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 
@@ -618,6 +620,29 @@ def _resolve_request_machine(db: Session, machine_name: str):
         )
 
     return machine
+
+
+def _resolve_machine_ids(
+    db: Session, machine_name: str | None, site_name: str | None
+) -> list[UUID] | None:
+    """Return IDs of machines matching both optional filters; None means all."""
+    if machine_name is None and site_name is None:
+        return None
+
+    query = db.query(Machine.id)
+    if machine_name is not None:
+        query = query.filter(
+            Machine.id == _resolve_request_machine(db, machine_name).id
+        )
+    if site_name is not None:
+        site = db.query(Site).filter(func.lower(Site.name) == site_name.lower()).first()
+        if site is None:
+            raise HTTPException(
+                status_code=404, detail=f"Site '{site_name}' not found."
+            )
+        query = query.filter(Machine.site_id == site.id)
+
+    return [machine_id for (machine_id,) in query.all()]
 
 
 def _build_hpc_upload_payload(

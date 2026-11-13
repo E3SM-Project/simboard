@@ -11,6 +11,7 @@ from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.ingestion.api import (
     _require_ingestion_state_access,
+    _resolve_machine_ids,
     _resolve_request_machine,
 )
 from app.features.ingestion.job_health import (
@@ -47,21 +48,18 @@ def get_scheduled_job_health(
     db: Annotated[Session, Depends(get_database_session)],
     user: Annotated[User, Depends(current_active_user)],
     machine_name: str | None = None,
+    site_name: str | None = None,
 ) -> ScheduledJobHealthResponse:
     """Return job health and daily failed case upload counts.
 
     Each job's latest completed run lists the cases whose uploads still fail.
     """
     _require_ingestion_state_access(user, action="read job health")
-    machine_id = (
-        _resolve_request_machine(db, machine_name).id
-        if machine_name is not None
-        else None
-    )
+    machine_ids = _resolve_machine_ids(db, machine_name, site_name)
 
     return ScheduledJobHealthResponse(
-        jobs=summarize_job_health(db, _now(), machine_id),
-        upload_failure_daily_counts=summarize_upload_failures(db, machine_id),
+        jobs=summarize_job_health(db, _now(), machine_ids),
+        upload_failure_daily_counts=summarize_upload_failures(db, machine_ids),
     )
 
 

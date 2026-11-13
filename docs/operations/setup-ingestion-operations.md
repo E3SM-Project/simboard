@@ -303,6 +303,26 @@ sums failures by UTC day, machine, and category:
 | `unavailable` | `408`, `429`, `502`, `503`, `504`, network |
 | `other`       | Any other status                           |
 
+### Operations dashboard
+
+Administrators can open **Operations** in the SimBoard navigation
+(`/admin/operations`) to see each environment's job health, failed uploads,
+recent ingestions, and rejected executions on one read-only page. Jobs that
+never reported appear separately from `stale` and `failed` jobs.
+
+| Filter     | Applies to                                                          |
+| ---------- | ------------------------------------------------------------------- |
+| Job type   | Job health and failed upload cases                                  |
+| Site       | All sections (`site_name` on each API)                              |
+| Date range | Recent ingestions and daily failure counts (last 7–90 UTC days)     |
+
+`GET /api/v1/ingestions/rejected-executions` (administrators and service
+accounts) returns up to 200 executions that the latest validation rejected as
+incomplete or invalid, newest first, with their errors and the full `total`. It
+accepts `machine_name` and `site_name`, like `GET /api/v1/ingestions/jobs` and
+`GET /api/v1/ingestions/summary`. A rejection is updated only when a scan visits
+its execution again, so one whose directory was removed stays listed.
+
 ### Reference: configuration files and variables
 
 | Location                        | Configure                                                                                                                                                            |

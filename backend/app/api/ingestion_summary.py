@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.common.dependencies import get_database_session
 from app.features.ingestion.api import (
     _require_ingestion_state_access,
-    _resolve_request_machine,
+    _resolve_machine_ids,
 )
 from app.features.ingestion.schemas import IngestionSummaryResponse
 from app.features.ingestion.summary import summarize_ingestions
@@ -28,7 +28,7 @@ MAX_SUMMARY_RANGE_DAYS = 90
         403: {
             "description": "Only administrators and service accounts may read summaries."
         },
-        404: {"description": "Machine not found."},
+        404: {"description": "Machine or site not found."},
         422: {"description": "Invalid dates or a range exceeding 90 days."},
     },
 )
@@ -38,6 +38,7 @@ def get_ingestion_summary(
     db: Annotated[Session, Depends(get_database_session)],
     user: Annotated[User, Depends(current_active_user)],
     machine_name: str | None = None,
+    site_name: str | None = None,
 ) -> IngestionSummaryResponse:
     """Count executions created in [start_date, end_date), using UTC days."""
     _require_ingestion_state_access(user, action="read summaries")
@@ -47,10 +48,6 @@ def get_ingestion_summary(
             detail=f"Date range must span between 1 and {MAX_SUMMARY_RANGE_DAYS} days.",
         )
 
-    machine_id = (
-        _resolve_request_machine(db, machine_name).id
-        if machine_name is not None
-        else None
-    )
+    machine_ids = _resolve_machine_ids(db, machine_name, site_name)
 
-    return summarize_ingestions(db, start_date, end_date, machine_id)
+    return summarize_ingestions(db, start_date, end_date, machine_ids)

@@ -1,5 +1,6 @@
 """Aggregate current execution records by their UTC creation day."""
 
+from collections.abc import Collection
 from datetime import date, datetime, time, timezone
 from uuid import UUID
 
@@ -21,7 +22,7 @@ def summarize_ingestions(
     db: Session,
     start_date: date,
     end_date: date,
-    machine_id: UUID | None = None,
+    machine_ids: Collection[UUID] | None = None,
 ) -> IngestionSummaryResponse:
     """Read case rows and SQL-computed totals from one database snapshot."""
     day = func.date(func.timezone("UTC", Execution.created_at))
@@ -59,8 +60,8 @@ def summarize_ingestions(
             Case.id.asc().nulls_last(),
         )
     )
-    if machine_id is not None:
-        statement = statement.where(Case.machine_id == machine_id)
+    if machine_ids is not None:
+        statement = statement.where(Case.machine_id.in_(machine_ids))
 
     response = IngestionSummaryResponse()
     # Grouped-away keys are NULL; all corresponding source columns are non-null.

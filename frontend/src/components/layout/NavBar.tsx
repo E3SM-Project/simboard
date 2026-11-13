@@ -1,10 +1,10 @@
 import { ChevronDown, LogOut } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { useAuth } from '@/auth/hooks/useAuth';
 import { GitHubIcon } from '@/components/icons/GitHubIcon';
-import { MobileMenu } from '@/components/layout/MobileMenu';
+import { AdminNavMarker, MobileMenu, type NavItem } from '@/components/layout/MobileMenu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,7 +16,7 @@ import {
 import { LoadingState } from '@/components/ui/loading-state';
 import { cn } from '@/lib/utils';
 
-const navItems = [
+const navItems: NavItem[] = [
   { label: 'Home', href: '/' },
   { label: 'Cases', href: '/cases' },
   { label: 'Diagnostics', href: '/diagnostics' },
@@ -24,12 +24,14 @@ const navItems = [
   { label: 'About', href: '/about' },
   { label: 'Docs', href: 'https://simboard.readthedocs.io/en/latest/user/', external: true },
 ];
+const ADMIN_NAV_ITEM: NavItem = { label: 'Operations', href: '/admin/operations', adminOnly: true };
 
 export const NavBar = () => {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { user, isAuthenticated, loginWithGithub, logout, loading } = useAuth();
+  const visibleNavItems = user?.role === 'admin' ? [...navItems, ADMIN_NAV_ITEM] : navItems;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -57,7 +59,7 @@ export const NavBar = () => {
         </div>
 
         <nav className="hidden md:flex gap-3 ml-6">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive =
               !item.external &&
               (item.href === '/'
@@ -75,23 +77,29 @@ export const NavBar = () => {
                 {item.label}
               </a>
             ) : (
-              <Link
-                key={item.href}
-                to={item.href}
-                className={cn(
-                  'text-sm font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent px-2 py-1 rounded flex items-center gap-1',
-                  isActive && 'text-foreground border-foreground font-semibold',
-                )}
-              >
-                {item.label}
-              </Link>
+              <Fragment key={item.href}>
+                {item.adminOnly ? (
+                  <span aria-hidden="true" className="h-5 self-center border-l border-border" />
+                ) : null}
+                <Link
+                  to={item.href}
+                  title={item.adminOnly ? 'Admins only' : undefined}
+                  className={cn(
+                    'text-sm font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent px-2 py-1 rounded flex items-center gap-1',
+                    isActive && 'text-foreground border-foreground font-semibold',
+                  )}
+                >
+                  {item.label}
+                  {item.adminOnly ? <AdminNavMarker /> : null}
+                </Link>
+              </Fragment>
             );
           })}
         </nav>
 
         <div className="flex items-center gap-3" ref={dropdownRef}>
           <MobileMenu
-            navItems={navItems}
+            navItems={visibleNavItems}
             isAuthenticated={isAuthenticated}
             user={user}
             loginWithGithub={loginWithGithub}
