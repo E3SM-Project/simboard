@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '@/auth/hooks/useAuth';
 import { Alert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -21,6 +22,7 @@ import {
   useRejectedExecutions,
 } from '@/features/operations/hooks/useOperations';
 import {
+  formatUtc,
   parseOperationsFilters,
   RANGE_DAYS,
   utcDateWindow,
@@ -74,9 +76,19 @@ const OperationsDashboard = ({ sites }: OperationsDashboardPageProps) => {
   const resetFilters = () => setSearchParams({}, { replace: true });
   const resetJobFilters = jobType || siteName ? resetFilters : undefined;
   const resetSiteFilter = siteName ? resetFilters : undefined;
+  const filtersActive = Boolean(jobType || siteName) || rangeDays !== RANGE_DAYS[0];
+
+  const queries = [jobsQuery, summaryQuery, rejectedQuery];
+  const isRefreshing = queries.some((query) => query.isFetching);
+  // Report the oldest load so the page never looks fresher than any section.
+  const loadedAt = queries.map((query) => query.dataUpdatedAt).filter((time) => time > 0);
+  const updatedAt = loadedAt.length
+    ? formatUtc(new Date(Math.min(...loadedAt)).toISOString())
+    : null;
+  const refreshAll = () => void Promise.all(queries.map((query) => query.refetch()));
 
   return (
-    <main className={`${PAGE_CLASS} space-y-6`}>
+    <main className={`${PAGE_CLASS} space-y-4`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Operations Dashboard</h1>
@@ -139,10 +151,31 @@ const OperationsDashboard = ({ sites }: OperationsDashboardPageProps) => {
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Times are UTC. Job type applies to job health and failed upload cases; date range applies to
-        recent ingestions and daily failure counts.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <p className="text-xs text-muted-foreground">
+          Times are UTC. Job type applies to job health and failed upload cases; date range applies
+          to recent ingestions and daily failure counts.
+        </p>
+        <div className="flex items-center gap-3">
+          {updatedAt ? (
+            <span className="text-xs text-muted-foreground">Updated {updatedAt} UTC</span>
+          ) : null}
+          {filtersActive ? (
+            <Button type="button" variant="link" size="sm" className="px-0" onClick={resetFilters}>
+              Reset filters
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isRefreshing}
+            onClick={refreshAll}
+          >
+            {isRefreshing ? 'Refreshing…' : 'Refresh'}
+          </Button>
+        </div>
+      </div>
 
       <JobHealthSection query={jobsQuery} jobType={jobType} onResetFilters={resetJobFilters} />
       <FailedUploadsSection

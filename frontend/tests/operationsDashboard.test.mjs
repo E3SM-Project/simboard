@@ -279,7 +279,9 @@ test('only admins see the Operations navigation item', async () => {
       ),
     );
 
-  assert.match(render('admin'), /href="\/admin\/operations"/);
+  const adminHtml = render('admin');
+  assert.match(adminHtml, /title="Admins only"[^>]*href="\/admin\/operations"/);
+  assert.match(adminHtml, /\(admins only\)/);
   for (const role of ['user', 'service_account'])
     assert.doesNotMatch(render(role), /\/admin\/operations/);
 });
@@ -312,6 +314,17 @@ test('admins see every section with status counts, details, and empty states', a
     '1',
     '1',
   ]);
+  // Tiles are colored only when their count is nonzero.
+  const tileClass = (label) =>
+    html.match(
+      new RegExp(`<div class="([^"]*)"><svg(?:(?!<div class).)*?<dt[^>]*>${label}</dt>`),
+    )[1];
+  assert.match(tileClass('Failed'), /border-red-200/);
+  assert.match(tileClass('Running'), /bg-muted/);
+  assert.doesNotMatch(tileClass('Running'), /blue/);
+  assert.match(html, /Updated \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC/);
+  assert.match(html, />Refresh<\/button>/);
+  assert.doesNotMatch(html, /Reset filters/);
   assert.match(html, /API request failed \(HTTP 503\): State request failed\./);
   assert.match(html, /3 failed uploads/);
   assert.match(html, /Showing 2 of 3 failed cases for/);
@@ -343,7 +356,9 @@ test('job type and site filters narrow sections and offer a reset', async () => 
   );
   assert.match(html, /chrysalis-archive/);
   assert.doesNotMatch(html, /chrysalis-staging/);
-  assert.match(html, /No failed uploads match these filters\./);
+  // With no failed cases or daily counts, one empty block replaces both tables.
+  assert.match(html, /border-dashed[^>]*>No failed uploads match these filters\./);
+  assert.doesNotMatch(html, /Daily failure counts/);
   assert.match(html, /No rejected executions match these filters\./);
   assert.match(html, /Reset filters/);
 });

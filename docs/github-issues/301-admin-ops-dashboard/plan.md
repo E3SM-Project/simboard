@@ -9,6 +9,7 @@ Admins need one read-only page per environment that shows whether jobs run, what
 - **Site filter, not machine.** Machines at a site can share a staging directory. Job and rejection rows use the scanning job's machine, while ingestions use each execution's metadata machine, so a machine filter would split one site's data inconsistently.
 - **Preset UTC date ranges** (7, 14, 30, 90 days). The summary API caps ranges at 90 days and job runs are retained 90 days.
 - **Tables, no charts.** `upload_failure_daily_counts` only includes days with failures, so a table stays short and shows exact counts.
+- **Status colors.** Tiles are tinted only when their count is nonzero. Running uses blue instead of the design system's in-progress amber so it stays distinct from Stale.
 - **Access.** The page is admin-only. The APIs keep the existing administrator and service-account access.
 
 ## Scope

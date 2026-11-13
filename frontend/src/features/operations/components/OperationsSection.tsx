@@ -48,10 +48,7 @@ export const OperationsSection = <T,>({
   return (
     <section
       aria-labelledby={headingId}
-      className={cn(
-        'min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm md:p-6',
-        className,
-      )}
+      className={cn('min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm', className)}
     >
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
@@ -134,6 +131,24 @@ export const OperationsTable = ({ columns, children, className }: OperationsTabl
       </TableHeader>
       <TableBody>{children}</TableBody>
     </Table>
+  </div>
+);
+
+interface EmptyPanelProps {
+  message: string;
+  /** Shown when filters may explain the empty result. */
+  onResetFilters?: () => void;
+}
+
+/** Dashed block for a section with nothing to show. */
+export const EmptyPanel = ({ message, onResetFilters }: EmptyPanelProps) => (
+  <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+    {message}
+    {onResetFilters ? (
+      <Button type="button" variant="link" size="sm" onClick={onResetFilters}>
+        Reset filters
+      </Button>
+    ) : null}
   </div>
 );
 

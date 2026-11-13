@@ -1,16 +1,28 @@
+import { ShieldCheck } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { GitHubIcon } from '@/components/icons/GitHubIcon';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { User } from '@/types/user';
 
-interface NavItem {
+export interface NavItem {
   label: string;
   href: string;
   external?: boolean;
+  /** Shown only to administrators; marked with a shield and separated from other items. */
+  adminOnly?: boolean;
 }
+
+/** Shield marker for admin-only navigation items. */
+export const AdminNavMarker = () => (
+  <>
+    <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+    <span className="sr-only"> (admins only)</span>
+  </>
+);
 
 interface MobileMenuProps {
   navItems: NavItem[];
@@ -172,10 +184,15 @@ export const MobileMenu = ({
                   <Link
                     key={item.href}
                     to={item.href}
-                    className="px-2 py-1.5 text-sm rounded hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+                    title={item.adminOnly ? 'Admins only' : undefined}
+                    className={cn(
+                      'px-2 py-1.5 text-sm rounded hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring',
+                      item.adminOnly && 'mt-2 flex items-center gap-1.5 border-t pt-3',
+                    )}
                     onClick={() => setOpen(false)}
                   >
                     {item.label}
+                    {item.adminOnly ? <AdminNavMarker /> : null}
                   </Link>
                 ),
               )}

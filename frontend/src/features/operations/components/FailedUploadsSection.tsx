@@ -5,6 +5,7 @@ import { TableCell, TableRow } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import {
   CountPill,
+  EmptyPanel,
   EmptyRow,
   OperationsSection,
   OperationsTable,
@@ -61,6 +62,19 @@ export const FailedUploadsSection = ({
         })),
         { label: 'Total', className: 'text-right' },
       ];
+
+      if (rows.length === 0 && daily.rows.length === 0) {
+        return (
+          <EmptyPanel
+            message={
+              onResetFilters
+                ? 'No failed uploads match these filters.'
+                : `No failed uploads in the latest runs or the last ${rangeDays} days.`
+            }
+            onResetFilters={onResetFilters}
+          />
+        );
+      }
 
       return (
         <div className="space-y-6">
