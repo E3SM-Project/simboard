@@ -20,6 +20,7 @@ from app.features.ingestion.job_health import (
     register_job,
     register_reporting_job,
     summarize_job_health,
+    summarize_upload_failures,
     to_job_read,
 )
 from app.features.ingestion.models import ScheduledJob
@@ -47,7 +48,10 @@ def get_scheduled_job_health(
     user: Annotated[User, Depends(current_active_user)],
     machine_name: str | None = None,
 ) -> ScheduledJobHealthResponse:
-    """Return latest activity and derived health for registered jobs."""
+    """Return job health and daily failed case upload counts.
+
+    Each job's latest completed run lists the cases whose uploads still fail.
+    """
     _require_ingestion_state_access(user, action="read job health")
     machine_id = (
         _resolve_request_machine(db, machine_name).id
@@ -55,7 +59,10 @@ def get_scheduled_job_health(
         else None
     )
 
-    return ScheduledJobHealthResponse(jobs=summarize_job_health(db, _now(), machine_id))
+    return ScheduledJobHealthResponse(
+        jobs=summarize_job_health(db, _now(), machine_id),
+        upload_failure_daily_counts=summarize_upload_failures(db, machine_id),
+    )
 
 
 @router.put("/{job_id}", response_model=ScheduledJobRead)

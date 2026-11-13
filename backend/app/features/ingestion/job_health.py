@@ -1,12 +1,18 @@
 """Scheduled job registration, run reporting, and derived health."""
 
-from datetime import datetime, timedelta
+from collections import Counter
+from datetime import date, datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.features.ingestion.enums import ScheduledJobHealth, ScheduledJobRunStatus
+from app.features.ingestion.enums import (
+    ScheduledJobHealth,
+    ScheduledJobRunStatus,
+    ScheduledJobUploadFailureCategory,
+)
 from app.features.ingestion.models import ScheduledJob, ScheduledJobRun
 from app.features.ingestion.schemas import (
     ScheduledJobHealthRead,
@@ -15,6 +21,7 @@ from app.features.ingestion.schemas import (
     ScheduledJobRunFinish,
     ScheduledJobRunRead,
     ScheduledJobRunStart,
+    ScheduledJobUploadFailureDailyCount,
 )
 from app.features.machine.models import Machine
 from app.features.user.models import User
@@ -26,6 +33,18 @@ DEFAULT_THRESHOLD_MINUTES: dict[str, tuple[int, int]] = {
     "staging": (45, 60),
     "archive": (1560, 720),
     "diagnostics": (420, 300),
+}
+UPLOAD_FAILURE_CATEGORIES: dict[str, ScheduledJobUploadFailureCategory] = {
+    **dict.fromkeys(["401", "403"], ScheduledJobUploadFailureCategory.AUTH),
+    **dict.fromkeys(
+        ["400", "413", "422"], ScheduledJobUploadFailureCategory.BAD_UPLOAD
+    ),
+    "409": ScheduledJobUploadFailureCategory.CONFLICT,
+    "500": ScheduledJobUploadFailureCategory.SERVER,
+    **dict.fromkeys(
+        ["408", "429", "502", "503", "504", "network"],
+        ScheduledJobUploadFailureCategory.UNAVAILABLE,
+    ),
 }
 
 
@@ -133,6 +152,7 @@ def record_run_finish(
     run.failure_message = failure.message if failure else None
     run.failure_status_code = failure.status_code if failure else None
     run.failure_transient = failure.transient if failure else None
+    run.upload_failures = _upload_failures_value(payload)
 
     return run
 
@@ -150,6 +170,40 @@ def summarize_job_health(
         query = query.where(ScheduledJob.machine_id == machine_id)
 
     return [_job_health(db, job, now) for job in db.scalars(query)]
+
+
+def summarize_upload_failures(
+    db: Session, machine_id: UUID | None = None
+) -> list[ScheduledJobUploadFailureDailyCount]:
+    """Sum stored failed upload counts by UTC report day, machine, and category."""
+    query = (
+        select(
+            ScheduledJobRun.finish_reported_at,
+            Machine.name,
+            ScheduledJobRun.upload_failures["counts"],
+        )
+        .join(ScheduledJob, ScheduledJobRun.job_id == ScheduledJob.id)
+        .join(Machine, ScheduledJob.machine_id == Machine.id)
+        .where(ScheduledJobRun.upload_failures.is_not(None))
+    )
+    if machine_id is not None:
+        query = query.where(ScheduledJob.machine_id == machine_id)
+
+    totals: Counter[tuple[date, str, ScheduledJobUploadFailureCategory]] = Counter()
+    for reported_at, machine_name, counts in db.execute(query):
+        day = reported_at.astimezone(timezone.utc).date()
+        for key, count in counts.items():
+            category = UPLOAD_FAILURE_CATEGORIES.get(
+                key, ScheduledJobUploadFailureCategory.OTHER
+            )
+            totals[(day, machine_name, category)] += count
+
+    return [
+        ScheduledJobUploadFailureDailyCount(
+            day=day, machine_name=machine_name, category=category, count=count
+        )
+        for (day, machine_name, category), count in sorted(totals.items())
+    ]
 
 
 def to_job_read(job: ScheduledJob) -> ScheduledJobRead:
@@ -191,6 +245,7 @@ def _finish_values(payload: ScheduledJobRunFinish) -> tuple:
         failure.message if failure else None,
         failure.status_code if failure else None,
         failure.transient if failure else None,
+        _upload_failures_value(payload),
     )
 
 
@@ -202,7 +257,15 @@ def _recorded_finish_values(run: ScheduledJobRun) -> tuple:
         run.failure_message,
         run.failure_status_code,
         run.failure_transient,
+        run.upload_failures,
     )
+
+
+def _upload_failures_value(payload: ScheduledJobRunFinish) -> dict[str, Any] | None:
+    if payload.upload_failures is None:
+        return None
+
+    return payload.upload_failures.model_dump(mode="json")
 
 
 def _job_health(
