@@ -547,6 +547,9 @@ class ScheduledJobHealthRead(ScheduledJobRead):
     latest_completed_run: ScheduledJobRunRead | None
     active_run: ScheduledJobRunRead | None
     active_run_count: int
+    # Runs that end before the upload step report no uploads, so the latest run
+    # that reached it holds the cases whose uploads still fail.
+    latest_upload_run: ScheduledJobRunRead | None
 
 
 class ScheduledJobUploadFailureDailyCount(BaseModel):

@@ -387,7 +387,7 @@ def test_health_is_protected_and_filterable(client, users, act_as, job):
     assert client.get(JOBS_URL, params={"machine_name": "x"}).status_code == 404
 
 
-def test_latest_run_lists_failed_uploads_until_they_succeed(client, db, job):
+def test_latest_upload_run_lists_failed_uploads_until_they_succeed(client, db, job):
     run_id = uuid4()
     failed = {**FAILURE, "upload_failures": UPLOAD_FAILURES}
 
@@ -400,23 +400,33 @@ def test_latest_run_lists_failed_uploads_until_they_succeed(client, db, job):
             "upload_failures": {**UPLOAD_FAILURES, "counts": {"413": 3, "network": 1}},
         },
     )
-    latest = client.get(JOBS_URL).json()["jobs"][0]["latest_completed_run"]
+    [listed] = client.get(JOBS_URL).json()["jobs"]
 
     assert first.json()["upload_failures"] == UPLOAD_FAILURES
     assert retry.status_code == 200
     assert changed.status_code == 409
-    assert latest["upload_failures"] == UPLOAD_FAILURES
+    assert listed["latest_upload_run"]["upload_failures"] == UPLOAD_FAILURES
 
-    client.put(_run_url(uuid4(), "finish"), json=SUCCESS)
+    # A run that ends before uploading keeps the stuck cases listed.
+    client.put(_run_url(uuid4(), "finish"), json=FAILURE)
 
-    latest = client.get(JOBS_URL).json()["jobs"][0]["latest_completed_run"]
-    assert latest["upload_failures"] is None
+    [listed] = client.get(JOBS_URL).json()["jobs"]
+    assert listed["latest_completed_run"]["upload_failures"] is None
+    assert listed["latest_upload_run"]["id"] == str(run_id)
     assert (
         db.query(ScheduledJobRun)
         .filter(ScheduledJobRun.upload_failures.is_(None))
         .count()
         == 1
     )
+
+    no_failures = {"counts": {}, "cases": [], "truncated": False}
+    client.put(
+        _run_url(uuid4(), "finish"), json={**SUCCESS, "upload_failures": no_failures}
+    )
+
+    [listed] = client.get(JOBS_URL).json()["jobs"]
+    assert listed["latest_upload_run"]["upload_failures"] == no_failures
 
 
 def test_daily_upload_failure_counts_by_category_and_machine(

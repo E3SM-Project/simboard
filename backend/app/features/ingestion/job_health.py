@@ -288,6 +288,11 @@ def _job_health(
         active.order_by(ScheduledJobRun.reported_at.desc()).limit(1)
     ).first()
     active_run_count = db.scalar(select(func.count()).select_from(active.subquery()))
+    latest_upload_run = db.scalars(
+        runs.where(ScheduledJobRun.upload_failures.is_not(None))
+        .order_by(ScheduledJobRun.finish_reported_at.desc())
+        .limit(1)
+    ).first()
     report_times = [newest_run.reported_at] if newest_run else []
     if latest_completed and latest_completed.finish_reported_at:
         report_times.append(latest_completed.finish_reported_at)
@@ -302,6 +307,7 @@ def _job_health(
         latest_completed_run=_to_run_read(latest_completed),
         active_run=_to_run_read(active_run),
         active_run_count=active_run_count or 0,
+        latest_upload_run=_to_run_read(latest_upload_run),
     )
 
 

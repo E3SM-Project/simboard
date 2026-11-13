@@ -172,11 +172,21 @@ def test_upload_failures_keep_complete_counts_and_bounded_cases(
     }
 
 
-def test_upload_failures_are_recorded_only_when_present(
-    monkeypatch, tmp_path: Path, upload_failures_file: Path
+def test_upload_step_without_failures_records_an_empty_report(
+    upload_failures_file: Path,
 ):
     record_upload_failures([])
-    monkeypatch.delenv("SIMBOARD_JOB_UPLOAD_FAILURES_FILE")
+
+    assert json.loads(upload_failures_file.read_text()) == {
+        "counts": {},
+        "cases": [],
+        "truncated": False,
+    }
+
+
+def test_upload_failures_are_a_no_op_without_a_file(monkeypatch, tmp_path: Path):
+    monkeypatch.delenv("SIMBOARD_JOB_UPLOAD_FAILURES_FILE", raising=False)
+
     record_upload_failures(
         [{"case_path": "/c", "status_code": 500, "attempts": 3, "message": "x"}]
     )

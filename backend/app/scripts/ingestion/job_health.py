@@ -101,9 +101,12 @@ def record_exception(exc: BaseException, message: str) -> None:
 
 
 def record_upload_failures(failures: list[UploadFailure]) -> None:
-    """Record complete failure counts and a bounded case list for the finish report."""
+    """Record the upload step's failures for the finish report.
+
+    An empty report still records that every attempted upload succeeded.
+    """
     path = os.environ.get(UPLOAD_FAILURES_FILE_ENV)
-    if not path or not failures:
+    if not path:
         return
 
     counts = Counter(

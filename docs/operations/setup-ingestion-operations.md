@@ -287,11 +287,12 @@ job is listed after its first scheduled run. Run records are kept for 90 days.
 
 Finish reports also include case uploads that failed after retries, including
 errors returned by a proxy (for example, an NGINX `413`). In the response, each
-job's `latest_completed_run.upload_failures` has complete `counts` by HTTP status
-(or `network`) and up to 50 failed `cases`; `truncated` is `true` when more cases
-failed. Every run retries failed cases, so this list is the current set of stuck
-cases. `upload_failure_daily_counts` sums failures by UTC day, machine, and
-category:
+job's `latest_upload_run` is the latest run that reached the upload step. Its
+`upload_failures` has complete `counts` by HTTP status (or `network`) and up to
+50 failed `cases`; `truncated` is `true` when more cases failed. Every such run
+retries failed cases, so this list is the current set of stuck cases; a run
+that ends before uploading does not replace it. `upload_failure_daily_counts`
+sums failures by UTC day, machine, and category:
 
 | Category      | Status                                     |
 | ------------- | ------------------------------------------ |
