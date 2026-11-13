@@ -313,6 +313,8 @@ def test_reports_cannot_change_an_outcome_or_another_jobs_run(
         },
         {**FAILURE, "upload_failures": {**UPLOAD_FAILURES, "counts": {"timeout": 1}}},
         {**FAILURE, "upload_failures": {**UPLOAD_FAILURES, "counts": {"413": 0}}},
+        {**FAILURE, "upload_failures": {**UPLOAD_FAILURES, "counts": {"413": 1}}},
+        {**FAILURE, "upload_failures": {**UPLOAD_FAILURES, "truncated": False}},
         {
             **FAILURE,
             "upload_failures": {
@@ -332,6 +334,8 @@ def test_reports_cannot_change_an_outcome_or_another_jobs_run(
         "too-many-upload-cases",
         "upload-count-key",
         "upload-count-value",
+        "uncounted-upload-cases",
+        "untruncated-upload-cases",
         "long-upload-message",
     ],
 )
@@ -391,7 +395,10 @@ def test_latest_run_lists_failed_uploads_until_they_succeed(client, db, job):
     retry = client.put(_run_url(run_id, "finish"), json=failed)
     changed = client.put(
         _run_url(run_id, "finish"),
-        json={**failed, "upload_failures": {**UPLOAD_FAILURES, "truncated": False}},
+        json={
+            **failed,
+            "upload_failures": {**UPLOAD_FAILURES, "counts": {"413": 3, "network": 1}},
+        },
     )
     latest = client.get(JOBS_URL).json()["jobs"][0]["latest_completed_run"]
 
@@ -417,7 +424,8 @@ def test_daily_upload_failure_counts_by_category_and_machine(
 ):
     def finish(counts, reported_at, job_id=JOB_ID, machine_name="chrysalis"):
         run_id = uuid4()
-        uploads = {**UPLOAD_FAILURES, "counts": counts}
+        truncated = sum(counts.values()) > len(UPLOAD_FAILURES["cases"])
+        uploads = {**UPLOAD_FAILURES, "counts": counts, "truncated": truncated}
         payload = {**FAILURE, "machine_name": machine_name, "upload_failures": uploads}
         assert client.put(_run_url(run_id, "finish", job_id), json=payload).is_success
         db.get(ScheduledJobRun, run_id).finish_reported_at = reported_at

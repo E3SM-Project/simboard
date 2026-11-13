@@ -488,6 +488,14 @@ class ScheduledJobUploadFailures(BaseModel):
     ]
     truncated: bool
 
+    @model_validator(mode="after")
+    def _require_cases_to_match_counts(self) -> "ScheduledJobUploadFailures":
+        total = sum(self.counts.values())
+        if total < len(self.cases) or self.truncated != (total > len(self.cases)):
+            raise ValueError("Counts must cover all cases; truncated when more failed.")
+
+        return self
+
 
 class ScheduledJobRunFinish(ScheduledJobReport):
     """Finish report; the start time lets a lost start report be recovered."""
