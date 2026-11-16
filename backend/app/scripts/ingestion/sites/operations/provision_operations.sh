@@ -45,7 +45,7 @@ fi
 # separate. Do not create summarized_logs until a summary-producing workflow is
 # introduced.
 directory_mode="$(operations_directory_mode "$operations_dir")" || exit 1
-for directory_name in raw_logs quality_assurance; do
+for directory_name in raw_logs history_logs quality_assurance; do
   directory_path="${operations_dir}/${directory_name}"
   if [[ ( -e "${directory_path}" || -L "${directory_path}" ) && ! -d "${directory_path}" ]]; then
     echo "Operations ${directory_name} path exists but is not a directory: ${directory_path}" >&2
@@ -61,7 +61,7 @@ done
 
 if ! operations_acl_enabled "$operations_dir" && command -v getent >/dev/null 2>&1 && getent group simboard >/dev/null 2>&1; then
   group_access_configured=true
-  for directory_path in "${operations_dir}" "${operations_dir}/raw_logs" "${operations_dir}/quality_assurance"; do
+  for directory_path in "${operations_dir}" "${operations_dir}/raw_logs" "${operations_dir}/history_logs" "${operations_dir}/quality_assurance"; do
     if ! chgrp simboard "${directory_path}"; then
       echo "WARNING: Unable to set simboard group ownership: ${directory_path}" >&2
       group_access_configured=false
