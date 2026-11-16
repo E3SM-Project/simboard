@@ -43,13 +43,13 @@ export const ProductionCasesTable = ({ recency }: ProductionCasesTableProps) => 
   });
 
   if (loading) {
-    return <LoadingState label="Loading production cases" />;
+    return <LoadingState label={`Loading ${recency} production cases`} />;
   }
 
   if (error && cases.length === 0) {
     return (
       <Alert variant="error" className="rounded-xl p-6 text-center">
-        <p>Could not load production cases.</p>
+        <p>Could not load {recency} production cases.</p>
         <Button
           className="mt-3"
           size="sm"
@@ -67,7 +67,7 @@ export const ProductionCasesTable = ({ recency }: ProductionCasesTableProps) => 
     <div className="rounded-xl border border-muted bg-card p-4 shadow-sm md:p-6">
       {error ? (
         <Alert variant="error" className="mb-3 flex items-center justify-between gap-3">
-          <span>Could not refresh production cases. Showing previously loaded data.</span>
+          <span>Could not refresh {recency} production cases. Showing previously loaded data.</span>
           <Button size="sm" type="button" variant="outline" onClick={() => void refetch()}>
             Retry
           </Button>
@@ -77,7 +77,7 @@ export const ProductionCasesTable = ({ recency }: ProductionCasesTableProps) => 
         <LoadingState
           className="mb-3 min-h-0 border-0 bg-transparent p-0"
           kind="inline"
-          label="Refreshing production cases"
+          label={`Refreshing ${recency} production cases`}
         />
       ) : null}
       <div className="overflow-x-auto">
