@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 
 import { ExecutionStatusBadge } from '@/components/shared/ExecutionStatusBadge';
 import { MarkdownContent } from '@/components/shared/MarkdownContent';
+import { Alert } from '@/components/ui/alert';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +31,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { CommitHashHelp } from '@/features/catalog/components/CommitHashHelp';
 import { EditableExternalLinkList } from '@/features/catalog/components/EditableExternalLinkList';
 import { ExecutionPathCard } from '@/features/catalog/components/ExecutionPathCard';
 import {
@@ -53,6 +55,7 @@ import {
   type ResourceRowFieldErrors,
   toEditableLinkRows,
 } from '@/features/catalog/externalLinkEditing';
+import { repositoryBrowserUrl } from '@/lib/catalog/repository';
 import { caseDetailsPath } from '@/lib/catalog/urls';
 import { cn } from '@/lib/utils';
 import type {
@@ -464,7 +467,7 @@ const EditableResourceList = <TKind extends string>({
                   placeholder="Optional label"
                   className={cn(
                     'h-9 text-sm',
-                    rowErrors?.[index]?.label ? 'border-red-300 focus-visible:ring-red-200' : '',
+                    rowErrors?.[index]?.label ? 'border-red-300 focus-visible:ring-red-600' : '',
                   )}
                 />
                 {rowErrors?.[index]?.label ? (
@@ -481,7 +484,7 @@ const EditableResourceList = <TKind extends string>({
                   placeholder={valuePlaceholder}
                   className={cn(
                     'h-9 text-sm',
-                    rowErrors?.[index]?.value ? 'border-red-300 focus-visible:ring-red-200' : '',
+                    rowErrors?.[index]?.value ? 'border-red-300 focus-visible:ring-red-600' : '',
                   )}
                 />
                 {rowErrors?.[index]?.value ? (
@@ -622,6 +625,7 @@ export const ExecutionDetailsView = ({
   onHistoryLoadMore,
   onHistoryOpenChange,
 }: ExecutionDetailsViewProps) => {
+  const repositoryHref = repositoryBrowserUrl(execution.gitRepositorySource);
   const [activeTab, setActiveTab] = useState('summary');
   const [isEditing, setIsEditing] = useState(false);
   const [isAdvancedMetadataOpen, setIsAdvancedMetadataOpen] = useState(false);
@@ -867,7 +871,7 @@ export const ExecutionDetailsView = ({
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] space-y-6 px-6 py-8">
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-6 py-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -877,14 +881,14 @@ export const ExecutionDetailsView = ({
               {backLabel}
             </Link>
           </Button>
-          <h1 className="text-2xl font-bold">{execution.executionId}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{execution.executionId}</h1>
           <Link
             to={caseDetailsPath({
               machineName: execution.machine.name,
               hpcUsername: execution.hpcUsername,
               caseName: execution.caseName,
             })}
-            className="mt-1 inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-blue-700 hover:underline"
+            className="mt-1 inline-flex items-center gap-1 text-sm text-muted-foreground transition hover:text-blue-600 hover:underline"
           >
             <span>Case: {execution.caseName}</span>
             <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -989,17 +993,17 @@ export const ExecutionDetailsView = ({
                     <FieldRow label="Model Version">
                       <ReadonlyInput value={execution.gitTag ?? undefined} />
                     </FieldRow>
-                    <FieldRow label="Compset">
-                      <ReadonlyInput value={execution.compset ?? undefined} />
+                    <FieldRow label="Compset Long Name">
+                      <ReadonlyInput value={execution.compsetLongName ?? undefined} />
                     </FieldRow>
                     <FieldRow label="Compset Alias">
                       <ReadonlyInput value={execution.compsetAlias ?? undefined} />
                     </FieldRow>
-                    <FieldRow label="Grid Name">
-                      <ReadonlyInput value={execution.gridName ?? undefined} />
+                    <FieldRow label="Grid Alias">
+                      <ReadonlyInput value={execution.gridAlias ?? undefined} />
                     </FieldRow>
-                    <FieldRow label="Grid Resolution">
-                      <ReadonlyInput value={execution.gridResolution ?? undefined} />
+                    <FieldRow label="Grid Long Name">
+                      <ReadonlyInput value={execution.gridLongName ?? undefined} />
                     </FieldRow>
                     <FieldRow label="Initialization Type">
                       <ReadonlyInput value={execution.initializationType ?? undefined} />
@@ -1197,57 +1201,23 @@ export const ExecutionDetailsView = ({
                         </Button>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Label className="min-w-[100px] text-xs text-muted-foreground">
-                        Case ID:
-                      </Label>
-                      <ReadonlyInput value={execution.caseId} />
-                      {execution.caseId && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          type="button"
-                          onClick={() => navigator.clipboard.writeText(execution.caseId)}
-                          title="Copy full Case ID"
-                        >
-                          Copy
-                        </Button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Label className="min-w-[100px] text-xs text-muted-foreground">
-                        Machine ID:
-                      </Label>
-                      <ReadonlyInput value={execution.machineId} />
-                      {execution.machineId && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          type="button"
-                          onClick={() => navigator.clipboard.writeText(execution.machineId)}
-                          title="Copy full Machine ID"
-                        >
-                          Copy
-                        </Button>
-                      )}
-                    </div>
 
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Git Repository:
                       </Label>
-                      {execution.gitRepositoryUrl ? (
+                      {repositoryHref ? (
                         <a
-                          href={execution.gitRepositoryUrl}
+                          href={repositoryHref}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="block min-w-0 truncate text-sm text-blue-600 hover:underline"
-                          title={execution.gitRepositoryUrl}
+                          title={execution.gitRepositorySource ?? undefined}
                         >
-                          {execution.gitRepositoryUrl}
+                          {execution.gitRepositorySource}
                         </a>
                       ) : (
-                        <p className="text-sm">—</p>
+                        <ReadonlyText value={execution.gitRepositorySource} />
                       )}
                     </div>
                     <div className="flex items-center gap-2">
@@ -1263,10 +1233,45 @@ export const ExecutionDetailsView = ({
                       <ReadonlyText value={execution.gitTag} />
                     </div>
                     <div className="flex items-center gap-2">
+                      <div className="flex min-w-[100px] items-center text-xs text-muted-foreground">
+                        <Label className="text-xs text-muted-foreground">Git Commit Hash</Label>
+                        <CommitHashHelp hash={execution.gitCommitHash} />:
+                      </div>
+                      <ReadonlyInput value={execution.gitCommitHash} />
+                      {execution.gitCommitHash && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={() =>
+                              navigator.clipboard.writeText(execution.gitCommitHash ?? '')
+                            }
+                            title="Copy full Git Commit Hash"
+                          >
+                            Copy
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
-                        Git Commit Hash:
+                        Source Code Path:
                       </Label>
-                      <ReadonlyText value={execution.gitCommitHash} />
+                      <ReadonlyInput value={execution.sourceCodePath} />
+                      {execution.sourceCodePath && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() =>
+                            navigator.clipboard.writeText(execution.sourceCodePath ?? '')
+                          }
+                          title="Copy full Source Code Path"
+                        >
+                          Copy
+                        </Button>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
@@ -1579,15 +1584,15 @@ export const ExecutionDetailsView = ({
                     </div>
                   )}
                   {isEditing && summaryErrorMessage ? (
-                    <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                    <Alert variant="error">
                       <div className="flex items-start gap-2">
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                         <div>
                           <p className="font-medium">Save blocked</p>
-                          <p className="mt-1 text-red-700">{summaryErrorMessage}</p>
+                          <p className="mt-1">{summaryErrorMessage}</p>
                         </div>
                       </div>
-                    </div>
+                    </Alert>
                   ) : null}
                 </CardContent>
               </Card>

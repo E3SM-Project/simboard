@@ -87,7 +87,57 @@ export interface SourceDirectoryOut {
   path: string;
 }
 
+export interface SimulationCoverageOut {
+  years: number | null;
+  partial: boolean;
+  excludedExecutionCount: number;
+}
+
+export interface SimulationDurationOut {
+  days: number | null;
+  months: number | null;
+  years: number | null;
+  calendars: string[];
+  calendarAssumed: boolean;
+  partial: boolean;
+  excludedExecutionCount: number;
+}
+
+export interface ConfigurationObservationOut {
+  value: string;
+  executionUuid: string;
+  executionId: string;
+  runDate: string | null;
+}
+
+export interface ConfigurationFieldOut {
+  source: ConfigurationObservationOut | null;
+  differences: ConfigurationObservationOut[];
+  missingExecutionIds: string[];
+}
+
+export interface SharedConfigurationFieldOut {
+  value: string | null;
+  varies: boolean;
+  incomplete: boolean;
+  hasDifferences?: boolean;
+}
+
+export interface CaseHashConfigurationOut {
+  key: string;
+  caseHash: string | null;
+  executionIds: string[];
+  configuration: Record<string, ConfigurationFieldOut>;
+  coverage: SimulationCoverageOut;
+  simulatedDuration?: SimulationDurationOut;
+}
+
 export interface CaseDetailOut extends CaseSummaryOut {
+  configurationGroups?: CaseHashConfigurationOut[];
+  sharedConfiguration?: Record<string, SharedConfigurationFieldOut>;
+  simulationCoverage?: SimulationCoverageOut;
+  simulatedDuration?: SimulationDurationOut;
+  latestExecution?: CaseListItemOut['latestExecution'];
   sourceDirectories?: SourceDirectoryOut[];
   performanceSourceDirectory?: SourceDirectoryOut | null;
   artifacts: CaseExecutionArtifactOut[];
@@ -112,6 +162,8 @@ export interface CaseListItemOut {
   machineName: string;
   hpcUsername: string;
   executionCount: number;
+  /** True when the case links case-level (zppy-based) diagnostics. */
+  hasDiagnostics: boolean;
   createdAt: string;
   updatedAt: string;
   /**
@@ -209,10 +261,10 @@ export interface ExecutionCreate {
   executionId: string;
   caseHash?: string | null;
   description: string | null;
-  compset: string;
-  compsetAlias: string;
-  gridName: string;
-  gridResolution: string;
+  compsetLongName: string;
+  compsetAlias: string | null;
+  gridAlias: string | null;
+  gridLongName: string;
 
   // Model setup/context
   // ~~~~~~~~~~~~~~~~~~~
@@ -238,10 +290,11 @@ export interface ExecutionCreate {
 
   // Version control
   // ~~~~~~~~~~~~~~~
-  gitRepositoryUrl?: string | null;
+  gitRepositorySource?: string | null;
   gitBranch?: string | null;
   gitTag?: string | null;
   gitCommitHash?: string | null;
+  sourceCodePath?: string | null;
 
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~
@@ -333,10 +386,10 @@ export interface ExecutionListItemOut {
   status: ExecutionStatusValue;
   campaign: string | null;
   experimentType: string | null;
-  compset: string;
-  compsetAlias: string;
-  gridName: string;
-  gridResolution: string;
+  compsetLongName: string;
+  compsetAlias: string | null;
+  gridAlias: string | null;
+  gridLongName: string;
   initializationType: string;
   simulationStartDate: string;
   simulationEndDate: string | null;
@@ -347,6 +400,7 @@ export interface ExecutionListItemOut {
   gitBranch: string | null;
   gitTag: string | null;
   gitCommitHash: string | null;
+  sourceCodePath: string | null;
   machineId: string;
   machineName: string;
   hpcUsername: string;

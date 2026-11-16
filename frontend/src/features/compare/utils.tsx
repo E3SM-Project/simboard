@@ -125,16 +125,19 @@ export const renderCellValue = (value: unknown): React.ReactNode => {
                   </a>
                 ) : (
                   // Local URIs (Locations)
-                  <span className="inline-flex max-w-full items-center gap-1 text-gray-700">
-                    <span className="break-all">{l.url}</span>
+                  <span
+                    className="inline-flex min-w-0 max-w-full items-center gap-2 text-foreground"
+                    title={l.url}
+                  >
+                    <span className="line-clamp-2 min-w-0 break-all">{l.url}</span>
                     <button
                       type="button"
                       onClick={() => copyText(l.url)}
-                      className="p-1 rounded hover:bg-gray-100"
+                      className="shrink-0 p-1 rounded hover:bg-muted"
                       aria-label="Copy path"
                       title="Copy full path/URI"
                     >
-                      <Copy size={13} className="text-gray-500" />
+                      <Copy size={13} className="text-muted-foreground" />
                     </button>
                   </span>
                 )}
@@ -150,11 +153,11 @@ export const renderCellValue = (value: unknown): React.ReactNode => {
   }
 
   if (Array.isArray(value)) {
-    return value.length ? value.join(', ') : <span className="text-gray-400">—</span>;
+    return value.length ? value.join(', ') : <span className="text-muted-foreground">—</span>;
   }
 
   if (value === null || value === undefined || value === '') {
-    return <span className="text-gray-400">—</span>;
+    return <span className="text-muted-foreground">—</span>;
   }
 
   return String(value);

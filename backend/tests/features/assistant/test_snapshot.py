@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -28,16 +28,17 @@ def _make_snapshot() -> ExecutionSnapshot:
             id="execution-1",
             execution_id="assistant-snapshot-exec",
             description="Description " * 5,
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             status="completed",
             initialization_type="startup",
             notes_markdown="Notes " * 5,
             key_features="Features " * 5,
             known_issues="Issues " * 5,
             case_hash="snapshot-hash-1",
+            git_repository_source="ssh://git@github.com/owner/repo.git",
             extra={"foo": "bar"},
         ),
         case=SnapshotCaseFields(name="assistant_case"),
@@ -58,6 +59,15 @@ def _make_snapshot() -> ExecutionSnapshot:
 
 
 class TestSnapshotHelpers:
+    def test_repository_source_survives_snapshot_serialization(self) -> None:
+        snapshot = _make_snapshot()
+        restored = ExecutionSnapshot.model_validate_json(snapshot.model_dump_json())
+        assert (
+            restored.execution.git_repository_source
+            == "ssh://git@github.com/owner/repo.git"
+        )
+        assert "git_repository_url" not in restored.execution.model_dump()
+
     def test_enum_value_and_isoformat_handle_none_enum_and_plain_values(self) -> None:
         timestamp = datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC)
 
@@ -212,13 +222,13 @@ class TestSnapshotHelpers:
             case=case,
             case_id=case.id,
             execution_id="snapshot-exec",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             status=ExecutionStatus.COMPLETED,
             initialization_type="startup",
-            simulation_start_date=date(2024, 1, 1),
+            simulation_start_date="0000-01-02",
             created_by=uuid4(),
             last_updated_by=uuid4(),
             ingestion_id=uuid4(),
@@ -253,6 +263,7 @@ class TestSnapshotHelpers:
 
         snapshot = snapshot_module.build_execution_snapshot(execution)
 
+        assert snapshot.execution.simulation_start_date == "0000-01-02"
         assert [(link.url, link.label) for link in snapshot.links] == [
             ("https://example.com/case-only", "Case only"),
             ("https://example.com/shared", "Execution shared"),

@@ -60,10 +60,10 @@ def _create_execution(
         description="Control execution for deterministic summary."
         if with_optional_metadata
         else None,
-        compset="AQUAPLANET",
-        compset_alias="QPC4",
-        grid_name="f19_f19",
-        grid_resolution="1.9x2.5",
+        compset_long_name="AQUAPLANET",
+        compset_alias="QPC4" if with_optional_metadata else None,
+        grid_alias="f19_f19",
+        grid_long_name="1.9x2.5",
         status="completed",
         campaign="historical" if with_optional_metadata else None,
         experiment_type="historical" if with_optional_metadata else None,
@@ -134,6 +134,11 @@ class TestBuildExecutionSummary:
             "Recorded version metadata includes tag v1.2.3, branch main, commit abc123def456."
             in summary.answer
         )
+        assert (
+            "on grid f19_f19 with specification 1.9x2.5 with startup initialization."
+            in summary.answer
+        )
+        assert "1.9x2.5 resolution" not in summary.answer
         assert "SimBoard records 1 diagnostic link(s) for this run" in summary.answer
         assert {citation.path for citation in summary.citations} >= {
             "execution.execution_id",
@@ -153,10 +158,20 @@ class TestBuildExecutionSummary:
             with_diagnostics=False,
             with_optional_metadata=False,
         )
+        execution.grid_alias = None
 
         summary = build_execution_summary(execution)
 
         assert "Recorded description:" not in summary.answer
+        assert "(None)" not in summary.answer
+        assert "It uses compset AQUAPLANET on grid" in summary.answer
+        assert "(alias unavailable)" in summary.answer
+        assert "execution.grid_alias" not in {
+            citation.path for citation in summary.citations
+        }
+        assert "execution.compset_alias" not in {
+            citation.path for citation in summary.citations
+        }
         assert "Version metadata is not recorded for this execution." in summary.caveats
         assert (
             "Campaign metadata is not recorded for this execution." in summary.caveats
@@ -243,10 +258,10 @@ class TestBuildExecutionSummary:
                 execution=SnapshotExecutionFields(
                     id="execution-1",
                     execution_id="assistant-no-case-hash",
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
-                    grid_name="f19_f19",
-                    grid_resolution="1.9x2.5",
+                    grid_alias="f19_f19",
+                    grid_long_name="1.9x2.5",
                     status="completed",
                     initialization_type="startup",
                     simulation_start_date="2023-01-01T00:00:00Z",
@@ -263,10 +278,10 @@ class TestBuildExecutionSummary:
                 execution=SnapshotExecutionFields(
                     id="execution-1",
                     execution_id="assistant-no-start-date",
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
-                    grid_name="f19_f19",
-                    grid_resolution="1.9x2.5",
+                    grid_alias="f19_f19",
+                    grid_long_name="1.9x2.5",
                     status="completed",
                     initialization_type="startup",
                 ),

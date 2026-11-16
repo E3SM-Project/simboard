@@ -1,10 +1,14 @@
+import gzip
 from pathlib import Path
+
+import pytest
 
 from app.features.ingestion.parsers.git_info import (
     _extract_branch,
     _extract_remote_url,
     parse_git_config,
     parse_git_describe,
+    parse_git_log,
     parse_git_status,
 )
 
@@ -32,6 +36,31 @@ class TestGitInfoParser:
         assert result["git_tag"] == "release"
         assert result["git_commit_hash"] == "abcdef1"
 
+    @pytest.mark.parametrize(
+        ("content", "expected"),
+        [
+            (f"{'a' * 40} Merge branch 'x' (PR #1)\n{'b' * 40} Older\n", "a" * 40),
+            (f"{'c' * 64} SHA-256 commit\n", "c" * 64),
+            ("commit abc1234\n", None),
+            (f"{'d' * 41} Too long\n", None),
+            ("", None),
+        ],
+    )
+    def test_parse_git_log_first_line_full_hash(
+        self, tmp_path: Path, content: str, expected: str | None
+    ) -> None:
+        file_path = tmp_path / "GIT_LOG.1.0-0.gz"
+        with gzip.open(file_path, "wt") as f:
+            f.write(content)
+
+        assert parse_git_log(file_path) == {"git_log_commit_hash": expected}
+
+    def test_parse_git_log_uncompressed(self, tmp_path: Path) -> None:
+        file_path = tmp_path / "GIT_LOG.1.0-0"
+        file_path.write_text(f"{'e' * 40} Subject\n")
+
+        assert parse_git_log(file_path) == {"git_log_commit_hash": "e" * 40}
+
     def test_parse_git_status_branch(self, tmp_path: Path) -> None:
         content = "On branch feature/59-automate-ingestion\n"
         file_path = tmp_path / "GIT_STATUS"
@@ -53,7 +82,9 @@ class TestGitInfoParser:
 
         result = parse_git_config(str(file_path))
 
-        assert result == {"git_repository_url": "https://github.com/example/repo.git"}
+        assert result == {
+            "git_repository_source": "https://github.com/example/repo.git"
+        }
 
     def test_parse_git_config_missing_origin_url(self, tmp_path: Path) -> None:
         content = (
@@ -67,7 +98,7 @@ class TestGitInfoParser:
 
         result = parse_git_config(str(file_path))
 
-        assert result == {"git_repository_url": None}
+        assert result == {"git_repository_source": None}
 
     def test_extract_remote_url_returns_origin_url(self) -> None:
         lines = [

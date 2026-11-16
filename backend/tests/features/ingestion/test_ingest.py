@@ -1,5 +1,6 @@
 import gzip
-from datetime import date, datetime
+from dataclasses import replace
+from datetime import date
 from pathlib import Path
 from typing import Mapping
 from unittest.mock import MagicMock, patch
@@ -19,7 +20,6 @@ from app.features.ingestion.ingest import (
     _get_known_case_hash,
     _get_or_create_case,
     _normalize_execution_status,
-    _normalize_git_url,
     _normalize_path_candidate,
     _track_case_hash_grouping,
     _validate_execution_create,
@@ -50,11 +50,11 @@ def test_qa_continuation_dates_survive_ingestion_mapping(tmp_path):
     assert [
         (item.simulation_start_date, item.simulation_end_date) for item in executions
     ] == [
-        (date(2019, 1, 1), date(2020, 1, 1)),
-        (date(2020, 1, 1), date(2021, 1, 1)),
-        (date(2021, 1, 1), date(2022, 1, 1)),
-        (date(2022, 1, 1), date(2023, 1, 1)),
-        (date(2023, 1, 1), date(2024, 1, 1)),
+        ("2019-01-01", "2020-01-01"),
+        ("2020-01-01", "2021-01-01"),
+        ("2021-01-01", "2022-01-01"),
+        ("2022-01-01", "2023-01-01"),
+        ("2023-01-01", "2024-01-01"),
     ]
     assert all(item.case_id == case_id for item in executions)
     assert all(item.status == ExecutionStatus.COMPLETED for item in executions)
@@ -131,7 +131,7 @@ def test_qa_continuation_without_start_date_reports_ingestion_errors(tmp_path, c
     assert result.skipped_count == 0
     assert len(result.errors) == 5
     assert all(error["error_type"] == "ValidationError" for error in result.errors)
-    assert all("valid date" in error["error"] for error in result.errors)
+    assert all(error["field"] == "simulation_start_date" for error in result.errors)
     db.add.assert_not_called()
 
 
@@ -151,10 +151,10 @@ def _parsed_executions_from_mapping(
                 hpc_username=metadata.get("hpc_username")
                 or metadata.get("user")
                 or "test-user",
-                compset=metadata.get("compset"),
+                compset_long_name=metadata.get("compset_long_name"),
                 compset_alias=metadata.get("compset_alias"),
-                grid_name=metadata.get("grid_name"),
-                grid_resolution=metadata.get("grid_resolution"),
+                grid_alias=metadata.get("grid_alias"),
+                grid_long_name=metadata.get("grid_long_name"),
                 campaign=metadata.get("campaign"),
                 experiment_type=metadata.get("experiment_type"),
                 initialization_type=metadata.get("initialization_type"),
@@ -163,7 +163,7 @@ def _parsed_executions_from_mapping(
                 run_start_date=metadata.get("run_start_date"),
                 run_end_date=metadata.get("run_end_date"),
                 compiler=metadata.get("compiler"),
-                git_repository_url=metadata.get("git_repository_url"),
+                git_repository_source=metadata.get("git_repository_source"),
                 git_branch=metadata.get("git_branch"),
                 git_tag=metadata.get("git_tag"),
                 git_commit_hash=metadata.get("git_commit_hash"),
@@ -171,6 +171,7 @@ def _parsed_executions_from_mapping(
                 output_path=metadata.get("output_path"),
                 archive_path=metadata.get("archive_path"),
                 case_root=metadata.get("case_root"),
+                source_code_path=metadata.get("source_code_path"),
                 run_script_path=metadata.get("run_script_path"),
                 postprocessing_script=metadata.get("postprocessing_script"),
                 case_hash=metadata.get("case_hash"),
@@ -246,10 +247,10 @@ class TestIngestArchive:
             "/path/to/1081156.251218-200923": {
                 "execution_id": "1081156.251218-200923",
                 "case_name": "case1",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
-                "grid_name": "grid1",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid1",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -259,7 +260,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -293,10 +294,10 @@ class TestIngestArchive:
             "/path/to/1081157.251218-200924": {
                 "execution_id": "1081157.251218-200924",
                 "case_name": "case1",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
-                "grid_name": "grid1",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid1",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -306,7 +307,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -316,10 +317,10 @@ class TestIngestArchive:
             "/path/to/1081158.251218-200925": {
                 "execution_id": "1081158.251218-200925",
                 "case_name": "case2",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
-                "grid_name": "grid2",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid2",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -329,7 +330,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -368,10 +369,10 @@ class TestIngestArchive:
             "/path/to/1081159.251218-200926": {
                 "execution_id": "1081159.251218-200926",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -381,7 +382,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -409,10 +410,10 @@ class TestIngestArchive:
             "/path/to/1081160.251218-200927": {
                 "execution_id": "1081160.251218-200927",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": "nonexistent-machine",
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -422,7 +423,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -465,10 +466,10 @@ class TestIngestArchive:
                 f"/path/to/108200{idx}.251218-200900": {
                     "execution_id": f"108200{idx}.251218-200900",
                     "case_name": f"case1_{date_str}",
-                    "compset": "test",
+                    "compset_long_name": "test",
                     "compset_alias": "test_alias",
-                    "grid_name": "grid",
-                    "grid_resolution": "0.9x1.25",
+                    "grid_alias": "grid",
+                    "grid_long_name": "0.9x1.25",
                     "machine": machine.name,
                     "simulation_start_date": date_str,
                     "initialization_type": "test",
@@ -478,7 +479,7 @@ class TestIngestArchive:
                     "run_start_date": None,
                     "run_end_date": None,
                     "compiler": None,
-                    "git_repository_url": None,
+                    "git_repository_source": None,
                     "git_branch": None,
                     "git_tag": None,
                     "git_commit_hash": None,
@@ -496,20 +497,24 @@ class TestIngestArchive:
             )
 
         assert len(ingest_result.executions) == 1
-        assert ingest_result.executions[0].simulation_start_date == date(2020, 1, 1)
+        assert ingest_result.executions[0].simulation_start_date == "2020-01-01"
 
-    def test_preserves_env_run_calendar_date(self, db: Session) -> None:
+    @pytest.mark.parametrize("model_date", ["2019-08-01", "0000-01-01", "0000-01-02"])
+    def test_preserves_env_run_calendar_date(
+        self, db: Session, model_date: str
+    ) -> None:
         machine = self._create_machine(db, "test-machine")
         mock_executions = {
             "/path/to/1082000.251218-200900": {
                 "execution_id": "1082000.251218-200900",
                 "case_name": "timezone-regression",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
-                "simulation_start_date": "2019-08-01",
+                "simulation_start_date": model_date,
+                "simulation_end_date": model_date,
                 "initialization_type": "startup",
             }
         }
@@ -522,10 +527,13 @@ class TestIngestArchive:
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-        assert ingest_result.executions[0].simulation_start_date == date(2019, 8, 1)
+        assert ingest_result.created_count == 1
+        assert ingest_result.errors == []
+        assert ingest_result.executions[0].simulation_start_date == model_date
+        assert ingest_result.executions[0].simulation_end_date == model_date
         assert (
             ingest_result.executions[0].model_dump(mode="json")["simulation_start_date"]
-            == "2019-08-01"
+            == model_date
         )
 
     def test_rejects_non_midnight_model_datetime(self, db: Session) -> None:
@@ -534,10 +542,10 @@ class TestIngestArchive:
             "/path/to/1082000.251218-200900": {
                 "execution_id": "1082000.251218-200900",
                 "case_name": "invalid-model-date",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2019-08-01T01:00:00Z",
                 "initialization_type": "startup",
@@ -565,10 +573,10 @@ class TestIngestArchive:
             "/path/to/1081170.251218-200930": {
                 "execution_id": "1081170.251218-200930",
                 "case_name": None,
-                "compset": None,
+                "compset_long_name": None,
                 "compset_alias": "test_alias",
-                "grid_name": None,
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": None,
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": None,
@@ -578,7 +586,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -615,10 +623,10 @@ class TestIngestArchive:
             "/path/to/1081171.251218-200931": {
                 "execution_id": "1081171.251218-200931",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -628,7 +636,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -656,10 +664,10 @@ class TestIngestArchive:
             "/path/to/1081172.251218-200932": {
                 "execution_id": "1081172.251218-200932",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": "nonexistent",
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -669,7 +677,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -718,10 +726,10 @@ class TestIngestArchive:
             "/path/to/1081175.251218-200935": {
                 "execution_id": "1081175.251218-200935",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine_alias,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -731,7 +739,7 @@ class TestIngestArchive:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -779,10 +787,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081173.251218-200933": {
                 "execution_id": "1081173.251218-200933",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -792,7 +800,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": "2020-01-01",
                 "run_end_date": "2020-12-31",
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -810,7 +818,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             )
 
             assert len(ingest_result.executions) == 1
-            assert ingest_result.executions[0].simulation_start_date == date(2020, 1, 1)
+            assert ingest_result.executions[0].simulation_start_date == "2020-01-01"
             # Run fields remain timezone-aware timestamps.
             if ingest_result.executions[0].run_start_date:
                 assert ingest_result.executions[0].run_start_date.tzinfo is not None
@@ -829,10 +837,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081174.251218-200934": {
                 "execution_id": "1081174.251218-200934",
                 "case_name": "case1",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "FHIST_f09_fe",
-                "grid_name": "f09_fe",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "f09_fe",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "BRANCH",
@@ -843,10 +851,11 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": "2020-01-01 00:00:00",
                 "run_end_date": "2020-12-31 23:59:59",
                 "compiler": "gcc",
-                "git_repository_url": "https://github.com/test/repo",
+                "git_repository_source": "https://github.com/test/repo",
                 "git_branch": "main",
                 "git_tag": "v1.0.0",
                 "git_commit_hash": "abc123",
+                "source_code_path": "/model/source",
                 "created_by": "user1",
                 "last_updated_by": "user2",
             }
@@ -865,12 +874,13 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert ingest_result.executions[0].campaign == "CMIP6"
             assert ingest_result.executions[0].compiler == "gcc"
             assert (
-                str(ingest_result.executions[0].git_repository_url)
+                ingest_result.executions[0].git_repository_source
                 == "https://github.com/test/repo"
             )
             assert ingest_result.executions[0].git_branch == "main"
             assert ingest_result.executions[0].git_tag == "v1.0.0"
             assert ingest_result.executions[0].git_commit_hash == "abc123"
+            assert ingest_result.executions[0].source_code_path == "/model/source"
 
             # Verify case_group is stored on the Case, not the Execution
             case = db.query(Case).filter(Case.name == "case1").first()
@@ -913,11 +923,11 @@ class TestIngestArchiveContinued(TestIngestArchive):
         existing_sim = Execution(
             case_id=case.id,
             execution_id="1081175.251218-200935",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="FHIST_f09_fe",
-            grid_name="grid",
-            grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            grid_alias="grid",
+            grid_long_name="0.9x1.25",
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -932,10 +942,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081175.251218-200935": {
                 "execution_id": "1081175.251218-200935",
                 "case_name": "existing_case",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -945,7 +955,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -975,10 +985,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081175.251218-200940": {
                 "execution_id": "1081175.251218-200940",
                 "case_name": "orphan_case_validation",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": None,
                 "initialization_type": "test",
@@ -988,7 +998,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1041,11 +1051,11 @@ class TestIngestArchiveContinued(TestIngestArchive):
         existing_sim = Execution(
             case_id=case.id,
             execution_id="1081175.251218-200941",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="FHIST_f09_fe",
-            grid_name="grid",
-            grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            grid_alias="grid",
+            grid_long_name="0.9x1.25",
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -1059,10 +1069,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081175.251218-200941": {
                 "execution_id": "1081175.251218-200941",
                 "case_name": "orphan_case_duplicate",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -1072,7 +1082,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1126,11 +1136,11 @@ class TestIngestArchiveContinued(TestIngestArchive):
         existing_sim = Execution(
             case_id=case.id,
             execution_id="1081176.251218-200936",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="FHIST_f09_fe",
-            grid_name="grid",
-            grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            grid_alias="grid",
+            grid_long_name="0.9x1.25",
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -1144,10 +1154,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081176.251218-200936": {
                 "execution_id": "1081176.251218-200936",
                 "case_name": "existing_case",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -1157,7 +1167,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1167,10 +1177,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081177.251218-200937": {
                 "execution_id": "1081176.251218-200936",
                 "case_name": "new_case",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2021-01-01",
                 "initialization_type": "test",
@@ -1180,7 +1190,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1230,10 +1240,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081178.251218-200938": {
                 "execution_id": "1081178.251218-200938",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -1243,7 +1253,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,  # None should parse gracefully
                 "run_end_date": None,  # None should parse gracefully
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1279,10 +1289,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081179.251218-200939": {
                 "execution_id": "1081179.251218-200939",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -1292,7 +1302,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": "INVALID_DATE_STRING_FOR_TESTING",
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1333,10 +1343,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081180.251218-200940": {
                 "execution_id": "1081180.251218-200940",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": None,  # Missing machine
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -1346,7 +1356,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1368,6 +1378,92 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert ingest_result.errors[0]["error_type"] == "ValueError"
             assert "Machine name is required" in ingest_result.errors[0]["error"]
 
+    @pytest.mark.parametrize(
+        ("field_name", "value", "code"),
+        [
+            ("execution_id", None, "string_type"),
+            ("compset_long_name", None, "string_type"),
+            ("compset_long_name", "", "string_too_short"),
+            ("compset_long_name", "   ", "string_pattern_mismatch"),
+            ("compset_alias", 123, "string_type"),
+            ("grid_alias", 123, "string_type"),
+            ("grid_long_name", None, "string_type"),
+            ("grid_long_name", "", "string_too_short"),
+            ("grid_long_name", "   ", "string_pattern_mismatch"),
+            ("initialization_type", None, "string_type"),
+            ("simulation_start_date", None, "value_error"),
+            ("simulation_start_date", "not-a-date", "value_error"),
+            ("simulation_start_date", "0000-02-30", "value_error"),
+            ("simulation_end_date", "0000-02-30", "value_error"),
+            ("git_repository_source", 123, "string_type"),
+        ],
+    )
+    def test_prevalidation_errors_include_field_and_code(
+        self, db: Session, field_name, value, code
+    ) -> None:
+        machine = self._create_machine(db, "test-machine")
+        execution_dir = "/path/to/1081181.251218-200941"
+        parsed = _parsed_executions_from_mapping(
+            {
+                execution_dir: {
+                    "execution_id": "1081181.251218-200941",
+                    "case_name": "invalid-field",
+                    "machine": machine.name,
+                    "compset_long_name": "test",
+                    "compset_alias": "test_alias",
+                    "grid_alias": "grid",
+                    "grid_long_name": "0.9x1.25",
+                    "initialization_type": "startup",
+                    "simulation_start_date": "2020-01-01",
+                }
+            }
+        )[0]
+        parsed = replace(parsed, **{field_name: value})
+        with (
+            patch(
+                "app.features.ingestion.ingest.main_parser", return_value=([parsed], 0)
+            ),
+            patch("app.features.ingestion.ingest.logger") as logger,
+        ):
+            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+
+        assert result.executions == []
+        assert result.created_count == result.duplicate_count == 0
+        assert len(result.errors) == 1
+        error = result.errors[0]
+        assert error["execution_dir"] == execution_dir
+        assert error["error_type"] == "ValidationError"
+        assert error["field"] == field_name
+        assert error["code"] == code
+        assert f"[type={code}," in error["error"]
+        logger.error.assert_called_once()
+        assert logger.error.call_args.args[1:4] == (execution_dir, field_name, code)
+        assert db.query(Case).filter(Case.name == "invalid-field").first() is None
+
+    def test_prevalidation_reports_first_failure(self, db: Session) -> None:
+        machine = self._create_machine(db, "test-machine")
+        parsed = _parsed_executions_from_mapping(
+            {
+                "/path/to/1081181.251218-200941": {
+                    "execution_id": "1081181.251218-200941",
+                    "case_name": "multiple-invalid-fields",
+                    "machine": machine.name,
+                    "compset_long_name": None,
+                    "grid_long_name": None,
+                    "simulation_start_date": None,
+                    "git_repository_source": "invalid-url",
+                }
+            }
+        )
+        with patch(
+            "app.features.ingestion.ingest.main_parser", return_value=(parsed, 0)
+        ):
+            result = ingest_archive(Path("/tmp/archive.zip"), Path("/tmp/out"), db)
+
+        assert len(result.errors) == 1
+        assert result.errors[0]["field"] == "compset_long_name"
+        assert result.errors[0]["code"] == "string_type"
+
     def test_missing_simulation_start_date(self, db: Session) -> None:
         """Test error when simulation_start_date cannot be parsed."""
         machine = self._create_machine(db, "test-machine")
@@ -1376,10 +1472,10 @@ class TestIngestArchiveContinued(TestIngestArchive):
             "/path/to/1081181.251218-200941": {
                 "execution_id": "1081181.251218-200941",
                 "case_name": "case1",
-                "compset": "test",
+                "compset_long_name": "test",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": None,  # Missing or invalid
                 "initialization_type": "test",
@@ -1389,7 +1485,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": None,
+                "git_repository_source": None,
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1411,72 +1507,47 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert ingest_result.errors[0]["error_type"] == "ValidationError"
 
 
-class TestNormalizeGitUrl:
-    """Tests for the _normalize_git_url helper function.
+@pytest.mark.parametrize(
+    "source",
+    [
+        "ssh://git@github.com/mr-gabrielrios/E3SM.git",
+        "/global/homes/m/mchinita/E3SM_SCREAM_pm_oct_2023/scream",
+        "../E3SM",
+        "ssh://git@private.example/owner/repo.git",
+        "ssh://git@github.com:2222/owner/repo.git",
+        "git@github.com:owner/../repo.git",
+        "git@github.com:owner/repo.git?query",
+        "https://github.com/owner/repo.git",
+        "git://github.com/owner/repo.git",
+        "not-a-url",
+    ],
+)
+def test_repository_provenance_survives_archive_validation(tmp_path, db, source):
+    case = stage_continuation_case(tmp_path)
+    for execution_dir in case.iterdir():
+        config = execution_dir / f"GIT_CONFIG.{execution_dir.name}.gz"
+        with gzip.open(config, "wt") as stream:
+            stream.write(f'[remote "origin"]\n    url = {source}\n')
+    parsed, _ = main_parser(case, tmp_path / "parsed", strict_validation=True)
+    # The fixture must actually contain rewritten source files.
+    assert parsed and all(item.git_repository_source == source for item in parsed)
+    result = ingest_archive(case, tmp_path / "out", db, strict_validation=True)
+    assert result.errors == []
+    assert result.executions
+    for execution in result.executions:
+        assert execution.git_repository_source == source
+        assert "gitRepositoryUrl" not in execution.model_dump(by_alias=True)
+        restored = ExecutionCreate.model_validate_json(
+            execution.model_dump_json(by_alias=True)
+        )
+        assert restored.git_repository_source == source
 
-    Tests cover SSH to HTTPS URL conversion and various edge cases.
-    """
 
-    def test_converts_ssh_github_url_to_https(self) -> None:
-        """Test conversion of SSH GitHub URL to HTTPS."""
-        ssh_url = "git@github.com:E3SM-Project/E3SM.git"
-        expected = "https://github.com/E3SM-Project/E3SM.git"
-        assert _normalize_git_url(ssh_url) == expected
+class TestRepositorySource:
+    """Repository sources remain unchanged through ingestion."""
 
-    def test_converts_ssh_gitlab_url_to_https(self) -> None:
-        """Test conversion of SSH GitLab URL to HTTPS."""
-        ssh_url = "git@gitlab.com:owner/repo.git"
-        expected = "https://gitlab.com/owner/repo.git"
-        assert _normalize_git_url(ssh_url) == expected
-
-    def test_converts_ssh_url_with_nested_path(self) -> None:
-        """Test conversion of SSH URL with nested repository path."""
-        ssh_url = "git@github.com:organization/group/nested/repo.git"
-        expected = "https://github.com/organization/group/nested/repo.git"
-        assert _normalize_git_url(ssh_url) == expected
-
-    def test_preserves_https_url(self) -> None:
-        """Test that HTTPS URLs are preserved as-is."""
-        https_url = "https://github.com/E3SM-Project/E3SM.git"
-        assert _normalize_git_url(https_url) == https_url
-
-    def test_preserves_http_url(self) -> None:
-        """Test that HTTP URLs are preserved as-is."""
-        http_url = "http://github.com/E3SM-Project/E3SM.git"
-        assert _normalize_git_url(http_url) == http_url
-
-    def test_returns_none_for_none_input(self) -> None:
-        """Test that None input returns None."""
-        assert _normalize_git_url(None) is None
-
-    def test_returns_none_for_empty_string(self) -> None:
-        """Test that empty string returns None."""
-        assert _normalize_git_url("") is None
-
-    def test_handles_ssh_url_without_git_extension(self) -> None:
-        """Test SSH URL conversion without .git extension."""
-        ssh_url = "git@github.com:owner/repo"
-        expected = "https://github.com/owner/repo"
-        assert _normalize_git_url(ssh_url) == expected
-
-    def test_handles_malformed_ssh_url_gracefully(self) -> None:
-        """Test that malformed SSH URLs are returned as-is."""
-        # Malformed SSH URL (no colon separator)
-        malformed_url = "git@github.com"
-        # Should return original since it can't be split on colon
-        assert _normalize_git_url(malformed_url) == malformed_url
-
-    def test_handles_other_git_formats(self) -> None:
-        """Test that non-SSH non-HTTP URLs are returned as-is."""
-        file_url = "file:///path/to/repo.git"
-        assert _normalize_git_url(file_url) == file_url
-
-    def test_ssh_url_conversion_integrated_in_ingest(self, db: Session) -> None:
-        """Test SSH URL conversion through the full ingest pipeline.
-
-        This test verifies that _normalize_git_url is actually used when
-        processing metadata through ingest_archive.
-        """
+    def test_ssh_source_preserved_in_ingest(self, db: Session) -> None:
+        """The full ingest pipeline preserves SSH repository sources."""
         machine = self._create_machine(db, "test-machine")
 
         # SSH URL in metadata
@@ -1484,10 +1555,10 @@ class TestNormalizeGitUrl:
             "/path/to/1081182.251218-200942": {
                 "execution_id": "1081182.251218-200942",
                 "case_name": "case1",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
-                "grid_name": "grid",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -1497,7 +1568,7 @@ class TestNormalizeGitUrl:
                 "run_start_date": None,
                 "run_end_date": None,
                 "compiler": None,
-                "git_repository_url": "git@github.com:E3SM-Project/E3SM.git",
+                "git_repository_source": "git@github.com:E3SM-Project/E3SM.git",
                 "git_branch": None,
                 "git_tag": None,
                 "git_commit_hash": None,
@@ -1514,10 +1585,10 @@ class TestNormalizeGitUrl:
                 Path("/tmp/archive.zip"), Path("/tmp/out"), db
             )
 
-            # Verify SSH URL was converted to HTTPS
+            # Verify the original SSH source is preserved.
             assert len(ingest_result.executions) == 1
-            assert str(ingest_result.executions[0].git_repository_url) == (
-                "https://github.com/E3SM-Project/E3SM.git"
+            assert ingest_result.executions[0].git_repository_source == (
+                "git@github.com:E3SM-Project/E3SM.git"
             )
 
     @staticmethod
@@ -1566,10 +1637,10 @@ class TestCaseHashIngestion:
         base: dict[str, str | None] = {
             "execution_id": execution_id,
             "case_name": case_name,
-            "compset": "FHIST",
+            "compset_long_name": "FHIST",
             "compset_alias": "test_alias",
-            "grid_name": "grid1",
-            "grid_resolution": "0.9x1.25",
+            "grid_alias": "grid1",
+            "grid_long_name": "0.9x1.25",
             "machine": machine,
             "hpc_username": "test-user",
             "simulation_start_date": simulation_start_date,
@@ -1580,7 +1651,7 @@ class TestCaseHashIngestion:
             "run_start_date": None,
             "run_end_date": None,
             "compiler": None,
-            "git_repository_url": None,
+            "git_repository_source": None,
             "git_branch": None,
             "git_tag": None,
             "git_commit_hash": None,
@@ -1648,11 +1719,11 @@ class TestCaseHashIngestion:
         execution = Execution(
             case_id=case.id,
             execution_id="1081191.251218-200951",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            grid_alias="grid1",
+            grid_long_name="0.9x1.25",
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -1710,11 +1781,11 @@ class TestCaseHashIngestion:
         execution = Execution(
             case_id=case.id,
             execution_id="1081191.251218-200951",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            grid_alias="grid1",
+            grid_long_name="0.9x1.25",
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -1772,11 +1843,11 @@ class TestCaseHashIngestion:
         execution = Execution(
             case_id=case.id,
             execution_id="1081191.251218-200951",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            grid_alias="grid1",
+            grid_long_name="0.9x1.25",
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -1790,7 +1861,7 @@ class TestCaseHashIngestion:
             "/path/to/1081191.251218-200951": self._make_metadata(
                 execution_id="1081191.251218-200951",
                 simulation_start_date="2020-01-01",
-                compset=None,
+                compset_long_name=None,
             ),
         }
 
@@ -1834,11 +1905,11 @@ class TestCaseHashIngestion:
         execution = Execution(
             case_id=case.id,
             execution_id="1081192.251218-200952",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            grid_alias="grid1",
+            grid_long_name="0.9x1.25",
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -1906,17 +1977,17 @@ class TestCaseHashIngestion:
         execution = Execution(
             case_id=case.id,
             execution_id="1081194.251218-200953",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            grid_alias="grid1",
+            grid_long_name="0.9x1.25",
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
             last_updated_by=user.id,
             ingestion_id=ingestion.id,
-            git_repository_url="https://github.com/E3SM-Project/E3SM.git",
+            git_repository_source="https://github.com/E3SM-Project/E3SM.git",
         )
         db.add(execution)
         db.flush()
@@ -1927,7 +1998,7 @@ class TestCaseHashIngestion:
             "/path/to/1081194.251218-200956": self._make_metadata(
                 execution_id="1081194.251218-200956",
                 simulation_start_date="2020-06-01",
-                git_repository_url="git@github.com:E3SM-Project/E3SM.git",
+                git_repository_source="git@github.com:E3SM-Project/E3SM.git",
             ),
         }
 
@@ -1940,8 +2011,8 @@ class TestCaseHashIngestion:
         assert result.created_count == 1
         assert len(result.executions) == 1
         assert result.executions[0].case_id == case.id
-        assert str(result.executions[0].git_repository_url) == (
-            "https://github.com/E3SM-Project/E3SM.git"
+        assert result.executions[0].git_repository_source == (
+            "git@github.com:E3SM-Project/E3SM.git"
         )
 
     def test_incremental_ingestion_keeps_new_case_hash_on_created_run(
@@ -1974,11 +2045,11 @@ class TestCaseHashIngestion:
             case_id=case.id,
             execution_id="1081194.251218-200954",
             case_hash="existing-hash",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            grid_alias="grid1",
+            grid_long_name="0.9x1.25",
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -2188,11 +2259,11 @@ class TestCaseHashIngestion:
             case_id=case.id,
             execution_id="1081192.251218-200952",
             case_hash="ea56b83457fa9e775be77c500bef13533bf675cee8f662f6ce218c2e53b7c357",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
-            simulation_start_date=datetime(2020, 1, 1),
+            grid_alias="grid1",
+            grid_long_name="0.9x1.25",
+            simulation_start_date="2020-01-01",
             initialization_type="test",
             status=ExecutionStatus.CREATED,
             created_by=user.id,
@@ -2269,11 +2340,11 @@ class TestCaseHashIngestion:
                 case_id=existing_case.id,
                 execution_id="1081192.251218-200952",
                 case_hash="existing-hash",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="test_alias",
-                grid_name="grid1",
-                grid_resolution="0.9x1.25",
-                simulation_start_date=datetime(2020, 1, 1),
+                grid_alias="grid1",
+                grid_long_name="0.9x1.25",
+                simulation_start_date="2020-01-01",
                 initialization_type="test",
                 status=ExecutionStatus.CREATED,
                 created_by=user.id,
@@ -2471,10 +2542,10 @@ class TestIngestHelpers:
             case_group=None,
             machine="machine",
             hpc_username=None,
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
+            grid_alias="grid1",
+            grid_long_name="0.9x1.25",
             campaign=None,
             experiment_type=None,
             initialization_type="test",
@@ -2483,7 +2554,7 @@ class TestIngestHelpers:
             run_start_date=None,
             run_end_date=None,
             compiler=None,
-            git_repository_url=None,
+            git_repository_source=None,
             git_branch=None,
             git_tag=None,
             git_commit_hash=None,
@@ -2527,10 +2598,10 @@ class TestIngestHelpers:
             case_group=None,
             machine="machine",
             hpc_username=None,
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
+            grid_alias="grid1",
+            grid_long_name="0.9x1.25",
             campaign=None,
             experiment_type=None,
             initialization_type="test",
@@ -2539,7 +2610,7 @@ class TestIngestHelpers:
             run_start_date=None,
             run_end_date=None,
             compiler=None,
-            git_repository_url=None,
+            git_repository_source=None,
             git_branch=None,
             git_tag=None,
             git_commit_hash=None,
@@ -2553,10 +2624,10 @@ class TestIngestHelpers:
             case_group=None,
             machine="machine",
             hpc_username=None,
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
+            grid_alias="grid1",
+            grid_long_name="0.9x1.25",
             campaign=None,
             experiment_type=None,
             initialization_type="test",
@@ -2565,7 +2636,7 @@ class TestIngestHelpers:
             run_start_date=None,
             run_end_date=None,
             compiler=None,
-            git_repository_url=None,
+            git_repository_source=None,
             git_branch=None,
             git_tag=None,
             git_commit_hash=None,
@@ -2612,20 +2683,20 @@ class TestIngestHelpers:
         draft = ExecutionCreateDraft(
             case_id=uuid4(),
             execution_id="1082005.260305-120005",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
+            grid_alias="grid1",
+            grid_long_name="0.9x1.25",
             status=ExecutionStatus.CREATED,
             campaign="campaign",
             experiment_type="historical",
             initialization_type="test",
-            simulation_start_date=datetime(2020, 1, 1),
+            simulation_start_date="2020-01-01",
             simulation_end_date=None,
             run_start_date=None,
             run_end_date=None,
             compiler="gcc",
-            git_repository_url="https://example.com/repo.git",
+            git_repository_source="https://example.com/repo.git",
             git_branch="main",
             git_tag="v1.0.0",
             git_commit_hash="abc123",
@@ -2651,10 +2722,10 @@ class TestIngestHelpers:
             case_group=None,
             machine="machine",
             hpc_username="test-user",
-            compset="FHIST",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid1",
-            grid_resolution="0.9x1.25",
+            grid_alias="grid1",
+            grid_long_name="0.9x1.25",
             campaign="campaign",
             experiment_type="historical",
             initialization_type="test",
@@ -2663,7 +2734,7 @@ class TestIngestHelpers:
             run_start_date="2020-01-02T03:04:05Z",
             run_end_date=None,
             compiler="gcc",
-            git_repository_url="git@github.com:E3SM-Project/E3SM.git",
+            git_repository_source="git@github.com:E3SM-Project/E3SM.git",
             git_branch="main",
             git_tag="v1.0.0",
             git_commit_hash="abc123",
@@ -2677,7 +2748,7 @@ class TestIngestHelpers:
         )
 
         assert draft.status == ExecutionStatus.COMPLETED
-        assert draft.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
+        assert draft.git_repository_source == "git@github.com:E3SM-Project/E3SM.git"
         assert draft.case_hash == "hash123"
         assert draft.simulation_start_date is not None
         assert draft.run_start_date is not None
@@ -2713,10 +2784,10 @@ class TestIngestHelpers:
             "/path/to/1082010.260305-120010": {
                 "execution_id": "1082010.260305-120010",
                 "case_name": "case-artifacts",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
-                "grid_name": "grid1",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid1",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -2765,10 +2836,10 @@ class TestIngestHelpers:
             "/path/to/1082010.260305-120010": {
                 "execution_id": "1082010.260305-120010",
                 "case_name": "case-artifacts",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
-                "grid_name": "grid1",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid1",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",
@@ -2828,10 +2899,10 @@ class TestIngestHelpers:
             "/path/to/1082011.260305-120011": {
                 "execution_id": "1082011.260305-120011",
                 "case_name": "case-missing-artifacts",
-                "compset": "FHIST",
+                "compset_long_name": "FHIST",
                 "compset_alias": "test_alias",
-                "grid_name": "grid1",
-                "grid_resolution": "0.9x1.25",
+                "grid_alias": "grid1",
+                "grid_long_name": "0.9x1.25",
                 "machine": machine.name,
                 "simulation_start_date": "2020-01-01",
                 "initialization_type": "test",

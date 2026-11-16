@@ -1,14 +1,16 @@
 """Database-backed metadata selection, ownership, and update contracts."""
 
-from datetime import date
-
 import pytest
 from fastapi import HTTPException
 
 from app.api.metadata_backfill import backfill_record, list_records
 from app.features.catalog.enums import ArtifactKind
 from app.features.catalog.models import Artifact, MetadataChange
-from app.features.ingestion.metadata_backfill import MetadataUpdate
+from app.features.ingestion.metadata_backfill import (
+    MetadataUpdate,
+    MetadataValues,
+    stored_values,
+)
 from app.features.user.models import UserRole
 from tests.features.ingestion.test_source_directory_api import _owners
 
@@ -25,6 +27,89 @@ def _payload(machine, case, execution, **kwargs):
         expected={"simulation_start_date": execution.simulation_start_date},
         **kwargs,
     )
+
+
+@pytest.mark.parametrize("alias", [None, "arcticx4"])
+def test_grid_repair_pair_dry_run_apply_and_repeat(db, alias):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    execution.grid_alias = "wrong-alias"
+    execution.grid_long_name = "wrong-spec"
+    db.commit()
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["grid"],
+        values={"grid_long_name": "a%arcticx4_l%r05", "grid_alias": alias},
+        expected={"grid_long_name": "wrong-spec", "grid_alias": "wrong-alias"},
+    )
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+    request.overwrite = True
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.grid_long_name == "wrong-spec"
+    request.dry_run = False
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.grid_long_name == "a%arcticx4_l%r05"
+    assert execution.grid_alias == alias
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+    changes = {row.field_name: row.new_value for row in db.query(MetadataChange).all()}
+    assert changes["grid_alias"] == alias
+    assert changes["grid_long_name"] == "a%arcticx4_l%r05"
+
+
+def test_grid_repair_checks_unchanged_pair_member(db):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["grid"],
+        values={"grid_long_name": "new-spec", "grid_alias": None},
+        expected=stored_values(execution),
+        overwrite=True,
+        dry_run=False,
+    )
+    execution.grid_alias = "concurrent-change"
+    db.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        backfill_record(request, db, user)
+
+    assert exc.value.status_code == 409
+    db.refresh(execution)
+    assert execution.grid_long_name != "new-spec"
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"grid_alias": None},
+        {"grid_long_name": "spec"},
+        {"grid_long_name": None, "grid_alias": None},
+        {"grid_long_name": "   ", "grid_alias": None},
+    ],
+)
+def test_grid_repair_requires_explicit_valid_pair(db, values):
+    _, machine, case, execution = _owners(db)
+    with pytest.raises(ValueError, match="grid"):
+        MetadataUpdate(
+            machine_name=machine.name,
+            record_id=execution.id,
+            case_name=case.name,
+            hpc_username=case.hpc_username,
+            execution_id=execution.execution_id,
+            fields=["grid"],
+            values=values,
+            expected=stored_values(execution),
+        )
 
 
 @pytest.mark.parametrize("operation", ["read", "write"])
@@ -66,6 +151,190 @@ def test_selection_filters_and_pagination(db):
 
 
 @pytest.mark.parametrize(
+    "source",
+    [
+        "/global/homes/user/E3SM",
+        "ssh://git@github.com/owner/repo.git",
+    ],
+)
+def test_repository_repair_is_audited_and_idempotent(db, source):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    execution.git_repository_source = "https://wrong.example/repo"
+    db.commit()
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["git-repository"],
+        values={"git_repository_source": source},
+        expected={
+            "git_repository_source": execution.git_repository_source,
+        },
+    )
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+    assert execution.git_repository_source == "https://wrong.example/repo"
+    request.overwrite = True
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    assert execution.git_repository_source == "https://wrong.example/repo"
+    assert db.query(MetadataChange).count() == 0
+    request.dry_run = False
+    request.expected.git_repository_source = "changed-by-someone-else"
+    with pytest.raises(HTTPException) as exc:
+        backfill_record(request, db, user)
+    assert exc.value.status_code == 409
+    request.expected.git_repository_source = "https://wrong.example/repo"
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.git_repository_source == source
+    assert {row.field_name for row in db.query(MetadataChange).all()} == {
+        "git_repository_source",
+    }
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+
+
+def test_initialization_repair_dry_run_apply_and_repeat(db):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    execution.initialization_type = "hybrid"
+    db.commit()
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["initialization"],
+        values={"initialization_type": "restart"},
+        expected={"initialization_type": "hybrid"},
+    )
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+    request.overwrite = True
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.initialization_type == "hybrid"
+    assert db.query(MetadataChange).count() == 0
+    request.dry_run = False
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.initialization_type == "restart"
+    change = db.query(MetadataChange).one()
+    assert (change.field_name, change.old_value, change.new_value) == (
+        "initialization_type",
+        "hybrid",
+        "restart",
+    )
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+
+
+def test_initialization_repair_rejects_empty_value_and_tolerates_stored_empty(db):
+    user, machine, case, execution = _owners(db)
+    execution.initialization_type = ""
+    assert stored_values(execution).initialization_type == ""
+    with pytest.raises(ValueError, match="initialization type"):
+        MetadataUpdate(
+            machine_name=machine.name,
+            record_id=execution.id,
+            case_name=case.name,
+            hpc_username=case.hpc_username,
+            execution_id=execution.execution_id,
+            fields=["initialization"],
+            values={"initialization_type": " "},
+            expected={"initialization_type": ""},
+        )
+
+
+def test_source_code_repair_fills_and_requires_overwrite_for_full_hash(db):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    execution.git_commit_hash = "7c4ec379a6"
+    execution.source_code_path = None
+    db.commit()
+    full_hash = "7c4ec379a6" + "0" * 30
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["source-code-path", "git-commit-hash"],
+        values={"source_code_path": "/model/source", "git_commit_hash": full_hash},
+        expected={"source_code_path": None, "git_commit_hash": "7c4ec379a6"},
+        dry_run=False,
+    )
+
+    # Fill-only mode populates the path but keeps the stored abbreviated hash.
+    assert backfill_record(request, db, user)["changes"] == {
+        "source_code_path": {"before": None, "after": "/model/source"}
+    }
+    db.refresh(execution)
+    assert execution.git_commit_hash == "7c4ec379a6"
+
+    request.overwrite = True
+    request.expected = MetadataValues(
+        source_code_path="/model/source", git_commit_hash="7c4ec379a6"
+    )
+    assert backfill_record(request, db, user)["changes"] == {
+        "git_commit_hash": {"before": "7c4ec379a6", "after": full_hash}
+    }
+    db.refresh(execution)
+    assert execution.git_commit_hash == full_hash
+    assert {
+        (change.field_name, change.new_value)
+        for change in db.query(MetadataChange).all()
+    } == {("source_code_path", "/model/source"), ("git_commit_hash", full_hash)}
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+
+
+def test_commit_hash_repair_rejects_abbreviated_values(db):
+    user, machine, case, execution = _owners(db)
+    with pytest.raises(ValueError, match="Full git_commit_hash"):
+        MetadataUpdate(
+            machine_name=machine.name,
+            record_id=execution.id,
+            case_name=case.name,
+            hpc_username=case.hpc_username,
+            execution_id=execution.execution_id,
+            fields=["git-commit-hash"],
+            values={"git_commit_hash": "7c4ec379a6"},
+            expected={"git_commit_hash": None},
+        )
+
+
+@pytest.mark.parametrize("field", ["source-code-path", "git-commit-hash"])
+def test_source_code_repair_rejects_missing_values(db, field):
+    user, machine, case, execution = _owners(db)
+    with pytest.raises(ValueError, match="missing in values"):
+        MetadataUpdate(
+            machine_name=machine.name,
+            record_id=execution.id,
+            case_name=case.name,
+            hpc_username=case.hpc_username,
+            execution_id=execution.execution_id,
+            fields=[field],
+            values={},
+            expected={},
+        )
+
+
+def test_backfill_preserves_year_zero_dates_and_history(db):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    request = _payload(machine, case, execution, overwrite=True, dry_run=False)
+    request.values.simulation_start_date = "0000-01-02"
+    request.values.simulation_end_date = "0000-12-31"
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.simulation_start_date == "0000-01-02"
+    assert execution.simulation_end_date == "0000-12-31"
+    changes = {row.field_name: row.new_value for row in db.query(MetadataChange).all()}
+    assert changes["simulation_start_date"] == "0000-01-02"
+    assert changes["simulation_end_date"] == "0000-12-31"
+
+
+@pytest.mark.parametrize(
     "field", ["case_name", "hpc_username", "execution_id", "machine_name"]
 )
 def test_update_requires_complete_identity(db, field):
@@ -83,24 +352,62 @@ def test_update_requires_complete_identity(db, field):
 def test_dry_run_and_stale_update_do_not_write(db):
     user, machine, case, execution = _owners(db)
     user.role = UserRole.ADMIN
-    execution.simulation_start_date = date(1850, 1, 1)
+    execution.simulation_start_date = "1850-01-01"
     db.commit()
 
     request = _payload(machine, case, execution, overwrite=True)
     assert backfill_record(request, db, user)["outcome"] == "changed"
     db.refresh(execution)
-    assert execution.simulation_start_date == date(1850, 1, 1)
+    assert execution.simulation_start_date == "1850-01-01"
     assert db.query(MetadataChange).count() == 0
 
     request.dry_run = False
-    request.expected.simulation_start_date = date(1900, 1, 1)
+    request.expected.simulation_start_date = "1900-01-01"
 
     with pytest.raises(HTTPException) as exc:
         backfill_record(request, db, user)
     assert exc.value.status_code == 409
 
     db.refresh(execution)
-    assert execution.simulation_start_date == date(1850, 1, 1)
+    assert execution.simulation_start_date == "1850-01-01"
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {},
+        {"git_repository_source": None},
+        {"git_repository_source": ""},
+        {"git_repository_source": 123},
+    ],
+)
+def test_repository_repair_rejects_missing_or_non_text_sources(db, values):
+    _, machine, case, execution = _owners(db)
+    with pytest.raises(ValueError):
+        MetadataUpdate(
+            machine_name=machine.name,
+            record_id=execution.id,
+            case_name=case.name,
+            hpc_username=case.hpc_username,
+            execution_id=execution.execution_id,
+            fields=["git-repository"],
+            values=values,
+            expected={"git_repository_source": None},
+        )
+
+
+def test_opaque_repository_source_does_not_block_other_repairs(db):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    execution.git_repository_source = "legacy-invalid-url"
+    db.commit()
+    records = list_records(machine.name, db, user, offset=0, limit=100)["records"]
+    assert records[0]["values"]["git_repository_source"] == "legacy-invalid-url"
+    request = _payload(machine, case, execution, overwrite=True, dry_run=False)
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.simulation_start_date == "2020-01-01"
+    assert execution.git_repository_source == "legacy-invalid-url"
 
 
 def test_multiple_run_scripts_are_reported_and_not_overwritten(db):
@@ -126,8 +433,8 @@ def test_multiple_run_scripts_are_reported_and_not_overwritten(db):
 def test_apply_records_execution_history_in_same_transaction(db, existing_script):
     user, machine, case, execution = _owners(db)
     user.role = UserRole.ADMIN
-    execution.simulation_start_date = date(1850, 1, 1)
-    execution.simulation_end_date = date(1851, 1, 1)
+    execution.simulation_start_date = "1850-01-01"
+    execution.simulation_end_date = "1851-01-01"
     if existing_script:
         execution.artifacts.append(
             Artifact(kind=ArtifactKind.RUN_SCRIPT, uri="/old/run.sh")
@@ -187,7 +494,7 @@ def test_apply_records_execution_history_in_same_transaction(db, existing_script
 def test_failed_commit_rolls_back_metadata_and_history(db, monkeypatch):
     user, machine, case, execution = _owners(db)
     user.role = UserRole.ADMIN
-    execution.simulation_start_date = date(1850, 1, 1)
+    execution.simulation_start_date = "1850-01-01"
     db.commit()
     request = _payload(machine, case, execution, overwrite=True, dry_run=False)
 
@@ -201,5 +508,102 @@ def test_failed_commit_rolls_back_metadata_and_history(db, monkeypatch):
             backfill_record(request, db, user)
 
     db.refresh(execution)
-    assert execution.simulation_start_date == date(1850, 1, 1)
+    assert execution.simulation_start_date == "1850-01-01"
     assert db.query(MetadataChange).count() == 0
+
+
+@pytest.mark.parametrize("alias", ["F20TR-GHG", None])
+@pytest.mark.parametrize("old_long_name", ["AQUAPLANET", ""])
+def test_component_set_repair_is_guarded_and_idempotent(db, alias, old_long_name):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    execution.compset_long_name = old_long_name
+    db.commit()
+    before = stored_values(execution).model_dump()
+    original_dates = (execution.simulation_start_date, execution.simulation_end_date)
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["component-set"],
+        values={
+            "compset_long_name": "1850_EAM_ELM_" + "X" * 121,
+            "compset_alias": alias,
+        },
+        expected=before,
+        overwrite=True,
+    )
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert stored_values(execution).model_dump() == before
+    assert db.query(MetadataChange).count() == 0
+
+    request.dry_run = False
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.compset_long_name == request.values.compset_long_name
+    assert execution.compset_alias == alias
+    assert (
+        execution.simulation_start_date,
+        execution.simulation_end_date,
+    ) == original_dates
+    assert {row.field_name for row in db.query(MetadataChange).all()} == {
+        "compset_long_name",
+        "compset_alias",
+    }
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+    assert db.query(MetadataChange).count() == 2
+
+
+def test_component_set_repair_rejects_stale_pair_and_requires_overwrite(db):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    db.commit()
+    before = stored_values(execution).model_dump()
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["component-set"],
+        values={"compset_long_name": "1850_EAM_ELM", "compset_alias": None},
+        expected=before,
+        dry_run=False,
+    )
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+    request.overwrite = True
+    execution.compset_long_name = "concurrent-change"
+    db.commit()
+    with pytest.raises(HTTPException) as exc:
+        backfill_record(request, db, user)
+    assert exc.value.status_code == 409
+    db.refresh(execution)
+    assert execution.compset_alias == before["compset_alias"]
+    assert db.query(MetadataChange).count() == 0
+
+
+@pytest.mark.parametrize(
+    "section,field",
+    [
+        ("values", "compset_long_name"),
+        ("values", "compset_alias"),
+        ("expected", "compset_alias"),
+    ],
+)
+def test_component_repair_requires_explicit_pair(section, field):
+    pair = {"compset_long_name": "1850_EAM_ELM", "compset_alias": None}
+    payload = {"values": dict(pair), "expected": dict(pair)}
+    del payload[section][field]
+    with pytest.raises(ValueError, match="Explicit component-set pair"):
+        MetadataUpdate(
+            machine_name="chrysalis",
+            record_id="00000000-0000-0000-0000-000000000001",
+            case_name="case",
+            hpc_username="alice",
+            execution_id="1.1-1",
+            fields=["component-set"],
+            **payload,
+        )

@@ -1,6 +1,7 @@
 """Tests for shared archive ingestion HTTP client behavior."""
 
 import json
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -127,7 +128,18 @@ def test_post_discovery_results_request_preserves_wire_contract(
         "perlmutter",
         results=[
             ExecutionDiscoveryResult("case-a", "100.1-1", "accepted"),
-            ExecutionDiscoveryResult("case-b", "200.1-1", "rejected_invalid"),
+            ExecutionDiscoveryResult(
+                "case-b",
+                "200.1-1",
+                "rejected_invalid",
+                errors=[
+                    {
+                        "field": "grid_long_name",
+                        "code": "string_type",
+                        "message": "Input should be a valid string",
+                    }
+                ],
+            ),
         ],
         timeout_seconds=12,
     )
@@ -147,11 +159,19 @@ def test_post_discovery_results_request_preserves_wire_contract(
                 "case_identity": "case-a",
                 "execution_id": "100.1-1",
                 "outcome": "accepted",
+                "errors": [],
             },
             {
                 "case_identity": "case-b",
                 "execution_id": "200.1-1",
                 "outcome": "rejected_invalid",
+                "errors": [
+                    {
+                        "field": "grid_long_name",
+                        "code": "string_type",
+                        "message": "Input should be a valid string",
+                    }
+                ],
             },
         ],
     }
@@ -780,7 +800,7 @@ def test_ingest_case_with_retries_returns_exhausted_retries_when_zero_attempts()
         ('"unexpected"', {}),
     ],
 )
-def test_post_ingestion_request_preserves_wire_contract(
+def test_post_ingestion_request_selects_discovered_execution_ids(
     monkeypatch,
     response_body: str,
     expected_body: dict[str, int],
@@ -814,6 +834,7 @@ def test_post_ingestion_request_preserves_wire_contract(
         "archive_path": "/archive/case_a",
         "machine_name": "pm",
         "processed_execution_ids": ["100.1-1", "101.1-1"],
+        "selected_execution_ids": ["100.1-1", "101.1-1"],
     }
     assert request.data == json.dumps(expected_payload).encode("utf-8")
 
@@ -828,6 +849,12 @@ def test_post_ingestion_request_preserves_wire_contract(
         ),
         (urllib.error.URLError("network down"), "URL error: network down", None),
         (TimeoutError(), "Request timed out", None),
+        (ConnectionResetError("reset"), "Connection error: reset", None),
+        (
+            ssl.SSLEOFError(8, "EOF occurred in violation of protocol"),
+            "Connection error: .*EOF occurred",
+            None,
+        ),
     ],
 )
 def test_post_ingestion_request_maps_transport_errors(

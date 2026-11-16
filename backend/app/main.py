@@ -1,9 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.health import router as health_router
+from app.api.ingestion_summary import router as ingestion_summary_router
+from app.api.job_health import router as job_health_router
 from app.api.meta import router as meta_router
 from app.api.metadata_backfill import router as metadata_backfill_router
+from app.api.rejected_executions import router as rejected_executions_router
 from app.api.source_directories import router as source_directories_router
 from app.api.version import API_BASE
 from app.core.config import settings
@@ -13,6 +17,7 @@ from app.features.assistant.api import (
     execution_router as execution_assistant_router,
 )
 from app.features.catalog.api import case_router, diagnostics_router, execution_router
+from app.features.diagnostics.api import router as diagnostics_compare_router
 from app.features.ingestion.api import router as ingestion_router
 from app.features.machine.api import router as machine_router
 from app.features.pace.api import router as pace_router
@@ -39,9 +44,13 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Diagnostics comparisons run to hundreds of kilobytes of repetitive JSON.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
+
     # Register routers.
     app.include_router(execution_router, prefix=API_BASE)
     app.include_router(diagnostics_router, prefix=API_BASE)
+    app.include_router(diagnostics_compare_router, prefix=API_BASE)
     app.include_router(execution_assistant_router, prefix=API_BASE)
     app.include_router(case_router, prefix=API_BASE)
     app.include_router(machine_router, prefix=API_BASE)
@@ -51,6 +60,9 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix=API_BASE)
     app.include_router(token_router, prefix=API_BASE)
     app.include_router(ingestion_router, prefix=API_BASE)
+    app.include_router(ingestion_summary_router, prefix=API_BASE)
+    app.include_router(job_health_router, prefix=API_BASE)
+    app.include_router(rejected_executions_router, prefix=API_BASE)
     app.include_router(source_directories_router, prefix=API_BASE)
     app.include_router(metadata_backfill_router, prefix=API_BASE)
     app.include_router(meta_router, prefix=API_BASE)

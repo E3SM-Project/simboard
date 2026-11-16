@@ -30,6 +30,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
     _log_event,
     _utc_now_iso,
 )
+from app.scripts.ingestion.job_health import record_request_failure
 
 
 class _ReadableResponse(Protocol):
@@ -100,6 +101,15 @@ def _timeout_request_error() -> IngestionRequestError:
     )
 
 
+def _connection_request_error(exc: OSError) -> IngestionRequestError:
+    """Convert a connection or TLS error raised while reading the response."""
+    return IngestionRequestError(
+        f"Connection error: {exc}",
+        status_code=None,
+        transient=True,
+    )
+
+
 def _checkpoint_request_error(
     exc: urllib.error.URLError | TimeoutError,
 ) -> IngestionRequestError:
@@ -120,6 +130,8 @@ def _retry_failure_event_fields(
 ) -> tuple[bool, dict[str, Any]]:
     """Build stable retry failure fields and return whether to retry."""
     retrying = exc.transient and attempt < max_attempts
+    if not retrying:
+        record_request_failure(exc)
     fields: dict[str, Any] = {
         "attempt": attempt,
         "status_code": exc.status_code,
@@ -234,7 +246,7 @@ def _normalize_remote_state(body: object) -> dict[str, Any]:
         }
 
     raw_discovery_results = body.get("discovery_results", {})
-    discovery_results: dict[str, list[dict[str, str]]] = {}
+    discovery_results: dict[str, list[dict[str, Any]]] = {}
     if isinstance(raw_discovery_results, dict):
         for case_identity, raw_results in raw_discovery_results.items():
             if not isinstance(case_identity, str) or not isinstance(raw_results, list):
@@ -244,6 +256,7 @@ def _normalize_remote_state(body: object) -> dict[str, Any]:
                     "case_identity": case_identity,
                     "execution_id": result["execution_id"],
                     "outcome": result["outcome"],
+                    "errors": result.get("errors", []),
                 }
                 for result in raw_results
                 if isinstance(result, dict)
@@ -377,6 +390,7 @@ def _post_discovery_results_request(
                 "case_identity": result.case_identity,
                 "execution_id": result.execution_id,
                 "outcome": result.outcome,
+                "errors": result.errors,
             }
             for result in results
         ],
@@ -501,6 +515,7 @@ def _post_ingestion_request(
         "archive_path": archive_path,
         "machine_name": machine_name,
         "processed_execution_ids": processed_execution_ids,
+        "selected_execution_ids": processed_execution_ids,
     }
     request = _build_json_request(endpoint_url, api_token, payload)
 
@@ -517,6 +532,9 @@ def _post_ingestion_request(
         raise _url_request_error(exc) from exc
     except TimeoutError as exc:
         raise _timeout_request_error() from exc
+    # urllib wraps only send errors; response read errors arrive as OSError.
+    except OSError as exc:
+        raise _connection_request_error(exc) from exc
 
 
 def _persist_archive_checkpoints_with_retries(

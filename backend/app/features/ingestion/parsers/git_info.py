@@ -45,6 +45,26 @@ def parse_git_describe(describe_path: str | Path) -> dict[str, str | None]:
     return result
 
 
+def parse_git_log(log_path: str | Path) -> dict[str, str | None]:
+    """Parse the full model commit hash from the first GIT_LOG line.
+
+    Parameters
+    ----------
+    log_path : str or Path
+        Path to the GIT_LOG file.
+
+    Returns
+    -------
+    dict[str, str | None]
+        Dictionary with the full commit hash, or None if the first line is
+        missing or malformed.
+    """
+    lines = _open_text(Path(log_path)).splitlines()
+    match = re.match(r"([0-9a-f]{64}|[0-9a-f]{40})\b", lines[0]) if lines else None
+
+    return {"git_log_commit_hash": match.group(1) if match else None}
+
+
 def parse_git_status(status_path: str | Path) -> dict[str, str | None]:
     """Parse GIT_STATUS file for current branch.
 
@@ -65,7 +85,7 @@ def parse_git_status(status_path: str | Path) -> dict[str, str | None]:
 
 
 def parse_git_config(config_path: str | Path) -> dict[str, str | None]:
-    """Parse GIT_CONFIG file for repository URL.
+    """Parse GIT_CONFIG file for the original repository source.
 
     Parameters
     ----------
@@ -75,7 +95,7 @@ def parse_git_config(config_path: str | Path) -> dict[str, str | None]:
     Returns
     -------
     dict[str, str | None]
-        Dictionary containing the repository URL, or None if not found.
+        Dictionary containing the repository source, or None if not found.
     """
     config_path = Path(config_path)
     config_lines = _open_text(config_path).splitlines()
@@ -86,7 +106,7 @@ def parse_git_config(config_path: str | Path) -> dict[str, str | None]:
             url = line.split("=", 1)[1].strip()
             break
 
-    return {"git_repository_url": url}
+    return {"git_repository_source": url}
 
 
 def _extract_branch(lines: list[str]) -> str | None:

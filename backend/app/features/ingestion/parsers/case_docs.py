@@ -1,10 +1,8 @@
 import re
 import xml.etree.ElementTree as ET
-from datetime import datetime
 from pathlib import Path
 
-from dateutil.relativedelta import relativedelta
-
+from app.common.model_dates import add_model_date, normalize_model_date
 from app.features.catalog.schemas import KNOWN_EXPERIMENT_TYPES
 from app.features.ingestion.parsers.utils import _open_text
 
@@ -30,8 +28,9 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
         - ``campaign``: Derived campaign identifier from the case name
         - ``experiment_type``: Derived experiment type, constrained to
           KNOWN_EXPERIMENT_TYPES when possible
-        - ``compset_alias``: Compset alias (``COMPSET``)
+        - ``compset_long_name``: Required component-set long name (``COMPSET``)
         - ``case_root``: Case root directory (``CASEROOT``)
+        - ``source_code_path``: Model source root directory (``SRCROOT``)
     """
     env_case_path = Path(env_case_path)
 
@@ -40,8 +39,13 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
     case_group = _extract_value_from_file(env_case_path, "CASE_GROUP")
     machine = _extract_value_from_file(env_case_path, "MACH")
     user = _extract_value_from_file(env_case_path, "REALUSER")
-    compset_alias = _extract_value_from_file(env_case_path, "COMPSET")
+    compset_long_name = _extract_value_from_file(env_case_path, "COMPSET")
+    if compset_long_name is not None:
+        compset_long_name = compset_long_name.strip() or None
     case_root = _extract_value_from_file(env_case_path, "CASEROOT")
+    source_code_path = (
+        _extract_value_from_file(env_case_path, "SRCROOT") or ""
+    ).strip()
 
     # Extract metadata that requires special handling
     campaign, experiment_type = _extract_campaign_and_experiment_type(case_name)
@@ -54,8 +58,9 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
         "user": user,
         "campaign": campaign,
         "experiment_type": experiment_type,
-        "compset_alias": compset_alias,
+        "compset_long_name": compset_long_name,
         "case_root": case_root,
+        "source_code_path": source_code_path or None,
     }
 
 
@@ -70,18 +75,20 @@ def parse_env_build(env_build_path: str | Path) -> dict[str, str | None]:
     Returns
     -------
     dict
-        Dictionary with keys 'grid_resolution', 'compiler', 'mpilib',
+        Dictionary with keys 'grid_long_name', 'compiler', 'mpilib',
         and 'cime_output_root' (str or None)
     """
     env_build_path = Path(env_build_path)
 
-    grid_resolution = _extract_value_from_file(env_build_path, "GRID")
+    grid_long_name = _extract_value_from_file(env_build_path, "GRID")
+    if grid_long_name is not None:
+        grid_long_name = grid_long_name.strip() or None
     compiler = _extract_value_from_file(env_build_path, "COMPILER")
     mpilib = _extract_value_from_file(env_build_path, "MPILIB")
     cime_output_root = _extract_value_from_file(env_build_path, "CIME_OUTPUT_ROOT")
 
     return {
-        "grid_resolution": grid_resolution,
+        "grid_long_name": grid_long_name,
         "compiler": compiler,
         "mpilib": mpilib,
         "cime_output_root": cime_output_root,
@@ -102,7 +109,8 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
         Dictionary with runtime initialization, simulation date metadata,
         and path-based artifact metadata, including:
 
-        - ``initialization_type``: Run type (``RUN_TYPE``)
+        - ``initialization_type``: ``restart`` when ``CONTINUE_RUN`` is TRUE;
+          otherwise run type (``RUN_TYPE``)
         - ``simulation_start_date``: Initialization date for non-continuation runs
         - ``simulation_end_date``: Derived end date for non-continuation runs
         - ``output_path``: Run directory path (``RUNDIR``)
@@ -110,7 +118,7 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
         - ``postprocessing_script``: Post-run script command (``POSTRUN_SCRIPT``)
     """
     env_run_path = Path(env_run_path)
-    initialization_type = _extract_value_from_file(env_run_path, "RUN_TYPE")
+    run_type = _extract_value_from_file(env_run_path, "RUN_TYPE")
     run_start_date = _extract_value_from_file(env_run_path, "RUN_STARTDATE")
     run_ref_date = _extract_value_from_file(env_run_path, "RUN_REFDATE")
     continue_run = _extract_value_from_file(env_run_path, "CONTINUE_RUN")
@@ -121,9 +129,9 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
     archive_path = _extract_value_from_file(env_run_path, "DOUT_S_ROOT")
     postprocessing_script = _extract_value_from_file(env_run_path, "POSTRUN_SCRIPT")
 
-    simulation_start_date = (
-        run_ref_date if initialization_type == "branch" else run_start_date
-    )
+    is_continuation = bool(continue_run) and continue_run.strip().upper() == "TRUE"
+
+    simulation_start_date = run_ref_date if run_type == "branch" else run_start_date
     simulation_end_date = _calculate_simulation_end_date(
         simulation_start_date,
         stop_option,
@@ -132,12 +140,13 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
     )
     # Continuations retain the original initialization date in XML. Their
     # execution interval must come from the coupler clock, not this fallback.
-    if continue_run and continue_run.strip().upper() == "TRUE":
+    if is_continuation:
         simulation_start_date = None
         simulation_end_date = None
 
     return {
-        "initialization_type": initialization_type,
+        # RUN_TYPE describes only the first execution in a case.
+        "initialization_type": "restart" if is_continuation else run_type,
         "simulation_start_date": simulation_start_date,
         "simulation_end_date": simulation_end_date,
         "output_path": output_path,
@@ -283,21 +292,17 @@ def _calculate_simulation_end_date(
         return None
 
     try:
-        start_date = datetime.strptime(simulation_start_date, "%Y-%m-%d")
         stop_n_int = int(stop_n)
+        if stop_option == "ndays":
+            return add_model_date(simulation_start_date, days=stop_n_int)
+        if stop_option == "nmonths":
+            return add_model_date(simulation_start_date, months=stop_n_int)
+        if stop_option == "nyears":
+            return add_model_date(simulation_start_date, months=stop_n_int * 12)
     except ValueError:
         return None
 
-    if stop_option == "ndays":
-        end_date = start_date + relativedelta(days=stop_n_int)
-    elif stop_option == "nmonths":
-        end_date = start_date + relativedelta(months=stop_n_int)
-    elif stop_option == "nyears":
-        end_date = start_date + relativedelta(years=stop_n_int)
-    else:
-        return None
-
-    return end_date.strftime("%Y-%m-%d")
+    return None
 
 
 def _parse_stop_date(stop_date: str | None) -> str | None:
@@ -305,6 +310,9 @@ def _parse_stop_date(stop_date: str | None) -> str | None:
         return None
 
     try:
-        return datetime.strptime(stop_date, "%Y%m%d").strftime("%Y-%m-%d")
+        if not re.fullmatch(r"[0-9]{8}", stop_date):
+            return None
+
+        return normalize_model_date(f"{stop_date[:4]}-{stop_date[4:6]}-{stop_date[6:]}")
     except ValueError:
         return None

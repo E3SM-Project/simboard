@@ -42,13 +42,13 @@ Case-level state is derived from execution-level state.
 
 | Term                      | Definition                                                                                                                                                                                                                                                                                                                                                                          |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Complete execution        | An execution directory that has the required metadata files `env_case.xml..*.gz`, `env_build.xml..*.gz`, `env_run.xml..*`, `README.case..*.gz`, `CaseStatus..*.gz`, and `e3sm_timing..*`, with the required metadata present in those files. The timing file must also provide a non-empty execution ID (LID). Optional `GIT_CONFIG..*.gz` and `GIT_STATUS..*.gz` are not required. |
-| Incomplete execution      | An execution directory rejected with typed `IncompleteArchiveError` because required metadata is missing. This immutable content result is distinct from a transient filesystem access failure.                                                                                                                                                                                     |
+| Complete execution        | An execution directory that has the required metadata files `env_case.xml..*.gz`, `env_build.xml..*.gz`, `env_run.xml..*`, `README.case..*.gz`, `CaseStatus..*.gz`, and `e3sm_timing..*`, with the required metadata present in those files. The timing file must also provide a non-empty execution ID (LID). Optional `GIT_CONFIG..*.gz`, `GIT_STATUS..*.gz`, and `GIT_LOG.<execution_id>[.gz]` are not required. |
+| Incomplete execution      | An execution directory rejected with typed `IncompleteArchiveError` because required metadata is missing. Rejections are revalidated when an unprocessed execution is visited again; filesystem access failures are reported separately. |
 | Submission-qualified case | A parent case directory for which collection found at least one newly discovered complete execution ID that is not already present in the stored known execution IDs.                                                                                                                                                                                                               |
 | Selected submission case  | A submission-qualified case that a given runner invocation selects for dry-run reporting or submission after applying any per-run cap such as `MAX_CASES_PER_RUN`.                                                                                                                                                                                                                  |
-| Deferred execution        | A newly discovered valid execution ID that belongs to a submission-qualified case but is not selected in the current runner invocation because a per-run cap stopped selection earlier.                                                                                                                                                                                             |
+| Deferred execution        | An execution not selected in this invocation because its staging `CaseStatus` reports `running`, or because a per-run cap stopped selection. Readiness deferrals are retried on later scans without being marked processed or persisted as metadata rejections. |
 | `processed_execution_ids` | Execution IDs already recorded in stored processed state for one case, reconstructed from prior successful ingestion state so future collection can treat matching discovered executions as already known.                                                                                                                                                                          |
-| Discovery result          | Immutable validation outcome keyed by machine, normalized case identity, and execution ID. Stored outcomes are `accepted`, `rejected_incomplete`, and `rejected_invalid`.                                                                                                                                                                                                           |
+| Discovery result          | Current validation outcome keyed by machine, normalized case identity, and execution ID, with structured errors including field/code details. Stored outcomes are `accepted`, `rejected_incomplete`, and `rejected_invalid`. Unprocessed executions are revalidated when visited again. |
 
 ### Logging reference
 
@@ -65,6 +65,15 @@ selected submissions. It advances when a case finishes (including retries),
 whether successful or failed. Non-interactive runs keep the existing structured
 case and summary logs without a terminal progress bar.
 
+## Ingested Simulation Dates
+
+- **Source:** `Curr Time` and `Stop Time` from the initial driver clock in `cpl.log.<execution_id>` (plain or gzipped). `Stop Time` is the configured end; termination timestamps do not override it.
+- **Fallback:** XML-derived dates apply only to non-continuation runs, never `CONTINUE_RUN=TRUE`. Missing coupler logs alone do not fail required-file validation.
+- **Validation:** An unknown start date prevents execution creation; the end date may be null.
+- **Storage:** API and database use validated `YYYY-MM-DD` strings, including year `0000`. Validation and fallback arithmetic use Gregorian rules, not inferred model calendars. Actual run timestamps from CaseStatus remain timezone-aware datetimes.
+- **Migration:** Existing dates and nulls are preserved. Year-zero records block downgrade to PostgreSQL `DATE`.
+- **Corrections:** Duplicates remain skipped; update stored dates through [metadata backfill](../operations/metadata-backfill.md).
+
 ## Performance Directories
 
 There are two PACE performance directories on HPC sites: staging (`PERF_ARCHIVE_DIR`) and archive (`OLD_PERF_ARCHIVE_DIR`).
@@ -73,6 +82,57 @@ There are two PACE performance directories on HPC sites: staging (`PERF_ARCHIVE_
 >
 > SimBoard automation can scan either `PERF_ARCHIVE_DIR` or
 > `OLD_PERF_ARCHIVE_DIR` depending on runner configuration.
+
+### PACE archiving and metadata state
+
+**Staging metadata is not necessarily final.** Staging can contain active runs
+as well as executions awaiting the next PACE collection run. PACE selects
+individual execution directories, not entire case lifecycles.
+
+- **NERSC:** The Python workflow selects executions using Slurm accounting status,
+  leaving selected active job states in staging. Other states, including
+  `UNKNOWN`, are eligible to move. See
+  [`pace-process-perf-archive.py`](https://github.com/E3SM-Project/pace/blob/master/portal/utils/pace-process-perf-archive.py)
+  and the upload/archive wrapper,
+  [`pace_archive_nersc.sh`](https://github.com/E3SM-Project/pace/blob/master/portal/utils/pace_archive_nersc.sh).
+- **LCRC and other sites using the Perl workflow:** The script first checks for
+  a gzipped `CaseStatus` and all readable regular files being gzipped, then falls
+  back to machine-specific scheduler checks. See
+  [`e3sm_perf_archive.perl`](https://pace.ornl.gov/static/tools/e3sm_perf_archive.perl)
+  and the upload/archive wrapper,
+  [`pace_archive.sh`](https://github.com/E3SM-Project/E3SM_test_scripts/blob/master/util/pace_archive.sh).
+
+**Archived does not mean successful.** Both workflows can archive failed
+executions without requiring a `case.run success` entry. These scripts do not
+establish whether staged metadata is refreshed after a run finishes.
+
+For SimBoard, metadata completeness means the required files and fields are
+present, not that the run completed. Normal collection skips already-processed
+execution IDs rather than automatically refreshing their run status.
+
+Staging collection checks the latest `case.run` attempt using the existing
+`CaseStatus` parser before accepting an unprocessed execution, including cached
+acceptance. A parsed `running` status defers collection until a later scan.
+`unknown`, `completed`, and `failed` retain existing selection behavior.
+Every unprocessed execution must pass current metadata and schema validation.
+Missing or ambiguous required `CaseStatus` files fail this validation, even
+after earlier acceptance. Read/decompression errors during readiness checks are retryable
+unreadable observations, not parsed `unknown` statuses. Archive scans do not
+apply this readiness gate. This is a metadata readiness check, not PACE's
+scheduler-state filtering: it makes no Slurm queries
+and cannot guarantee final metadata. A stale `running` snapshot can remain
+deferred in staging until its status changes or it is collected from archive.
+
+Automated path submissions send `selected_execution_ids` so the backend parses
+only selected execution directories, not deferred siblings in the same case.
+When supplied, selected IDs also determine the persisted processed IDs, even
+if the request's `processed_execution_ids` differs or is omitted.
+Requests omitting this optional field retain whole-path parsing. Deploy the
+backend's selection support before running the updated path collector.
+
+See the [PACE Collection and Upload Reference](https://e3sm.atlassian.net/wiki/spaces/EPG/pages/5477335106/PACE+Collection+and+Upload+Reference)
+for detailed selection criteria and site workflows. Site-deployed scripts may
+differ from the published references.
 
 ### Source directory mappings
 
@@ -149,22 +209,32 @@ Example NERSC path:
 
 ### 2. Archive directory (`OLD_PERF_ARCHIVE_DIR`)
 
-Long-term filesystem location managed by PACE, referred to as `OLD_PERF_ARCHIVE_DIR`. PACE moves staging output into this directory once per day.
+Long-term filesystem location managed by PACE, referred to as `OLD_PERF_ARCHIVE_DIR`. PACE moves eligible staging output into this directory when the site's archiving job runs; site scheduling determines the frequency.
 
 Supported structure under configured archive root:
 
 ```bash
 YYYY-MM/
-  performance_archive_<timestamp>/
+  performance_archive_[<machine>_<project-tag>_]<timestamp>/
     [STATUS_BUCKET/] # Optional, for example COMPLETED/ on machines with status bucketing such as NERSC and ALCF.
       user/
         case/
           execution/
 ```
 
-Archive runners treat each immediate `YYYY-MM/performance_archive_<timestamp>`
-directory as an atomic, immutable snapshot. Other top-level directories are
-ignored.
+Square brackets denote an optional prefix or status bucket. The timestamp format
+is `YYYY_MM_DD_HH_MM_SS`. Both PACE producer formats are supported:
+
+- Python producer (for example, NERSC and ORNL Frontier):
+  `performance_archive_2026_05_22_08_01_32`.
+- Shell producer (for example, LCRC Chrysalis and PNNL Compy):
+  `performance_archive_chrysalis_e3sm_2026_05_22_08_01_32`.
+
+The optional machine/project prefix is opaque, may contain underscores, and does
+not determine machine identity. Archive runners treat each matching immediate
+snapshot directory under `YYYY-MM/` as atomic and immutable. Both formats use the
+same discovery, case-identity, status-pruning, and database checkpoint handling.
+Other top-level directories are ignored.
 
 Example NERSC path for `COMPLETED` status cases:
 
@@ -251,7 +321,7 @@ Targeted v3 scans do not read or write archive snapshot checkpoints. Snapshot
 checkpoints describe completion of every execution in a snapshot, so a
 case-filtered scan must not mark a mixed snapshot complete or let prior general
 checkpoints hide targets. The runner still reads processed execution state and
-immutable discovery results, preserving submission idempotency.
+discovery results, preserving submission idempotency while revalidating rejections.
 
 ### Automated Submission-State Flow
 
@@ -267,25 +337,43 @@ archive root basename. The next run treats every eligible snapshot as
 uncheckpointed. See the NERSC Spin runbook for the operational SQL procedure.
 
 1. Scan either the staging performance directory (`PERF_ARCHIVE_DIR`, mounted at `PERF_ARCHIVE_ROOT`) or the archive directory (`OLD_PERF_ARCHIVE_DIR`, mounted at `OLD_PERF_ARCHIVE_ROOT`) for case directories and metadata.
-2. Read processed execution IDs and immutable discovery results from `/api/v1/ingestions/state`.
-3. Skip processed executions. For unprocessed executions, reuse stored discovery results before metadata validation: accepted results remain candidates, while rejected results remain excluded.
-4. Validate executions without stored results. `IncompleteArchiveError` becomes `rejected_incomplete`, `ArchiveValidationError` becomes `rejected_invalid`, and successful validation becomes `accepted`. Plain `FileNotFoundError`, `PermissionError`, other `OSError` values, and request failures are transient and are not stored.
-5. Persist all new immutable results in bounded batches through `/api/v1/ingestions/discovery-results` before submitting any ingestion request. Exact repeats are idempotent; a different outcome for an existing identity returns a conflict and rolls back that batch.
+2. Read processed execution IDs and discovery results from `/api/v1/ingestions/state`.
+3. Skip processed executions. Revalidate all unprocessed executions in both staging and archive scans, including earlier accepted outcomes.
+4. Locate files, parse metadata, and validate normalized execution fields against the ingestion schema before selection. `IncompleteArchiveError` becomes `rejected_incomplete`, invalid fields or `ArchiveValidationError` become `rejected_invalid`, and successful validation becomes `accepted`. Invalid executions remain visible in logs and stored discovery results, but are excluded from submission. Plain `FileNotFoundError`, `PermissionError`, other `OSError` values, and request failures are transient and are not stored.
+5. Persist current results and structured errors in bounded batches through `/api/v1/ingestions/discovery-results` before submitting any ingestion request. Exact repeats are idempotent. Existing rows can be refreshed in either direction. Concurrent requests serialize changes to each stored identity. Fresh acceptance takes precedence over rejections for the same identity within one scan. `existing_count` includes refreshed rows.
 6. Submit each selected case, sending its newly discovered execution IDs as `processed_execution_ids`. Remote uploads stage a delta archive with the case root and only those selected execution directories; retries reuse that one immutable multipart payload, then remove the staging directory after either success or failure.
 7. SimBoard adds `processed_execution_ids` only through successful ingestion audit rows. Discovery `accepted` means validation succeeded; it does not mean ingestion succeeded.
-8. Future runs reconstruct both state types from PostgreSQL. Accepted executions deferred by a per-run cap, or left after failed ingestion, bypass validation and remain eligible for later submission.
-9. After submission, archive mode records a snapshot checkpoint only when every execution in that snapshot was ingested successfully or has an immutable rejection. Empty snapshots are also complete. Dry runs and snapshots containing deferred, failed, or transient work are not checkpointed.
+8. Future runs reconstruct both state types from PostgreSQL. Accepted executions deferred by a per-run cap, or left after failed ingestion, undergo current preflight before later submission.
+9. After submission, archive mode records a snapshot checkpoint only when every execution in that snapshot was ingested successfully or has a stored rejection. Empty snapshots are also complete. Dry runs and snapshots containing deferred, failed, or transient work are not checkpointed. These checkpoint settlement rules are unchanged by rejection revalidation.
+
+The server validates submitted executions again before persistence. `/from-path`
+returns HTTP 201 when executions are created, including partial results with
+counts and per-execution errors. It returns HTTP 400 when no executions are
+created and validation errors remain, preserving the failed ingestion audit.
+Duplicate-only and empty error-free no-ops return HTTP 200. Failed executions
+are not added to successful processed state.
 
 Collection atomicity for staging scans is `(case_path, execution_id)`. Archive
 scans additionally deduplicate by stable logical case identity plus
 `execution_id` so timestamped snapshot parents do not cause repeated archive
 ingestion across `OLD_PERF_ARCHIVE_DIR` snapshots. Updating files inside an
-already recorded execution directory does not make that execution eligible
-again. Completed archive snapshots are skipped before their contents are
+already successfully ingested execution directory does not make that execution eligible
+again. Previously rejected executions are checked again when visited, including
+after moving from staging into a `COMPLETED` archive directory. PACE parses and
+sorts these completed directories, so remaining missing-file errors warrant
+investigation rather than bypassing validation. Completed archive snapshots are skipped before their contents are
 walked. Dry runs compute and log proposed results but never persist discovery,
 processed state, or archive checkpoints.
 
-The targeted v3 runner is the exception to completed-snapshot pruning: it scans
+Targeted recovery of legacy rejections uses `execution_dir=<absolute-path>` with
+the normal `make ingest-dry-run` and `make ingest-apply` targets. Deploy the updated
+runner and API first. No routine discovery-row deletion is needed: a visited
+rejection is revalidated, and apply refreshes its stored result. Existing snapshot
+checkpoints are not automatically reopened or changed; single-execution runs
+bypass them without completing a whole snapshot. Already-ingested executions
+remain protected by normal processed-state and duplicate checks.
+
+The targeted v3 runner is another exception to completed-snapshot pruning: it scans
 all eligible snapshots within its fixed lower bound because checkpoint state is
 intentionally disabled for filtered reconciliation.
 

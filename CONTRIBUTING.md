@@ -18,8 +18,10 @@ If no issue exists, open one first or document the reason the change is intentio
 
 - branch from `main`
 - use short-lived, descriptive branch names
+- commit incrementally: make one small commit per logical step instead of one large commit at the end
 - keep commits focused and reviewable
 - avoid mixing behavior changes, refactors, and unrelated cleanup in one commit
+- make each commit pass tests and pre-commit on its own, so history stays bisectable
 
 No repository branch naming convention is documented, so prefer clarity over personal shorthand.
 

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal, Optional
 from uuid import UUID
 
 from sqlalchemy import (
     CheckConstraint,
-    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -21,8 +20,9 @@ from sqlalchemy import (
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
+from app.common.model_dates import normalize_model_date
 from app.common.models.base import Base
 from app.common.models.mixins import IDMixin, TimestampMixin
 from app.features.catalog.enums import (
@@ -120,10 +120,10 @@ class Execution(Base, IDMixin, TimestampMixin):
     execution_id: Mapped[str] = mapped_column(Text, index=True, nullable=False)
     case_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    compset: Mapped[str] = mapped_column(String(120))
-    compset_alias: Mapped[str] = mapped_column(Text)
-    grid_name: Mapped[str] = mapped_column(Text)
-    grid_resolution: Mapped[str] = mapped_column(Text)
+    compset_long_name: Mapped[str] = mapped_column(Text)
+    compset_alias: Mapped[str | None] = mapped_column(Text, nullable=True)
+    grid_alias: Mapped[str | None] = mapped_column(Text, nullable=True)
+    grid_long_name: Mapped[str] = mapped_column(Text)
 
     # Model setup/context
     # ~~~~~~~~~~~~~~~~~~~
@@ -144,8 +144,8 @@ class Execution(Base, IDMixin, TimestampMixin):
 
     # Model timeline
     # ~~~~~~~~~~~~~~
-    simulation_start_date: Mapped[date] = mapped_column(Date)
-    simulation_end_date: Mapped[date | None] = mapped_column(Date)
+    simulation_start_date: Mapped[str] = mapped_column(String(10))
+    simulation_end_date: Mapped[str | None] = mapped_column(String(10))
     run_start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     run_end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     compiler: Mapped[str | None] = mapped_column(String(100))
@@ -161,10 +161,11 @@ class Execution(Base, IDMixin, TimestampMixin):
 
     # Version control
     # ~~~~~~~~~~~~~~~
-    git_repository_url: Mapped[str | None] = mapped_column(Text)
+    git_repository_source: Mapped[str | None] = mapped_column(Text)
     git_branch: Mapped[str | None] = mapped_column(String(200))
     git_tag: Mapped[str | None] = mapped_column(String(100))
     git_commit_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    source_code_path: Mapped[str | None] = mapped_column(Text)
 
     # Provenance & submission
     # ~~~~~~~~~~~~~~~~~~~~~~~
@@ -202,6 +203,10 @@ class Execution(Base, IDMixin, TimestampMixin):
     links: Mapped[list[ExternalLink]] = relationship(
         back_populates="execution", cascade="all, delete-orphan"
     )
+
+    @validates("simulation_start_date", "simulation_end_date")
+    def _normalize_simulation_date(self, key: str, value: object) -> str | None:
+        return normalize_model_date(value) if value is not None else None
 
 
 class SourceDirectory(Base, IDMixin):

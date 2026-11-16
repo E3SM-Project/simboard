@@ -4,10 +4,10 @@ This test module provides comprehensive coverage for the ingestion API,
 including path-based and upload-based ingestion endpoints.
 """
 
+import gzip
 import tarfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -27,6 +27,7 @@ from app.features.ingestion.api import (
     _build_hpc_upload_payload,
     _build_ingestion_state_response,
     _normalize_processed_execution_ids,
+    _resolve_ingestion_status,
     _run_ingest_archive,
     _save_uploaded_file_and_hash,
     _validate_archive_path,
@@ -61,6 +62,8 @@ from app.main import app
 from tests.features.site.utils import get_or_create_site
 from tests.fixtures.continuation_case import (
     CASE_NAME,
+    ENV_BUILD,
+    ENV_CASE,
     EXECUTIONS,
     stage_continuation_case,
 )
@@ -119,6 +122,70 @@ def _create_case(
     return case
 
 
+@pytest.mark.parametrize(
+    "created_count,error_count,expected_status",
+    [
+        (1, 0, "success"),
+        (0, 0, "success"),
+        (1, 1, "partial"),
+        (0, 1, "failed"),
+    ],
+)
+def test_resolve_ingestion_status(created_count, error_count, expected_status):
+    assert _resolve_ingestion_status(created_count, error_count) == expected_status
+
+
+@pytest.mark.parametrize("transport", ["path", "hpc-upload", "upload"])
+@pytest.mark.parametrize("duplicate_count", [0, 2], ids=["empty", "duplicate-only"])
+def test_error_free_noop_ingestion_records_success(
+    client, db, tmp_path, transport, duplicate_count
+):
+    machine = db.query(Machine).first()
+    archive_path = tmp_path / "noop.tar.gz"
+    archive_path.write_bytes(b"noop-archive")
+    payload = {"machine_name": machine.name}
+
+    with patch(
+        "app.features.ingestion.api.ingest_archive",
+        return_value=IngestArchiveResult(
+            executions=[], created_count=0, duplicate_count=duplicate_count, errors=[]
+        ),
+    ):
+        if transport == "path":
+            response = client.post(
+                f"{API_BASE}/ingestions/from-path",
+                json={**payload, "archive_path": str(archive_path)},
+            )
+            source_reference = str(archive_path)
+        else:
+            source_reference = archive_path.name
+            if transport == "hpc-upload":
+                source_reference = "/archive/noop-case"
+                payload.update(
+                    case_path=source_reference, processed_execution_ids=["100.1-1"]
+                )
+            response = client.post(
+                f"{API_BASE}/ingestions/from-{transport}",
+                data=payload,
+                files={
+                    "file": (archive_path.name, b"noop-archive", "application/gzip")
+                },
+            )
+
+    assert response.status_code == (200 if transport == "path" else 201), response.text
+    assert response.json() == {
+        "created_count": 0,
+        "duplicate_count": duplicate_count,
+        "executions": [],
+        "errors": [],
+    }
+    ingestion = db.query(Ingestion).filter_by(source_reference=source_reference).one()
+    assert ingestion.status == "success"
+    assert ingestion.created_count == 0
+    assert ingestion.duplicate_count == duplicate_count
+    assert ingestion.error_count == 0
+
+
 @pytest.mark.parametrize("transport", ["path", "hpc-upload", "upload"])
 @pytest.mark.parametrize("existing_type", ["new", None, "development", "production"])
 def test_ingested_case_defaults_preserve_existing_types(
@@ -151,7 +218,9 @@ def test_ingested_case_defaults_preserve_existing_types(
                 data=payload,
                 files={"file": ("case.tar.gz", archive.getvalue(), "application/gzip")},
             )
-        assert response.status_code == 201, response.text
+        assert response.status_code == (
+            200 if transport == "path" and attempt else 201
+        ), response.text
         assert response.json()["created_count"] == (
             len(EXECUTIONS) if attempt == 0 else 0
         )
@@ -160,6 +229,292 @@ def test_ingested_case_defaults_preserve_existing_types(
         assert case.simulation_type == (
             "development" if existing_type == "new" else existing_type
         )
+
+
+@pytest.mark.parametrize(
+    "argument,alias",
+    [
+        ("-compset F20TR-GHG", "F20TR-GHG"),
+        ("--compset=F20TR-GHG", "F20TR-GHG"),
+        ("-compset=1850_EAM_ELM", None),
+        ("--compset 1850_EAM_ELM", None),
+        ("", None),
+    ],
+)
+def test_component_metadata_survives_api_ingestion_and_catalog_reads(
+    client, db, tmp_path, argument, alias
+):
+    case_path = stage_continuation_case(tmp_path)
+    for path in case_path.glob("*/CaseDocs.*/README.case.*.gz"):
+        with gzip.open(path, "wt") as stream:
+            stream.write(f"create_newcase {argument} --res ne30\n")
+    response = client.post(
+        f"{API_BASE}/ingestions/from-path",
+        json={"machine_name": "chrysalis", "archive_path": str(case_path)},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == len(EXECUTIONS)
+    for execution in db.query(Execution).all():
+        assert execution.compset_long_name.startswith("20TRSOI_EAM%")
+        assert execution.compset_alias == alias
+        response = client.get(f"{API_BASE}/executions/{execution.id}")
+        assert response.status_code == 200, response.text
+        assert response.json()["compsetLongName"] == execution.compset_long_name
+        assert response.json()["compsetAlias"] == alias
+        assert "compset" not in response.json()
+    response = client.get(
+        f"{API_BASE}/executions",
+        params={
+            "compset_long_name": execution.compset_long_name,
+            "sort_by": "compset_long_name",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert len(response.json()["items"]) == len(EXECUTIONS)
+    assert all(row["compsetAlias"] == alias for row in response.json()["items"])
+
+
+def test_missing_xml_component_set_fails_before_case_creation(client, db, tmp_path):
+    case_path = stage_continuation_case(tmp_path)
+    for path in case_path.glob("*/CaseDocs.*/env_case.xml.*.gz"):
+        with gzip.open(path, "wt") as stream:
+            stream.write(
+                "\n".join(
+                    line for line in ENV_CASE.splitlines() if 'id="COMPSET"' not in line
+                )
+            )
+    response = client.post(
+        f"{API_BASE}/ingestions/from-path",
+        json={"machine_name": "chrysalis", "archive_path": str(case_path)},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["created_count"] == 0
+    assert all(
+        error["field"] == "compset_long_name" for error in response.json()["errors"]
+    )
+    assert db.query(Case).count() == 0
+    assert db.query(Execution).count() == 0
+
+
+@pytest.mark.parametrize(
+    "argument,alias",
+    [
+        ("--res arcticx4", "arcticx4"),
+        ("-res arcticx4", "arcticx4"),
+        ("--res=arcticx4", "arcticx4"),
+        ("-res=arcticx4", "arcticx4"),
+        ("", None),
+    ],
+)
+def test_grid_metadata_survives_api_ingestion_and_catalog_reads(
+    client, db, tmp_path, argument, alias
+):
+    case_path = stage_continuation_case(tmp_path)
+    for path in case_path.glob("*/CaseDocs.*/README.case.*.gz"):
+        with gzip.open(path, "wt") as stream:
+            stream.write(f"create_newcase {argument}\n")
+    response = client.post(
+        f"{API_BASE}/ingestions/from-path",
+        json={"machine_name": "chrysalis", "archive_path": str(case_path)},
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == len(EXECUTIONS)
+    for execution in db.query(Execution).all():
+        db.refresh(execution)
+        assert execution.grid_alias == alias
+        assert execution.grid_long_name.startswith("a%ne30np4.pg2_l%r05_")
+        response = client.get(f"{API_BASE}/executions/{execution.id}")
+        assert response.status_code == 200, response.text
+        assert response.json()["gridAlias"] == alias
+        assert response.json()["gridLongName"] == execution.grid_long_name
+        assert "gridName" not in response.json()
+        assert "gridResolution" not in response.json()
+    params = {"grid_long_name": execution.grid_long_name, "sort_by": "grid_long_name"}
+    if alias is not None:
+        params["grid_alias"] = alias
+    response = client.get(f"{API_BASE}/executions", params=params)
+    assert response.status_code == 200, response.text
+    assert len(response.json()["items"]) == len(EXECUTIONS)
+    assert all(row["gridAlias"] == alias for row in response.json()["items"])
+    response = client.get(f"{API_BASE}/executions/filter-options")
+    assert response.status_code == 200, response.text
+    assert response.json()["gridAliases"] == ([alias] if alias else [])
+    assert response.json()["gridLongNames"] == [execution.grid_long_name]
+
+
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_missing_xml_grid_fails_before_case_creation(client, db, tmp_path, value):
+    case_path = stage_continuation_case(tmp_path)
+    for path in case_path.glob("*/CaseDocs.*/env_build.xml.*.gz"):
+        with gzip.open(path, "wt") as stream:
+            stream.write(
+                "<config>"
+                + (f'<entry id="GRID" value="{value}" />' if value is not None else "")
+                + "</config>"
+            )
+    response = client.post(
+        f"{API_BASE}/ingestions/from-path",
+        json={"machine_name": "chrysalis", "archive_path": str(case_path)},
+    )
+    assert response.status_code == 400, response.text
+    assert response.json()["created_count"] == 0
+    assert len(response.json()["errors"]) == len(EXECUTIONS)
+    assert all(
+        error["field"] == "grid_long_name" for error in response.json()["errors"]
+    )
+    assert db.query(Case).count() == 0
+    assert db.query(Execution).count() == 0
+
+
+@pytest.mark.parametrize("all_invalid", [False, True])
+@pytest.mark.parametrize("failure", ["missing", "ambiguous", "missing_lid"])
+def test_path_parser_rejections_preserve_errors_and_partial_ingestion(
+    client, db, tmp_path, all_invalid, failure
+):
+    case = stage_continuation_case(tmp_path)
+    invalid_ids = set(EXECUTIONS) if all_invalid else {next(iter(EXECUTIONS))}
+    for execution_id in invalid_ids:
+        execution = case / execution_id
+        if failure == "missing_lid":
+            next(execution.glob("e3sm_timing.*")).write_text("Case : case\n")
+        else:
+            metadata = next(execution.glob("CaseDocs.*/env_build.xml.*.gz"))
+            if failure == "missing":
+                metadata.unlink()
+            else:
+                metadata.with_name("env_build.xml.extra.gz").write_bytes(
+                    metadata.read_bytes()
+                )
+    response = client.post(
+        f"{API_BASE}/ingestions/from-path",
+        json={
+            "archive_path": str(case),
+            "machine_name": "chrysalis",
+            "selected_execution_ids": list(EXECUTIONS),
+        },
+    )
+
+    assert response.status_code == (400 if all_invalid else 201), response.text
+    body = response.json()
+    assert body["created_count"] == len(EXECUTIONS) - len(invalid_ids)
+    assert len(body["errors"]) == len(invalid_ids)
+    expected_code = {
+        "missing": "missing_required_file",
+        "ambiguous": "multiple_matching_files",
+        "missing_lid": "missing_required_value",
+    }[failure]
+    assert all(
+        error["code"] == expected_code and error["message"] for error in body["errors"]
+    )
+    assert {
+        Path(error["execution_dir"]).name for error in body["errors"]
+    } == invalid_ids
+    audit = db.query(Ingestion).one()
+    assert audit.status == ("failed" if all_invalid else "partial")
+    assert audit.error_count == len(invalid_ids)
+    assert set(audit.processed_execution_ids) == set(EXECUTIONS) - invalid_ids
+    assert db.query(Execution).count() == body["created_count"]
+
+
+@pytest.mark.parametrize("all_invalid", [False, True])
+@pytest.mark.parametrize("transport", ["path", "hpc-upload"])
+def test_hpc_validation_preserves_audit_and_only_tracks_successful_ids(
+    client, db, tmp_path, all_invalid, transport
+):
+    case = stage_continuation_case(tmp_path)
+    invalid_ids = set(EXECUTIONS) if all_invalid else {next(iter(EXECUTIONS))}
+    for execution_id in invalid_ids:
+        path = next((case / execution_id).glob("CaseDocs.*/env_build.xml.*.gz"))
+        with gzip.open(path, "wt") as stream:
+            stream.write("<config />")
+    payload = {
+        "machine_name": "chrysalis",
+        "archive_path": str(case),
+        "selected_execution_ids": list(EXECUTIONS),
+    }
+    if transport == "path":
+        response = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+    else:
+        archive = BytesIO()
+        with tarfile.open(fileobj=archive, mode="w:gz") as stream:
+            stream.add(case, arcname=case.name)
+        response = client.post(
+            f"{API_BASE}/ingestions/from-hpc-upload",
+            data={
+                "machine_name": "chrysalis",
+                "case_path": str(case),
+                "processed_execution_ids": list(EXECUTIONS),
+            },
+            files={"file": ("case.tar.gz", archive.getvalue(), "application/gzip")},
+        )
+
+    assert response.status_code == (
+        400 if all_invalid and transport == "path" else 201
+    ), response.text
+    assert response.json()["created_count"] == len(EXECUTIONS) - len(invalid_ids)
+    assert len(response.json()["errors"]) == len(invalid_ids)
+    assert all(
+        error["field"] == "grid_long_name" for error in response.json()["errors"]
+    )
+    audit = db.query(Ingestion).one()
+    assert audit.status == ("failed" if all_invalid else "partial")
+    assert audit.error_count == len(invalid_ids)
+    assert set(audit.processed_execution_ids) == set(EXECUTIONS) - invalid_ids
+    state = client.get(
+        f"{API_BASE}/ingestions/state", params={"machine_name": "chrysalis"}
+    )
+    assert (
+        set(state.json()["cases"][str(case)]["processed_execution_ids"])
+        == set(EXECUTIONS) - invalid_ids
+    )
+
+    # A retry with only successful executions is a duplicate-only no-op.
+    if not all_invalid:
+        payload["selected_execution_ids"] = sorted(set(EXECUTIONS) - invalid_ids)
+        response = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+        assert response.status_code == 200, response.text
+        assert response.json()["duplicate_count"] == len(EXECUTIONS) - len(invalid_ids)
+        assert response.json()["errors"] == []
+
+    # Corrected metadata remains eligible after a failed or partial ingestion.
+    for execution_id in invalid_ids:
+        path = next((case / execution_id).glob("CaseDocs.*/env_build.xml.*.gz"))
+        with gzip.open(path, "wt") as stream:
+            stream.write(ENV_BUILD)
+    payload["selected_execution_ids"] = sorted(invalid_ids)
+    response = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == len(invalid_ids)
+
+
+@pytest.mark.parametrize("processed_ids", [None, [], list(EXECUTIONS)])
+def test_path_selection_limits_persisted_processed_ids(
+    client, db, tmp_path, processed_ids
+):
+    case_path = stage_continuation_case(tmp_path)
+    selected_id = next(iter(EXECUTIONS))
+    payload = {
+        "archive_path": str(case_path),
+        "machine_name": "chrysalis",
+        "selected_execution_ids": [selected_id],
+    }
+    if processed_ids is not None:
+        payload["processed_execution_ids"] = processed_ids
+
+    response = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json()["created_count"] == 1
+    assert [row.execution_id for row in db.query(Execution).all()] == [selected_id]
+    ingestion = db.query(Ingestion).filter_by(source_reference=str(case_path)).one()
+    assert ingestion.processed_execution_ids == [selected_id]
+    state = client.get(
+        f"{API_BASE}/ingestions/state", params={"machine_name": "chrysalis"}
+    )
+    assert state.status_code == 200, state.text
+    assert state.json()["cases"][str(case_path)]["processed_execution_ids"] == [
+        selected_id
+    ]
 
 
 @pytest.mark.parametrize(
@@ -280,9 +635,9 @@ class TestExecutionDiscoveryResultsEndpoint:
             f"{API_BASE}/ingestions/state", params={"machine_name": machine.name}
         )
         assert state.status_code == 200
-        assert (
-            state.json()["discovery_results"]["campaign/case-a"] == payload["results"]
-        )
+        assert state.json()["discovery_results"]["campaign/case-a"] == [
+            {**result, "errors": []} for result in payload["results"]
+        ]
 
     def test_idempotency_reread_loads_only_requested_composite_identity(
         self, client, db: Session
@@ -330,7 +685,9 @@ class TestExecutionDiscoveryResultsEndpoint:
         assert response.status_code == 201
         assert loaded_execution_ids == ["100.1-1"]
 
-    def test_conflicting_stored_outcome_returns_409(self, client, db: Session) -> None:
+    def test_current_validation_refreshes_accepted_outcome(
+        self, client, db: Session
+    ) -> None:
         machine = db.query(Machine).first()
         assert machine is not None
         base: dict[str, Any] = {
@@ -350,14 +707,64 @@ class TestExecutionDiscoveryResultsEndpoint:
             == 201
         )
         base["results"][0]["outcome"] = "rejected_invalid"
+        errors = [
+            {
+                "field": "grid_long_name",
+                "code": "string_type",
+                "message": "Invalid grid",
+            }
+        ]
+        base["results"][0]["errors"] = errors
 
         response = client.post(f"{API_BASE}/ingestions/discovery-results", json=base)
 
-        assert response.status_code == 409
+        assert response.status_code == 201
         stored = db.query(ExecutionDiscoveryResult).one()
-        assert stored.outcome == ExecutionDiscoveryOutcome.ACCEPTED
+        db.refresh(stored)
+        assert stored.outcome == ExecutionDiscoveryOutcome.REJECTED_INVALID
+        assert stored.errors == errors
+        state = client.get(
+            f"{API_BASE}/ingestions/state", params={"machine_name": machine.name}
+        )
+        assert state.json()["discovery_results"]["case-a"][0]["errors"] == errors
 
-    def test_conflicting_batch_rolls_back_new_rows(self, client, db: Session) -> None:
+    @pytest.mark.parametrize("previous", ["rejected_incomplete", "rejected_invalid"])
+    @pytest.mark.parametrize(
+        "current", ["accepted", "rejected_incomplete", "rejected_invalid"]
+    )
+    def test_revalidation_refreshes_rejected_outcomes(
+        self, client, db: Session, previous, current
+    ) -> None:
+        machine = db.query(Machine).first()
+        endpoint = f"{API_BASE}/ingestions/discovery-results"
+        payload = {
+            "machine_name": machine.name,
+            "results": [
+                {
+                    "case_identity": "case-a",
+                    "execution_id": "100.1-1",
+                    "outcome": previous,
+                }
+            ],
+        }
+        assert client.post(endpoint, json=payload).status_code == 201
+        original = db.query(ExecutionDiscoveryResult).one()
+        original_id = original.id
+        # Rejection reports count "new" rejections by first detection time.
+        first_detected_at = original.created_at
+        payload["results"][0]["outcome"] = current
+
+        for _ in range(2):
+            response = client.post(endpoint, json=payload)
+            assert response.status_code == 201, response.text
+            assert response.json() == {"inserted_count": 0, "existing_count": 1}
+            db.refresh(original)
+            assert original.outcome == current
+            assert original.id == original_id
+            assert original.created_at == first_detected_at
+        assert db.query(ExecutionDiscoveryResult).count() == 1
+
+    def test_current_validation_refreshes_batch(self, client, db: Session) -> None:
         machine = db.query(Machine).first()
         assert machine is not None
         endpoint = f"{API_BASE}/ingestions/discovery-results"
@@ -369,7 +776,17 @@ class TestExecutionDiscoveryResultsEndpoint:
         assert (
             client.post(
                 endpoint,
-                json={"machine_name": machine.name, "results": [existing]},
+                json={
+                    "machine_name": machine.name,
+                    "results": [
+                        existing,
+                        {
+                            **existing,
+                            "execution_id": "102.1-1",
+                            "outcome": "rejected_incomplete",
+                        },
+                    ],
+                },
             ).status_code
             == 201
         )
@@ -379,6 +796,7 @@ class TestExecutionDiscoveryResultsEndpoint:
             json={
                 "machine_name": machine.name,
                 "results": [
+                    {**existing, "execution_id": "102.1-1"},
                     {
                         "case_identity": "case-a",
                         "execution_id": "101.1-1",
@@ -389,12 +807,19 @@ class TestExecutionDiscoveryResultsEndpoint:
             },
         )
 
-        assert response.status_code == 409
+        assert response.status_code == 201
+        assert (
+            db.query(ExecutionDiscoveryResult)
+            .filter_by(execution_id="102.1-1")
+            .one()
+            .outcome
+            == ExecutionDiscoveryOutcome.ACCEPTED
+        )
         assert (
             db.query(ExecutionDiscoveryResult)
             .filter(ExecutionDiscoveryResult.execution_id == "101.1-1")
             .one_or_none()
-            is None
+            is not None
         )
 
     def test_concurrent_identical_inserts_both_succeed(self, db: Session) -> None:
@@ -424,7 +849,7 @@ class TestExecutionDiscoveryResultsEndpoint:
             == 1
         )
 
-    def test_concurrent_differing_inserts_store_one_and_conflict_one(
+    def test_concurrent_differing_inserts_keep_one_current_outcome(
         self, db: Session
     ) -> None:
         machine = db.query(Machine).first()
@@ -457,13 +882,51 @@ class TestExecutionDiscoveryResultsEndpoint:
 
         results = self._persist_concurrently(db.get_bind().engine, [base, conflicting])
 
-        assert sorted(results) == ["http_409", "success"]
+        assert results[0] == "success"
+        assert results[1] == "success"
         assert (
             db.query(ExecutionDiscoveryResult)
             .filter(ExecutionDiscoveryResult.case_identity == identity)
             .count()
             == 1
         )
+        assert db.query(ExecutionDiscoveryResult).filter_by(
+            case_identity=identity
+        ).one().outcome in {
+            ExecutionDiscoveryOutcome.ACCEPTED,
+            ExecutionDiscoveryOutcome.REJECTED_INVALID,
+        }
+
+    @pytest.mark.parametrize("rejected", ["rejected_incomplete", "rejected_invalid"])
+    def test_concurrent_revalidation_keeps_one_current_outcome(
+        self, db: Session, rejected
+    ):
+        machine = db.query(Machine).first()
+        identity = f"concurrent-revalidation-{uuid.uuid4()}"
+        previous = ExecutionDiscoveryResultsRequest.model_validate(
+            {
+                "machine_name": machine.name,
+                "results": [
+                    {
+                        "case_identity": identity,
+                        "execution_id": "100.1-1",
+                        "outcome": rejected,
+                    }
+                ],
+            }
+        )
+        accepted = previous.model_copy(deep=True)
+        accepted.results[0].outcome = ExecutionDiscoveryOutcome.ACCEPTED
+        bind = db.get_bind().engine
+        assert self._persist_concurrently(bind, [previous]) == ["success"]
+
+        results = self._persist_concurrently(bind, [previous, accepted])
+
+        assert results[1] == "success"
+        assert results[0] == "success"
+        assert db.query(ExecutionDiscoveryResult).filter_by(
+            case_identity=identity
+        ).one().outcome in {ExecutionDiscoveryOutcome.ACCEPTED, rejected}
 
     def test_conflicting_batch_input_is_rejected(self) -> None:
         with pytest.raises(ValidationError):
@@ -621,8 +1084,11 @@ class TestExecutionDiscoveryResultsEndpoint:
 
 
 class TestArchiveCheckpointsEndpoint:
+    @pytest.mark.parametrize(
+        "prefix", ["", "chrysalis_e3sm_", "compy_e3sm_", "machine_name_project_tag_"]
+    )
     def test_batch_is_idempotent_and_get_is_range_filtered(
-        self, client, db: Session
+        self, client, db: Session, prefix: str
     ) -> None:
         machine = db.query(Machine).first()
         assert machine is not None
@@ -633,11 +1099,11 @@ class TestArchiveCheckpointsEndpoint:
             "snapshots": [
                 {
                     "archive_month": "2025-01",
-                    "snapshot_name": "performance_archive_2025_01_10_00_00_00",
+                    "snapshot_name": f"performance_archive_{prefix}2025_01_10_00_00_00",
                 },
                 {
                     "archive_month": "2025-02",
-                    "snapshot_name": "performance_archive_2025_02_10_00_00_00",
+                    "snapshot_name": f"performance_archive_{prefix}2025_02_10_00_00_00",
                 },
             ],
         }
@@ -734,13 +1200,13 @@ class TestGetIngestionStateEndpoint:
             Execution(
                 case_id=case.id,
                 execution_id=execution_id,
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="fhist",
-                grid_name="ne30pg2_r05_IcoswISC30E3r5",
-                grid_resolution="1x1",
+                grid_alias="ne30pg2_r05_IcoswISC30E3r5",
+                grid_long_name="1x1",
                 status="completed",
                 initialization_type="branch",
-                simulation_start_date=datetime.now(timezone.utc),
+                simulation_start_date="2020-01-01",
                 created_by=user_id,
                 last_updated_by=user_id,
                 ingestion_id=ingestion.id,
@@ -853,13 +1319,13 @@ class TestGetIngestionStateEndpoint:
             Execution(
                 case_id=partial_case.id,
                 execution_id="100.1-1",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="fhist",
-                grid_name="grid",
-                grid_resolution="1x1",
+                grid_alias="grid",
+                grid_long_name="1x1",
                 status="completed",
                 initialization_type="branch",
-                simulation_start_date=datetime.now(timezone.utc),
+                simulation_start_date="2020-01-01",
                 created_by=user_id,
                 last_updated_by=user_id,
                 ingestion_id=partial_ingestion.id,
@@ -917,13 +1383,13 @@ class TestGetIngestionStateEndpoint:
             Execution(
                 case_id=case.id,
                 execution_id="legacy-100.1-1",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="fhist",
-                grid_name="grid",
-                grid_resolution="1x1",
+                grid_alias="grid",
+                grid_long_name="1x1",
                 status="completed",
                 initialization_type="branch",
-                simulation_start_date=datetime.now(timezone.utc),
+                simulation_start_date="2020-01-01",
                 created_by=normal_user_sync["id"],
                 last_updated_by=normal_user_sync["id"],
                 ingestion_id=ingestion.id,
@@ -963,13 +1429,13 @@ class TestGetIngestionStateEndpoint:
             Execution(
                 case_id=case.id,
                 execution_id="legacy-upload-100.1-1",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="fhist",
-                grid_name="grid",
-                grid_resolution="1x1",
+                grid_alias="grid",
+                grid_long_name="1x1",
                 status="completed",
                 initialization_type="branch",
-                simulation_start_date=datetime.now(timezone.utc),
+                simulation_start_date="2020-01-01",
                 created_by=normal_user_sync["id"],
                 last_updated_by=normal_user_sync["id"],
                 ingestion_id=ingestion.id,
@@ -1015,13 +1481,13 @@ class TestGetIngestionStateEndpoint:
                 Execution(
                     case_id=case.id,
                     execution_id=f"legacy-{index}.1-1",
-                    compset="FHIST",
+                    compset_long_name="FHIST",
                     compset_alias="fhist",
-                    grid_name="grid",
-                    grid_resolution="1x1",
+                    grid_alias="grid",
+                    grid_long_name="1x1",
                     status="completed",
                     initialization_type="branch",
-                    simulation_start_date=datetime.now(timezone.utc),
+                    simulation_start_date="2020-01-01",
                     created_by=user_id,
                     last_updated_by=user_id,
                     ingestion_id=ingestion.id,
@@ -1117,13 +1583,13 @@ class TestGetIngestionStateEndpoint:
             Execution(
                 case_id=blank_execution_case.id,
                 execution_id="",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="fhist",
-                grid_name="grid",
-                grid_resolution="1x1",
+                grid_alias="grid",
+                grid_long_name="1x1",
                 status="completed",
                 initialization_type="branch",
-                simulation_start_date=datetime.now(timezone.utc),
+                simulation_start_date="2020-01-01",
                 created_by=user_id,
                 last_updated_by=user_id,
                 ingestion_id=blank_execution_ingestion.id,
@@ -1199,10 +1665,10 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-summary-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1264,10 +1730,10 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case1.id),
                     "executionId": "exec-errors-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1279,10 +1745,10 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case2.id),
                     "executionId": "exec-errors-2",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1351,10 +1817,10 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-audit-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1493,10 +1959,10 @@ class TestIngestFromPathEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": f"exec-{machine_alias}",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1546,10 +2012,10 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-zip-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1597,10 +2063,10 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-targz-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1673,10 +2139,10 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-sha256-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1731,10 +2197,10 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-partial-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1851,10 +2317,10 @@ class TestIngestFromUploadEndpoint:
                 case_group=None,
                 machine=machine.name,
                 hpc_username="ac.golaz",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="test_alias",
-                grid_name="grid1",
-                grid_resolution="0.9x1.25",
+                grid_alias="grid1",
+                grid_long_name="0.9x1.25",
                 campaign="v3.LR.historical",
                 experiment_type="historical",
                 initialization_type="branch",
@@ -1863,7 +2329,7 @@ class TestIngestFromUploadEndpoint:
                 run_start_date=None,
                 run_end_date=None,
                 compiler="gnu",
-                git_repository_url="https://github.com/E3SM-Project/E3SM.git",
+                git_repository_source="https://github.com/E3SM-Project/E3SM.git",
                 git_branch="main",
                 git_tag="v3",
                 git_commit_hash="abc123",
@@ -1937,10 +2403,10 @@ class TestIngestFromUploadEndpoint:
                 case_group=None,
                 machine=machine.name,
                 hpc_username="ac.golaz",
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="test_alias",
-                grid_name="grid1",
-                grid_resolution="0.9x1.25",
+                grid_alias="grid1",
+                grid_long_name="0.9x1.25",
                 campaign="v3.LR.historical",
                 experiment_type="historical",
                 initialization_type="branch",
@@ -1949,7 +2415,7 @@ class TestIngestFromUploadEndpoint:
                 run_start_date=None,
                 run_end_date=None,
                 compiler="gnu",
-                git_repository_url="https://github.com/E3SM-Project/E3SM.git",
+                git_repository_source="https://github.com/E3SM-Project/E3SM.git",
                 git_branch="main",
                 git_tag="v3",
                 git_commit_hash="abc123",
@@ -2015,7 +2481,13 @@ class TestIngestFromUploadEndpoint:
         payload = {"archive_path": str(archive_path), "machine_name": machine.name}
 
         mock_errors = [
-            {"file": "sim1.json", "error": "Invalid format"},
+            {
+                "execution_dir": "/path/to/exec1",
+                "error_type": "ValidationError",
+                "field": "compset_long_name",
+                "code": "string_type",
+                "error": "Input should be a valid string",
+            },
             {"file": "sim2.json", "error": "Missing field"},
         ]
 
@@ -2027,9 +2499,16 @@ class TestIngestFromUploadEndpoint:
         ):
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
-        assert res.status_code == 201
+        assert res.status_code == 400
 
         # Verify failed status in audit record
+        assert res.json() == {
+            "created_count": 0,
+            "duplicate_count": 0,
+            "executions": [],
+            "errors": mock_errors,
+        }
+
         ingestion = (
             db.query(Ingestion)
             .filter(Ingestion.source_reference == str(archive_path))
@@ -2056,11 +2535,11 @@ class TestIngestFromUploadEndpoint:
             case_name="orphan_case_endpoint",
             case_group=None,
             machine=machine.name,
-            hpc_username=None,
-            compset="FHIST",
+            hpc_username="test-user",
+            compset_long_name="FHIST",
             compset_alias="test_alias",
-            grid_name="grid",
-            grid_resolution="0.9x1.25",
+            grid_alias="grid",
+            grid_long_name="0.9x1.25",
             campaign=None,
             experiment_type=None,
             initialization_type="test",
@@ -2069,7 +2548,7 @@ class TestIngestFromUploadEndpoint:
             run_start_date=None,
             run_end_date=None,
             compiler=None,
-            git_repository_url=None,
+            git_repository_source=None,
             git_branch=None,
             git_tag=None,
             git_commit_hash=None,
@@ -2082,9 +2561,15 @@ class TestIngestFromUploadEndpoint:
         ):
             res = client.post(f"{API_BASE}/ingestions/from-path", json=payload)
 
-        assert res.status_code == 201
+        assert res.status_code == 400
         assert res.json()["created_count"] == 0
         assert len(res.json()["errors"]) == 1
+        error = res.json()["errors"][0]
+        assert error["execution_dir"] == parsed_execution.execution_dir
+        assert error["error_type"] == "ValidationError"
+        assert error["field"] == "simulation_start_date"
+        assert error["code"] == "value_error"
+        assert "Model date must use YYYY-MM-DD" in error["error"]
 
         ingestion = (
             db.query(Ingestion)
@@ -2207,10 +2692,10 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-artifacts-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2262,10 +2747,10 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-links-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2317,10 +2802,18 @@ class TestIngestFromUploadEndpoint:
         assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "Filename is required"
 
-    def test_persist_executions_with_git_repository_url(
-        self, client, db: Session, tmp_path
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "ssh://git@github.com/E3SM-Project/E3SM.git",
+            "/global/homes/user/E3SM",
+            "git@private.example:owner/repo.git",
+        ],
+    )
+    def test_persist_executions_with_git_repository_source(
+        self, client, db: Session, tmp_path, source
     ):
-        """Test that executions with git_repository_url are persisted correctly."""
+        """Repository sources survive API persistence without URL normalization."""
         machine = db.query(Machine).first()
         assert machine is not None
 
@@ -2336,16 +2829,16 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-git-url-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
                     "gitTag": "v1.0",
                     "gitCommitHash": "abc123",
-                    "gitRepositoryUrl": "https://github.com/E3SM-Project/E3SM.git",
+                    "gitRepositorySource": source,
                 }
             )
         ]
@@ -2366,9 +2859,8 @@ class TestIngestFromUploadEndpoint:
         execution = db.query(Execution).filter(Execution.case_id == case.id).first()
 
         assert execution is not None
-        assert (
-            execution.git_repository_url == "https://github.com/E3SM-Project/E3SM.git"
-        )
+        db.refresh(execution)
+        assert execution.git_repository_source == source
 
     def test_persist_executions_with_hpc_username(self, client, db: Session, tmp_path):
         machine = db.query(Machine).first()
@@ -2395,10 +2887,10 @@ class TestIngestFromUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-hpc-username-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2451,10 +2943,10 @@ class TestIngestFromUploadEndpoint:
                 case_group=None,
                 machine=machine.name,
                 hpc_username=None,
-                compset="FHIST",
+                compset_long_name="FHIST",
                 compset_alias="test_alias",
-                grid_name="grid1",
-                grid_resolution="0.9x1.25",
+                grid_alias="grid1",
+                grid_long_name="0.9x1.25",
                 campaign=None,
                 experiment_type=None,
                 initialization_type="branch",
@@ -2463,7 +2955,7 @@ class TestIngestFromUploadEndpoint:
                 run_start_date=None,
                 run_end_date=None,
                 compiler="gnu",
-                git_repository_url=None,
+                git_repository_source=None,
                 git_branch=None,
                 git_tag=None,
                 git_commit_hash=None,
@@ -2526,10 +3018,10 @@ class TestIngestFromHpcUploadEndpoint:
                 {
                     "caseId": str(case.id),
                     "executionId": "exec-hpc-upload-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2812,10 +3304,10 @@ class TestIngestFromHpcUploadEndpoint:
                 {
                     "caseId": str(first_case.id),
                     "executionId": "multi-1",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2825,10 +3317,10 @@ class TestIngestFromHpcUploadEndpoint:
                 {
                     "caseId": str(second_case.id),
                     "executionId": "multi-2",
-                    "compset": "AQUAPLANET",
+                    "compsetLongName": "AQUAPLANET",
                     "compsetAlias": "QPC4",
-                    "gridName": "f19_f19",
-                    "gridResolution": "1.9x2.5",
+                    "gridAlias": "f19_f19",
+                    "gridLongName": "1.9x2.5",
                     "initializationType": "startup",
                     "status": "created",
                     "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2884,8 +3376,9 @@ class TestIngestionApiCoverage:
 
         assert exc_info.value.status_code == 400
 
+    @pytest.mark.parametrize("selected_ids", [None, ["100.1-1"]])
     def test_run_ingest_archive_forwards_strict_validation_and_hpc_username(
-        self, db: Session
+        self, db: Session, selected_ids
     ):
         expected_result = IngestArchiveResult(
             executions=[],
@@ -2904,6 +3397,7 @@ class TestIngestionApiCoverage:
                 db,
                 strict_validation=True,
                 hpc_username="request-user",
+                selected_execution_ids=selected_ids,
             )
 
         assert result == expected_result
@@ -2914,6 +3408,7 @@ class TestIngestionApiCoverage:
             strict_validation=True,
             hpc_username="request-user",
             production_case_identity=None,
+            selected_execution_ids=selected_ids,
         )
 
     def test_run_ingest_archive_handles_archive_validation_error(self, db: Session):

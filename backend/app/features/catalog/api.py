@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import String, and_, asc, desc, distinct, func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -10,6 +11,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.common.dependencies import get_database_session
 from app.core.database import transaction
 from app.features.assistant.orchestrator import is_summary_llm_available
+from app.features.catalog.case_summary import summarize_case_executions
 from app.features.catalog.enums import (
     ArtifactKind,
     CaseSimulationType,
@@ -88,6 +90,14 @@ def list_cases(
     git_tag: str | None = Query(None),
     created_by: UUID | None = Query(None),
     simulation_type: CaseSimulationType | None = Query(None),
+    recent_execution: bool = Query(
+        False,
+        description="Only cases with a completed run in the last six calendar months.",
+    ),
+    has_diagnostics: bool = Query(
+        False,
+        description="Only cases that link to published diagnostics.",
+    ),
     sort_by: str = Query(
         "updated_at",
         pattern=(
@@ -114,10 +124,19 @@ def list_cases(
         created_by=created_by,
         simulation_type=simulation_type,
     )
-    total = query.order_by(None).count()
+    if has_diagnostics:
+        query = query.filter(
+            Case.links.any(ExternalLink.kind == ExternalLinkKind.DIAGNOSTIC)
+        )
     latest_execution = _completed_execution_summary_subquery(db)
     execution_count = _case_execution_count_subquery(db)
     rows_query = _case_list_projection(query, execution_count, latest_execution)
+
+    if recent_execution:
+        cutoff = datetime.now(timezone.utc) - relativedelta(months=6)
+        rows_query = rows_query.filter(latest_execution.c.latest_run_activity >= cutoff)
+
+    total = rows_query.order_by(None).count()
     ordering = _case_list_ordering(
         sort_by, sort_order, execution_count, latest_execution
     )
@@ -127,6 +146,7 @@ def list_cases(
         .limit(page_size)
         .all()
     )
+
     return CasePageOut(
         items=[_case_list_item_from_row(row) for row in rows],
         total=total,
@@ -216,7 +236,7 @@ def _completed_execution_summary_subquery(db: Session):
                     latest_run_activity.desc().nullslast(),
                     Execution.run_end_date.desc().nullslast(),
                     Execution.run_start_date.desc().nullslast(),
-                    Execution.execution_id.desc(),
+                    Execution.execution_id.collate("C").desc(),
                 ),
             )
             .label("latest_execution_rank"),
@@ -246,6 +266,9 @@ def _case_list_projection(query, execution_count, latest_execution):
             Machine.name.label("machine_name"),
             Case.hpc_username,
             execution_count.label("execution_count"),
+            Case.links.any(ExternalLink.kind == ExternalLinkKind.DIAGNOSTIC).label(
+                "has_diagnostics"
+            ),
             Case.created_at,
             Case.updated_at,
             latest_execution.c.latest_execution_id,
@@ -313,36 +336,14 @@ def get_catalog_overview(
     machine_counts: dict[UUID, int] = {
         machine_id: count for machine_id, count in machine_count_rows
     }
-    execution_count = (
-        db.query(func.count(Execution.id))
-        .filter(Execution.case_id == Case.id)
-        .correlate(Case)
-        .scalar_subquery()
-    )
-    latest_simulation_activity = (
-        db.query(func.max(func.greatest(Execution.created_at, Execution.updated_at)))
-        .filter(Execution.case_id == Case.id)
-        .correlate(Case)
-        .scalar_subquery()
-    )
-    latest_activity = func.greatest(
-        Case.updated_at,
-        func.coalesce(latest_simulation_activity, Case.updated_at),
+    execution_count = _case_execution_count_subquery(db)
+    latest_execution = _completed_execution_summary_subquery(db)
+    ordering = _case_list_ordering(
+        "latest_run_activity", "desc", execution_count, latest_execution
     )
     rows = (
-        db.query(
-            Case.id,
-            Case.name,
-            Case.case_group,
-            Case.machine_id,
-            Machine.name.label("machine_name"),
-            Case.hpc_username,
-            execution_count.label("execution_count"),
-            Case.created_at,
-            latest_activity.label("updated_at"),
-        )
-        .join(Machine, Machine.id == Case.machine_id)
-        .order_by(latest_activity.desc(), Case.id.asc())
+        _case_list_projection(db.query(Case), execution_count, latest_execution)
+        .order_by(*ordering)
         .limit(6)
         .all()
     )
@@ -351,7 +352,7 @@ def get_catalog_overview(
         total_executions=total_executions,
         latest_submission=latest_submission,
         machine_counts=machine_counts,
-        recent_cases=[CaseListItemOut(**row._asdict()) for row in rows],
+        recent_cases=[_case_list_item_from_row(row) for row in rows],
     )
 
 
@@ -905,9 +906,9 @@ def list_executions(  # noqa: C901
     hpc_username: list[str] | None = Query(None),
     campaign: list[str] | None = Query(None),
     experiment_type: list[str] | None = Query(None),
-    compset: list[str] | None = Query(None),
-    grid_name: list[str] | None = Query(None),
-    grid_resolution: list[str] | None = Query(None),
+    compset_long_name: list[str] | None = Query(None),
+    grid_alias: list[str] | None = Query(None),
+    grid_long_name: list[str] | None = Query(None),
     initialization_type: list[str] | None = Query(None),
     compiler: list[str] | None = Query(None),
     git_tag: list[str] | None = Query(None),
@@ -918,7 +919,7 @@ def list_executions(  # noqa: C901
             "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
             "case_group|experiment_type|status|git_branch|git_tag|"
             "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|run_activity|"
-            "grid_resolution|compset|grid_name|machine_name)$"
+            "grid_long_name|compset_long_name|grid_alias|machine_name)$"
         ),
     ),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
@@ -937,9 +938,9 @@ def list_executions(  # noqa: C901
         hpc_username=hpc_username,
         campaign=campaign,
         experiment_type=experiment_type,
-        compset=compset,
-        grid_name=grid_name,
-        grid_resolution=grid_resolution,
+        compset_long_name=compset_long_name,
+        grid_alias=grid_alias,
+        grid_long_name=grid_long_name,
         initialization_type=initialization_type,
         compiler=compiler,
         git_tag=git_tag,
@@ -1061,9 +1062,9 @@ def _list_executions(  # noqa: C901
     hpc_username: list[str] | None = Query(None),
     campaign: list[str] | None = Query(None),
     experiment_type: list[str] | None = Query(None),
-    compset: list[str] | None = Query(None),
-    grid_name: list[str] | None = Query(None),
-    grid_resolution: list[str] | None = Query(None),
+    compset_long_name: list[str] | None = Query(None),
+    grid_alias: list[str] | None = Query(None),
+    grid_long_name: list[str] | None = Query(None),
     initialization_type: list[str] | None = Query(None),
     compiler: list[str] | None = Query(None),
     git_tag: list[str] | None = Query(None),
@@ -1074,7 +1075,7 @@ def _list_executions(  # noqa: C901
             "^(created_at|updated_at|execution_id|case_name|case_hash|campaign|"
             "case_group|experiment_type|status|git_branch|git_tag|"
             "git_commit_hash|simulation_start_date|simulation_end_date|run_start_date|run_activity|"
-            "grid_resolution|compset|grid_name|machine_name)$"
+            "grid_long_name|compset_long_name|grid_alias|machine_name)$"
         ),
     ),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
@@ -1095,9 +1096,9 @@ def _list_executions(  # noqa: C901
                 Execution.git_branch.ilike(term),
                 Execution.git_tag.ilike(term),
                 Execution.git_commit_hash.ilike(term),
-                Execution.grid_name.ilike(term),
-                Execution.grid_resolution.ilike(term),
-                Execution.compset.ilike(term),
+                Execution.grid_alias.ilike(term),
+                Execution.grid_long_name.ilike(term),
+                Execution.compset_long_name.ilike(term),
                 Execution.compset_alias.ilike(term),
                 Machine.name.ilike(term),
             )
@@ -1117,9 +1118,9 @@ def _list_executions(  # noqa: C901
     for column, values in (
         (Execution.campaign, campaign),
         (Execution.experiment_type, experiment_type),
-        (Execution.compset, compset),
-        (Execution.grid_name, grid_name),
-        (Execution.grid_resolution, grid_resolution),
+        (Execution.compset_long_name, compset_long_name),
+        (Execution.grid_alias, grid_alias),
+        (Execution.grid_long_name, grid_long_name),
         (Execution.initialization_type, initialization_type),
         (Execution.compiler, compiler),
         (Execution.git_tag, git_tag),
@@ -1139,10 +1140,10 @@ def _list_executions(  # noqa: C901
         Execution.status,
         Execution.campaign,
         Execution.experiment_type,
-        Execution.compset,
+        Execution.compset_long_name,
         Execution.compset_alias,
-        Execution.grid_name,
-        Execution.grid_resolution,
+        Execution.grid_alias,
+        Execution.grid_long_name,
         Execution.initialization_type,
         Execution.simulation_start_date,
         Execution.simulation_end_date,
@@ -1153,6 +1154,7 @@ def _list_executions(  # noqa: C901
         Execution.git_branch,
         Execution.git_tag,
         Execution.git_commit_hash,
+        Execution.source_code_path,
         Case.machine_id,
         Machine.name.label("machine_name"),
         Case.hpc_username,
@@ -1178,9 +1180,9 @@ def _list_executions(  # noqa: C901
         "simulation_end_date": Execution.simulation_end_date,
         "run_start_date": Execution.run_start_date,
         "run_activity": func.coalesce(Execution.run_end_date, Execution.run_start_date),
-        "grid_resolution": Execution.grid_resolution,
-        "compset": Execution.compset,
-        "grid_name": Execution.grid_name,
+        "grid_long_name": Execution.grid_long_name,
+        "compset_long_name": Execution.compset_long_name,
+        "grid_alias": Execution.grid_alias,
         "machine_name": Machine.name,
     }[sort_by]
     ordering = asc(sort_column) if sort_order == "asc" else desc(sort_column)
@@ -1210,9 +1212,9 @@ def _get_execution_filter_options(db: Session) -> ExecutionFilterOptionsOut:
         hpc_usernames=_distinct_values(db, Case.hpc_username),
         campaigns=_distinct_values(db, Execution.campaign),
         experiment_types=_distinct_values(db, Execution.experiment_type),
-        compsets=_distinct_values(db, Execution.compset),
-        grid_names=_distinct_values(db, Execution.grid_name),
-        grid_resolutions=_distinct_values(db, Execution.grid_resolution),
+        compsets=_distinct_values(db, Execution.compset_long_name),
+        grid_aliases=_distinct_values(db, Execution.grid_alias),
+        grid_long_names=_distinct_values(db, Execution.grid_long_name),
         initialization_types=_distinct_values(db, Execution.initialization_type),
         compilers=_distinct_values(db, Execution.compiler),
         statuses=_distinct_values(db, Execution.status),
@@ -1790,6 +1792,7 @@ def _case_to_detail_out(case: Case) -> CaseDetailOut:
     """Convert a Case ORM instance to CaseDetailOut."""
     result = CaseDetailOut(
         **_build_case_summary(case),
+        **summarize_case_executions(case.executions),
         artifacts=_case_execution_artifacts(case),
         description=case.description,
         key_features=case.key_features,

@@ -7,6 +7,7 @@ from functools import partial
 from pathlib import Path
 from typing import Callable
 
+from app.features.ingestion.schemas import ARCHIVE_SNAPSHOT_NAME_PATTERN
 from app.scripts.ingestion.archive_ingestor_core import (
     ARCHIVE_ROOT_BASENAME,
     STAGING_ROOT_BASENAME,
@@ -15,9 +16,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
 )
 
 ARCHIVE_YEAR_DIR_PATTERN = re.compile(r"^(?P<year>\d{4})-(?P<month>\d{2})$")
-ARCHIVE_SNAPSHOT_DIR_PATTERN = re.compile(
-    r"^performance_archive_\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}$"
-)
+ARCHIVE_SNAPSHOT_DIR_PATTERN = re.compile(ARCHIVE_SNAPSHOT_NAME_PATTERN)
 # When snapshot layouts use status buckets, scan only COMPLETED cases.
 ARCHIVE_COMPLETED_STATUS_DIR_NAME = "COMPLETED"
 KNOWN_ARCHIVE_ROOT_BASENAMES = frozenset({STAGING_ROOT_BASENAME, ARCHIVE_ROOT_BASENAME})

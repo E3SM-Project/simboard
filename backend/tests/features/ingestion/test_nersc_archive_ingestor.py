@@ -1,5 +1,7 @@
 """Tests for the NERSC archive ingestion runner script."""
 
+import gzip
+import json
 import logging
 import runpy
 from dataclasses import replace
@@ -38,6 +40,7 @@ from app.scripts.ingestion.nersc_archive_ingestor import (
 from tests.features.ingestion.source_directory_utils import (
     stub_source_directory_persistence,
 )
+from tests.fixtures.continuation_case import stage_continuation_case
 
 
 @pytest.fixture(autouse=True)
@@ -190,6 +193,189 @@ def test_single_execution_rejects_normal_scan_exclusions(
         _run_ingestor(config, metadata_locator=forbidden, post_request_fn=forbidden)
         == 1
     )
+
+
+@pytest.mark.parametrize("runner", [ingestor_module, upload_module])
+@pytest.mark.parametrize("rejection", [IncompleteArchiveError, ArchiveValidationError])
+@pytest.mark.parametrize("move_to_archive", [False, True])
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_rejected_staging_execution_recovers_when_files_become_valid(
+    tmp_path, monkeypatch, runner, rejection, move_to_archive, dry_run
+):
+    staging = tmp_path / "performance_archive"
+    execution = staging / "user" / "case" / "100.1-1"
+    execution.mkdir(parents=True)
+    state = _fresh_state()
+    monkeypatch.setattr(runner, "_fetch_ingestion_state", lambda *a, **kw: state)
+    persisted = []
+    submitted = []
+    reads = []
+    ready = False
+
+    def locate(path):
+        reads.append(path)
+        if not ready:
+            raise rejection([])
+        return {}
+
+    def persist(*args, results, **kwargs):
+        persisted.extend(results)
+        for result in results:
+            state["discovery_results"][result.case_identity] = [
+                {
+                    "case_identity": result.case_identity,
+                    "execution_id": result.execution_id,
+                    "outcome": result.outcome,
+                }
+            ]
+        return {"status_code": 201, "body": {}}
+
+    def submit(endpoint, token, path, machine, **kwargs):
+        submitted.append((path, kwargs["processed_execution_ids"]))
+        return {"status_code": 201, "body": {"created_count": 1, "errors": []}}
+
+    config = IngestorConfig(
+        api_base_url="https://example.test",
+        api_token="token",
+        archive_root=staging,
+        machine_name="chrysalis" if runner is upload_module else "perlmutter",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+    assert (
+        runner._run_ingestor(
+            config,
+            metadata_locator=locate,
+            post_request_fn=submit,
+            discovery_post_request_fn=persist,
+        )
+        == 0
+    )
+    assert len(persisted) == 1
+    assert persisted[0].outcome == (
+        "rejected_incomplete"
+        if rejection is IncompleteArchiveError
+        else "rejected_invalid"
+    )
+    assert submitted == []
+    ready = True
+    if move_to_archive:
+        archive = tmp_path / "OLD_PERF"
+        destination = (
+            archive
+            / "2026-10"
+            / "performance_archive_2026_10_12_10_02_55"
+            / "COMPLETED"
+            / "user"
+            / "case"
+            / execution.name
+        )
+        destination.parent.mkdir(parents=True)
+        execution.rename(destination)
+        execution = destination
+        config = replace(
+            config, archive_root=archive, scan_mode="archive", execution_dir=execution
+        )
+    config = replace(config, dry_run=dry_run)
+
+    assert (
+        runner._run_ingestor(
+            config,
+            metadata_locator=locate,
+            post_request_fn=submit,
+            discovery_post_request_fn=persist,
+        )
+        == 0
+    )
+    assert reads == [str(staging / "user/case/100.1-1"), str(execution)]
+    assert len(persisted) == (1 if dry_run else 2)
+    assert submitted == ([] if dry_run else [(str(execution.parent), [execution.name])])
+    if not dry_run:
+        assert persisted[-1].outcome == "accepted"
+        assert (
+            runner._run_ingestor(
+                config,
+                metadata_locator=locate,
+                post_request_fn=submit,
+                discovery_post_request_fn=persist,
+            )
+            == 0
+        )
+        assert len(reads) == 2
+        assert len(submitted) == 1
+
+
+@pytest.mark.parametrize("runner", [ingestor_module, upload_module])
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize("dry_run", [False, True])
+@pytest.mark.parametrize("terminal", ["success", "error"])
+def test_running_staging_execution_is_deferred_then_ingested(
+    tmp_path, monkeypatch, runner, cached, dry_run, terminal
+) -> None:
+    root = tmp_path / "performance_archive"
+    case = stage_continuation_case(root / "user")
+    execution = next(case.iterdir())
+    status_file = next(execution.glob("CaseStatus.*.gz"))
+    starting = "2026-10-20 10:00:00: case.run starting 100\n"
+    with gzip.open(status_file, "wt") as stream:
+        stream.write(starting)
+    state = _fresh_state()
+    if cached:
+        state["discovery_results"]["user/" + case.name] = [
+            {
+                "case_identity": "user/" + case.name,
+                "execution_id": execution.name,
+                "outcome": "accepted",
+            }
+        ]
+    monkeypatch.setattr(runner, "_fetch_ingestion_state", lambda *a, **kw: state)
+    submitted = []
+    persisted = []
+
+    def submit(endpoint, token, path, machine, **kwargs):
+        submitted.append(kwargs["processed_execution_ids"])
+        return {"status_code": 201, "body": {"created_count": 1, "errors": []}}
+
+    def persist(*args, results, **kwargs):
+        persisted.extend(results)
+        return {"status_code": 201, "body": {}}
+
+    config = IngestorConfig(
+        api_base_url="https://example.test",
+        api_token="token",
+        archive_root=root,
+        machine_name="chrysalis" if runner is upload_module else "perlmutter",
+        dry_run=dry_run,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        execution_dir=execution,
+    )
+    assert (
+        runner._run_ingestor(
+            config, post_request_fn=submit, discovery_post_request_fn=persist
+        )
+        == 0
+    )
+    assert submitted == []
+    assert persisted == []
+    assert state["cases"] == {}
+
+    with gzip.open(status_file, "wt") as stream:
+        stream.write(starting + f"2026-10-20 11:00:00: case.run {terminal} 100\n")
+
+    assert (
+        runner._run_ingestor(
+            config, post_request_fn=submit, discovery_post_request_fn=persist
+        )
+        == 0
+    )
+    assert submitted == ([] if dry_run else [[execution.name]])
+    assert all(result.outcome == "accepted" for result in persisted)
+    if not dry_run:
+        assert state["cases"][str(case)]["processed_execution_ids"] == [execution.name]
 
 
 def test_run_ingestor_logs_case_grouped_outcomes_for_state_and_limit(
@@ -677,11 +863,20 @@ def test_run_ingestor_returns_failure_when_state_fetch_fails(
         request_timeout_seconds=30,
     )
 
+    status_file = tmp_path / "job-status.json"
+    monkeypatch.setenv("SIMBOARD_JOB_STATUS_FILE", str(status_file))
+
     exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
 
     assert exit_code == 1
     assert any(event == "state_fetch_failed" for event, _ in logged_events)
     assert not any(event == "scan_completed" for event, _ in logged_events)
+    assert json.loads(status_file.read_text()) == {
+        "reason": "api_request",
+        "message": "boom",
+        "status_code": 503,
+        "transient": True,
+    }
 
 
 def test_run_ingestor_default_dry_run_fetches_state_before_archive_checkpoints(
@@ -752,8 +947,11 @@ def test_run_ingestor_returns_failure_when_checkpoint_fetch_fails(
         request_timeout_seconds=30,
         scan_mode="archive",
     )
+    status_file = tmp_path / "job-status.json"
+    monkeypatch.setenv("SIMBOARD_JOB_STATUS_FILE", str(status_file))
 
     assert _run_ingestor(config, metadata_locator=lambda *_: {}) == 1
+    assert json.loads(status_file.read_text())["reason"] == "api_request"
     assert (
         "archive_checkpoint_fetch_failed",
         {"status_code": 503, "error": "boom"},
@@ -1248,7 +1446,7 @@ def test_discovery_persistence_failure_prevents_ingestion(
     assert ingestion_calls == []
 
 
-def test_all_accepted_results_persist_before_limit_and_deferred_bypasses_next_validation(
+def test_all_accepted_results_persist_before_limit_and_deferred_revalidates(
     tmp_path: Path, monkeypatch
 ) -> None:
     archive_root = tmp_path / "performance_archive"
@@ -1326,9 +1524,7 @@ def test_all_accepted_results_persist_before_limit_and_deferred_bypasses_next_va
     assert (
         _run_ingestor(
             config,
-            metadata_locator=lambda *_: pytest.fail(
-                "stored result must bypass validation"
-            ),
+            metadata_locator=lambda *_: {},
             post_request_fn=ingest_case,
             discovery_post_request_fn=persist_results,
         )
@@ -1336,7 +1532,7 @@ def test_all_accepted_results_persist_before_limit_and_deferred_bypasses_next_va
     )
     assert len(ingested_paths) == 2
     assert set(ingested_paths) == {str(case_a.resolve()), str(case_b.resolve())}
-    assert len(persisted_batches) == 1
+    assert len(persisted_batches) == 2
 
 
 def test_rejected_only_and_mixed_cases_persist_every_immutable_result(
@@ -1860,7 +2056,7 @@ def test_staging_scan_excludes_batches_and_unrelated_layouts(
     )
     assert set(validated) == (
         {str(case / execution_id) for case in case_paths}
-        if known_state == "fresh"
+        if known_state != "processed"
         else set()
     )
     assert set(ingested) == (
@@ -1869,7 +2065,7 @@ def test_staging_scan_excludes_batches_and_unrelated_layouts(
         else set()
     )
     assert {result.case_identity for result in discovered} == (
-        set(identities.values()) if known_state == "fresh" else set()
+        set(identities.values()) if known_state != "processed" else set()
     )
     assert {entry.execution_path for entry in sources} == {
         str(case / execution_id) for case in case_paths

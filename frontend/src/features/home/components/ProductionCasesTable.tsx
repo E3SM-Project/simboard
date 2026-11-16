@@ -1,6 +1,8 @@
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+import { DiagnosticsAvailableIcon } from '@/components/shared/DiagnosticsAvailableIcon';
+import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/loading-state';
 import {
@@ -26,6 +28,7 @@ export const ProductionCasesTable = () => {
     page: 1,
     pageSize: 6,
     simulationType: 'production',
+    recentExecution: true,
     sortBy: 'latest_run_activity',
     sortOrder: 'desc',
   });
@@ -36,7 +39,7 @@ export const ProductionCasesTable = () => {
 
   if (error && cases.length === 0) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center text-sm text-red-700">
+      <Alert variant="error" className="rounded-xl p-6 text-center">
         <p>Could not load production cases.</p>
         <Button
           className="mt-3"
@@ -47,19 +50,19 @@ export const ProductionCasesTable = () => {
         >
           Retry
         </Button>
-      </div>
+      </Alert>
     );
   }
 
   return (
-    <div className="rounded-xl border border-muted bg-white p-4 shadow-sm md:p-6">
+    <div className="rounded-xl border border-muted bg-card p-4 shadow-sm md:p-6">
       {error ? (
-        <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <Alert variant="error" className="mb-3 flex items-center justify-between gap-3">
           <span>Could not refresh production cases. Showing previously loaded data.</span>
           <Button size="sm" type="button" variant="outline" onClick={() => void refetch()}>
             Retry
           </Button>
-        </div>
+        </Alert>
       ) : null}
       {isFetching ? (
         <LoadingState
@@ -69,55 +72,66 @@ export const ProductionCasesTable = () => {
         />
       ) : null}
       <div className="overflow-x-auto">
-        <Table className="table-fixed">
+        <Table className="min-w-[1100px] table-fixed">
           <TableHeader>
             <TableRow>
               <TableHead className="w-[32%] min-w-[320px]">Case Name</TableHead>
-              <TableHead>HPC Username</TableHead>
-              <TableHead>Machine</TableHead>
-              <TableHead>Executions</TableHead>
-              <TableHead>Case Group</TableHead>
-              <TableHead>Last Updated</TableHead>
+              <TableHead>Last Execution</TableHead>
               <TableHead>Details</TableHead>
+              <TableHead>Case Group</TableHead>
+              <TableHead>Machine</TableHead>
+              <TableHead>HPC Username</TableHead>
+              <TableHead>Executions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {cases.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-                  No production cases are currently available.
+                  No production cases have a completed execution in the last six calendar months.
                 </TableCell>
               </TableRow>
             ) : (
-              cases.map((caseRecord) => (
-                <TableRow key={caseRecord.id}>
-                  <TableCell className="align-top">
-                    <TableCellText value={caseRecord.name} lines={1} />
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <TableCellText value={caseRecord.hpcUsername} lines={1} />
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <TableCellText value={caseRecord.machineName} lines={1} />
-                  </TableCell>
-                  <TableCell>{caseRecord.executionCount}</TableCell>
-                  <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
-                  <TableCell>{new Date(caseRecord.updatedAt).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    <Button asChild className="h-8 gap-1 px-2" size="sm" variant="outline">
-                      <Link
-                        to={caseDetailsPath({
-                          machineName: caseRecord.machineName,
-                          hpcUsername: caseRecord.hpcUsername,
-                          caseName: caseRecord.name,
-                        })}
-                      >
-                        Open <ArrowRight className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
+              cases.map((caseRecord) => {
+                const lastExecution =
+                  caseRecord.latestExecution?.runEndDate ??
+                  caseRecord.latestExecution?.runStartDate;
+
+                return (
+                  <TableRow key={caseRecord.id}>
+                    <TableCell className="align-top">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <TableCellText value={caseRecord.name} lines={1} />
+                        {caseRecord.hasDiagnostics ? <DiagnosticsAvailableIcon /> : null}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {lastExecution ? new Date(lastExecution).toLocaleDateString() : '—'}
+                    </TableCell>
+                    <TableCell>
+                      <Button asChild className="h-8 gap-1 px-2" size="sm" variant="outline">
+                        <Link
+                          to={caseDetailsPath({
+                            machineName: caseRecord.machineName,
+                            hpcUsername: caseRecord.hpcUsername,
+                            caseName: caseRecord.name,
+                          })}
+                        >
+                          Open <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </TableCell>
+                    <TableCell>{caseRecord.caseGroup ?? '—'}</TableCell>
+                    <TableCell className="align-top">
+                      <TableCellText value={caseRecord.machineName} lines={1} />
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <TableCellText value={caseRecord.hpcUsername} lines={1} />
+                    </TableCell>
+                    <TableCell>{caseRecord.executionCount}</TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

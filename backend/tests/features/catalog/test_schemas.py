@@ -27,18 +27,34 @@ from app.features.user.schemas import UserPreview
 
 
 class TestExecutionCreateSchema:
+    @pytest.mark.parametrize("value", [" ", "\t\n", "\u2003"])
+    def test_rejects_whitespace_only_component_long_name(self, value):
+        with pytest.raises(ValidationError) as exc:
+            ExecutionCreate(
+                caseId=uuid4(),
+                executionId="whitespace-compset",
+                compsetLongName=value,
+                gridAlias="ne30",
+                gridLongName="ne30",
+                initializationType="startup",
+                status="created",
+                simulationStartDate="1850-01-01",
+            )
+
+        assert exc.value.errors()[0]["type"] == "string_pattern_mismatch"
+
     def test_valid_execution_create_required_fields(self):
         payload = {
             "caseId": uuid4(),
             "executionId": "1081156.251218-200923",
             "caseHash": "abc123",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
-            "gridName": "f19_f19",
-            "gridResolution": "1.9x2.5",
+            "gridAlias": "f19_f19",
+            "gridLongName": "1.9x2.5",
             "initializationType": "startup",
             "status": "created",
-            "simulationStartDate": date(2023, 1, 1),
+            "simulationStartDate": "2023-01-01",
             "createdBy": uuid4(),
             "lastUpdatedBy": uuid4(),
         }
@@ -52,18 +68,18 @@ class TestExecutionCreateSchema:
         payload = {
             "caseId": uuid4(),
             "executionId": "1081156.251218-200923",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
-            "gridName": "f19_f19",
-            "gridResolution": "1.9x2.5",
+            "gridAlias": "f19_f19",
+            "gridLongName": "1.9x2.5",
             "initializationType": "startup",
             "status": "created",
-            "simulationStartDate": date(2023, 1, 1),
+            "simulationStartDate": "2023-01-01",
             "gitTag": "v1.0",
             "gitCommitHash": "abc123",
             "campaign": "campaign1",
             "experimentType": "exp1",
-            "simulationEndDate": date(2023, 12, 31),
+            "simulationEndDate": "2023-12-31",
             "runStartDate": datetime(2023, 1, 1, 0, 0, 0),
             "runEndDate": datetime(2023, 12, 31, 0, 0, 0),
             "compiler": "gcc",
@@ -71,7 +87,7 @@ class TestExecutionCreateSchema:
             "notesMarkdown": "Some notes",
             "knownIssues": "No known issues",
             "gitBranch": "main",
-            "gitRepositoryUrl": HttpUrl("http://example.com/repo"),
+            "gitRepositorySource": "http://example.com/repo",
             "createdBy": uuid4(),
             "lastUpdatedBy": uuid4(),
             "extra": {"key": "value"},
@@ -111,10 +127,10 @@ class TestExecutionCreateSchema:
             ExecutionCreate(
                 caseId=uuid4(),
                 executionId="1081156.251218-200923",
-                compset="AQUAPLANET",
+                compsetLongName="AQUAPLANET",
                 compsetAlias="QPC4",
-                gridName="f19_f19",
-                gridResolution="1.9x2.5",
+                gridAlias="f19_f19",
+                gridLongName="1.9x2.5",
                 initializationType="startup",
                 status="created",
                 simulationStartDate=datetime(2023, 1, 1),
@@ -126,16 +142,16 @@ class TestExecutionCreateSchema:
         execution = ExecutionCreate(
             caseId=uuid4(),
             executionId="1081156.251218-200923",
-            compset="AQUAPLANET",
+            compsetLongName="AQUAPLANET",
             compsetAlias="QPC4",
-            gridName="f19_f19",
-            gridResolution="1.9x2.5",
+            gridAlias="f19_f19",
+            gridLongName="1.9x2.5",
             initializationType="startup",
             status="created",
             simulationStartDate=value,
         )
 
-        assert execution.simulation_start_date == date(2019, 8, 1)
+        assert execution.simulation_start_date == "2019-08-01"
         assert (
             execution.model_dump(mode="json")["simulation_start_date"] == "2019-08-01"
         )
@@ -145,10 +161,10 @@ class TestExecutionCreateSchema:
             ExecutionCreate(
                 caseId=uuid4(),
                 executionId="1081156.251218-200923",
-                compset="AQUAPLANET",
+                compsetLongName="AQUAPLANET",
                 compsetAlias="QPC4",
-                gridName="f19_f19",
-                gridResolution="1.9x2.5",
+                gridAlias="f19_f19",
+                gridLongName="1.9x2.5",
                 initializationType="startup",
                 status="created",
                 simulationStartDate="2019-08-01T01:00:00Z",
@@ -179,7 +195,7 @@ class TestExecutionUpdateSchema:
         ("field_name", "value"),
         [
             ("compiler", "intel"),
-            ("gitRepositoryUrl", "https://example.com/repo"),
+            ("gitRepositorySource", "https://example.com/repo"),
             ("gitBranch", "main"),
             ("gitTag", "v1.2.3"),
             ("gitCommitHash", "abc123"),
@@ -368,14 +384,14 @@ class TestExecutionOutSchema:
             "case_name": "test_case",
             "execution_id": "1081156.251218-200923",
             "case_hash": "abc123",
-            "compset": "AQUAPLANET",
+            "compset_long_name": "AQUAPLANET",
             "compset_alias": "QPC4",
-            "grid_name": "f19_f19",
-            "grid_resolution": "1.9x2.5",
+            "grid_alias": "f19_f19",
+            "grid_long_name": "1.9x2.5",
             "initialization_type": "startup",
             "status": "created",
             "machine_id": uuid4(),
-            "simulation_start_date": date(2023, 1, 1),
+            "simulation_start_date": "2023-01-01",
             "created_by": uuid4(),
             "created_by_user": UserPreview(
                 id=uuid4(), email="creator@example.com", role="user"
@@ -425,7 +441,7 @@ class TestExecutionOutSchema:
             "compute_type",
             "notes_markdown",
             "known_issues",
-            "git_repository_url",
+            "git_repository_source",
             "git_branch",
             "git_tag",
             "git_commit_hash",
@@ -451,14 +467,14 @@ class TestExecutionOutSchema:
             "case_name": "test_case",
             "execution_id": "1081156.251218-200923",
             "case_hash": "abc123",
-            "compset": "AQUAPLANET",
+            "compset_long_name": "AQUAPLANET",
             "compset_alias": "QPC4",
-            "grid_name": "f19_f19",
-            "grid_resolution": "1.9x2.5",
+            "grid_alias": "f19_f19",
+            "grid_long_name": "1.9x2.5",
             "initialization_type": "startup",
             "status": "created",
             "machine_id": uuid4(),
-            "simulation_start_date": date(2023, 1, 1),
+            "simulation_start_date": "2023-01-01",
             "created_by": uuid4(),
             "created_by_user": UserPreview(
                 id=uuid4(), email="creator@example.com", role="user"
@@ -491,13 +507,13 @@ class TestExecutionOutSchema:
             "campaign": "campaign1",
             "experiment_type": "exp1",
             "case_group": "group1",
-            "simulation_end_date": date(2023, 12, 31),
+            "simulation_end_date": "2023-12-31",
             "run_start_date": datetime(2023, 1, 1, 0, 0, 0),
             "run_end_date": datetime(2023, 12, 31, 0, 0, 0),
             "compiler": "gcc",
             "notes_markdown": "Some notes",
             "known_issues": "No known issues",
-            "git_repository_url": HttpUrl("http://example.com/repo"),
+            "git_repository_source": "http://example.com/repo",
             "git_branch": "main",
             "git_tag": "v1.0",
             "git_commit_hash": "abc123",
@@ -546,10 +562,10 @@ class TestExecutionOutSchema:
             case_id=uuid4(),
             case_name="test_case",
             execution_id="1081156.251218-200923",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             status="created",
             machine_id=uuid4(),
@@ -619,10 +635,10 @@ class TestExecutionOutSchema:
             case_id=uuid4(),
             case_name="test_case",
             execution_id="1081156.251218-200923",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             status="created",
             machine_id=uuid4(),
@@ -723,7 +739,7 @@ class TestExecutionSummaryOutSchema:
             simulation_end_date=date(2023, 12, 31),
         )
         assert summary.case_hash == "hash-2"
-        assert summary.simulation_end_date == date(2023, 12, 31)
+        assert summary.simulation_end_date == "2023-12-31"
 
 
 class TestCaseSchemas:

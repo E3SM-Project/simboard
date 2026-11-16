@@ -1,14 +1,17 @@
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import { ChevronDown, ChevronRight, Copy, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Copy, Info, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
+import { DiagnosticsAvailableIcon } from '@/components/shared/DiagnosticsAvailableIcon';
+import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { LoadingState } from '@/components/ui/loading-state';
+import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import {
   Table,
   TableBody,
@@ -18,6 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   formatCaseDate,
   formatCaseHashLabel,
@@ -230,7 +234,6 @@ export const CasesPage = () => {
   const [legacyMachineId, setLegacyMachineId] = useState(initialSearchState.legacyMachineId);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(() =>
     [
-      initialSearchState.caseGroupFilter,
       initialSearchState.executionFilters.campaign,
       initialSearchState.executionFilters.initializationType,
       initialSearchState.executionFilters.compiler,
@@ -322,7 +325,6 @@ export const CasesPage = () => {
     setPagination(next.pagination);
     setShowAdvancedFilters(
       [
-        next.caseGroupFilter,
         next.executionFilters.campaign,
         next.executionFilters.initializationType,
         next.executionFilters.compiler,
@@ -459,7 +461,8 @@ export const CasesPage = () => {
     caseNameFilter.trim().length > 0 ||
     caseGroupFilter.length > 0 ||
     simulationType !== '' ||
-    hasActiveExecutionFilters;
+    hasActiveExecutionFilters ||
+    Boolean(legacyMachineId);
   const advancedFilterCount = useMemo(
     () =>
       [
@@ -467,9 +470,8 @@ export const CasesPage = () => {
         executionFilters.initializationType,
         executionFilters.compiler,
         executionFilters.gitTag,
-        caseGroupFilter,
       ].filter(Boolean).length,
-    [caseGroupFilter, executionFilters],
+    [executionFilters],
   );
   const activeFilterPills = useMemo(() => {
     const filters: ActiveFilterPill[] = [];
@@ -614,6 +616,7 @@ export const CasesPage = () => {
               type="button"
               className="h-8 w-8"
               aria-label={isExpanded ? 'Collapse executions' : 'Expand executions'}
+              aria-expanded={isExpanded}
               onClick={(event) => {
                 event.stopPropagation();
                 setExpandedCaseId((current) =>
@@ -635,23 +638,26 @@ export const CasesPage = () => {
         header: 'Case Name',
         cell: ({ row }) => (
           <div className="min-w-[14rem] max-w-[28rem]">
-            <Link
-              to={caseDetailsPath({
-                machineName: row.original.machineName,
-                hpcUsername: row.original.hpcUsername,
-                caseName: row.original.name,
-              })}
-              state={{ from: currentPath }}
-              className="block truncate font-medium text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              title={row.original.name}
-              onClick={(event) => event.stopPropagation()}
-            >
-              {row.original.name}
-            </Link>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Link
+                to={caseDetailsPath({
+                  machineName: row.original.machineName,
+                  hpcUsername: row.original.hpcUsername,
+                  caseName: row.original.name,
+                })}
+                state={{ from: currentPath }}
+                className="block min-w-0 truncate font-medium text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                title={row.original.name}
+                onClick={(event) => event.stopPropagation()}
+              >
+                {row.original.name}
+              </Link>
+              {row.original.hasDiagnostics ? <DiagnosticsAvailableIcon /> : null}
+            </div>
             {row.original.caseGroup && (
               <button
                 type="button"
-                className="mt-1 max-w-full truncate text-left text-xs text-slate-500 hover:text-blue-600 hover:underline"
+                className="mt-1 max-w-full truncate text-left text-xs text-muted-foreground hover:text-blue-600 hover:underline"
                 title={`Filter by case group: ${row.original.caseGroup}`}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -668,6 +674,8 @@ export const CasesPage = () => {
       {
         id: 'latestRun',
         header: 'Latest completed run',
+        accessorFn: (caseRecord) => getLatestExecution(caseRecord)?.runEndDate ?? null,
+        sortDescFirst: true,
         cell: ({ row }) => {
           const latestExecution = getLatestExecution(row.original);
           const completedRun = latestExecution
@@ -675,7 +683,7 @@ export const CasesPage = () => {
             : null;
 
           return (
-            <div className="min-w-[10rem] text-sm text-slate-600">
+            <div className="min-w-[10rem] text-sm text-muted-foreground">
               {completedRun ?? <UnavailableTimestamp />}
             </div>
           );
@@ -722,12 +730,14 @@ export const CasesPage = () => {
 
   const renderSelectField = ({
     label,
+    description,
     value,
     placeholder,
     options,
     onValueChange,
   }: {
     label: string;
+    description?: string;
     value: string;
     placeholder: string;
     options: SelectOption[];
@@ -738,12 +748,33 @@ export const CasesPage = () => {
         ? [{ value, label: value }, ...options]
         : options;
 
+    const id = `cases-filter-${label.toLowerCase().replace(/\s+/g, '-')}`;
+
     return (
       <div className="space-y-2">
-        <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-          {label}
-        </label>
+        <div className="flex h-4 items-center gap-1">
+          <label htmlFor={id} className="text-xs font-medium text-muted-foreground">
+            {label}
+          </label>
+          {description ? (
+            <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`About ${label}`}
+                    className="rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">{description}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : null}
+        </div>
         <SearchableFilterSelect
+          id={id}
           label={label}
           value={value}
           placeholder={placeholder}
@@ -762,7 +793,7 @@ export const CasesPage = () => {
         : `View all ${expandedExecutionPage.total} executions on the case details page`
       : `View all ${caseRecord.executionCount} executions on the case details page`;
     return (
-      <div className="mx-3 my-3 space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm sm:ml-12">
+      <div className="mx-3 my-3 space-y-2 rounded-xl border border-border bg-muted-subtle/80 p-3 shadow-sm sm:ml-12">
         <div>
           <p className="text-sm font-medium">Latest executions</p>
           <p className="text-xs text-muted-foreground">
@@ -772,7 +803,7 @@ export const CasesPage = () => {
           </p>
         </div>
 
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-background">
+        <div className="overflow-hidden rounded-lg border border-border bg-background">
           <div className="max-h-[20rem] overflow-auto">
             <Table>
               <TableHeader>
@@ -786,7 +817,7 @@ export const CasesPage = () => {
               <TableBody>
                 {visibleCaseExecutions.map((execution) => (
                   <TableRow key={execution.id}>
-                    <TableCell className="py-2 align-top text-xs text-slate-600">
+                    <TableCell className="py-2 align-top text-xs text-muted-foreground">
                       {formatRunDateRange(execution.runStartDate, execution.runEndDate) ?? (
                         <UnavailableTimestamp />
                       )}
@@ -807,13 +838,13 @@ export const CasesPage = () => {
                     </TableCell>
                     <TableCell className="py-2 align-top">
                       <span
-                        className="font-mono text-xs text-slate-700"
+                        className="font-mono text-xs text-foreground"
                         title={execution.caseHash ?? MISSING_CASE_HASH_LABEL}
                       >
                         {formatCaseHashLabel(execution.caseHash ?? null)}
                       </span>
                     </TableCell>
-                    <TableCell className="py-2 align-top text-xs text-slate-600">
+                    <TableCell className="py-2 align-top text-xs text-muted-foreground">
                       {`${formatModelDate(execution.simulationStartDate)} → ${formatModelDate(
                         execution.simulationEndDate ?? null,
                       )}`}
@@ -843,75 +874,84 @@ export const CasesPage = () => {
     );
   };
 
-  if (loading) {
-    return <LoadingState kind="page" label="Loading cases" />;
-  }
-
-  if (error && cases.length === 0) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="text-center text-red-600">Error: {error}</div>
-      </div>
-    );
-  }
+  const hasCasePage = casePage != null;
 
   return (
-    <div className="mx-auto w-full max-w-[1480px] space-y-6 px-6 py-8">
-      {error ? (
-        <div className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+    <div className="mx-auto w-full max-w-screen-2xl space-y-6 px-6 py-8">
+      {error && hasCasePage ? (
+        <Alert variant="error" className="flex items-center justify-between gap-3">
           <span>Could not refresh cases. Showing previously loaded results.</span>
           <Button size="sm" type="button" variant="outline" onClick={() => void refetchCases()}>
             Retry
           </Button>
-        </div>
+        </Alert>
       ) : null}
-      <div className="overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50/70 to-slate-100/80 shadow-sm">
+      <div className="overflow-hidden rounded-3xl border border-border/80 bg-gradient-to-br from-card via-muted-subtle/70 to-muted/80 shadow-sm">
         <div className="space-y-5 p-5 sm:p-6">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div className="space-y-3">
               <div className="space-y-2">
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Cases</h1>
-                <p className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">Cases</h1>
+                <p className="max-w-3xl text-sm leading-6 text-muted-foreground sm:text-[15px]">
                   Find cases and their execution context. Search case names, then refine by run or
                   case metadata.
                 </p>
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white/75 px-4 py-3 text-sm text-slate-600 shadow-sm shadow-slate-200/20">
-              <span className="font-medium text-slate-900">{casePage?.total ?? 0} cases</span>
-              <span className="px-2 text-slate-300">·</span>
-              <span>{visibleRunCount} runs on this page</span>
-              {activeFilterPills.length > 0 && (
-                <>
-                  <span className="px-2 text-slate-300">·</span>
-                  <span>{activeFilterPills.length} active filters</span>
-                </>
-              )}
-            </div>
+            {hasCasePage ? (
+              <div className="rounded-xl border border-border bg-card/75 px-4 py-3 text-sm text-muted-foreground shadow-sm shadow-border/20">
+                <span className="font-medium text-foreground">{casePage.total} cases</span>
+                <span className="px-2 text-muted-foreground">·</span>
+                <span>{visibleRunCount} runs on this page</span>
+                {activeFilterPills.length > 0 && (
+                  <>
+                    <span className="px-2 text-muted-foreground">·</span>
+                    <span>{activeFilterPills.length} active filters</span>
+                  </>
+                )}
+              </div>
+            ) : null}
           </div>
 
           <Collapsible open={showAdvancedFilters} onOpenChange={setShowAdvancedFilters}>
-            <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm shadow-slate-200/30">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="grid flex-1 gap-3 xl:grid-cols-[minmax(0,1.35fr)_220px_220px_220px]">
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+            <div className="rounded-2xl border border-border bg-card/90 p-4 shadow-sm shadow-border/30">
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1.5fr)_repeat(4,minmax(200px,1fr))]">
+                  <div className="space-y-2 sm:col-span-2 xl:col-span-1">
+                    <label
+                      htmlFor="cases-search"
+                      className="text-xs font-medium text-muted-foreground"
+                    >
                       Search
                     </label>
                     <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
+                        id="cases-search"
                         placeholder="Search case name…"
                         value={caseNameFilter}
                         onChange={(event) => {
                           setCaseNameFilter(event.target.value);
                           table.setPageIndex(0);
                         }}
-                        className="h-10 rounded-xl border-slate-200 bg-white pl-10 shadow-none"
+                        className="h-10 rounded-xl border-border bg-card pl-10 shadow-none"
                       />
                     </div>
                   </div>
+
+                  {renderSelectField({
+                    label: 'Case group',
+                    description:
+                      'A shared label for related cases, such as members of an ensemble run. Select a group to browse those cases together.',
+                    value: caseGroupFilter,
+                    placeholder: 'All case groups',
+                    options: caseGroupOptions,
+                    onValueChange: (value) => {
+                      setCaseGroupFilter(value);
+                      table.setPageIndex(0);
+                    },
+                  })}
 
                   {renderSelectField({
                     label: 'Machine',
@@ -922,7 +962,7 @@ export const CasesPage = () => {
                   })}
 
                   {renderSelectField({
-                    label: 'HPC Username',
+                    label: 'HPC username',
                     value: executionFilters.hpcUsername,
                     placeholder: 'All HPC usernames',
                     options: hpcUsernameOptions,
@@ -944,12 +984,12 @@ export const CasesPage = () => {
                   })}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <CollapsibleTrigger asChild>
                     <Button
                       variant="outline"
                       type="button"
-                      className="h-10 rounded-xl border-slate-200 bg-white px-4 text-slate-700 shadow-none hover:bg-slate-50"
+                      className="h-10 rounded-xl border-border bg-card px-4 text-foreground shadow-none hover:bg-muted-subtle"
                     >
                       <SlidersHorizontal className="mr-2 h-4 w-4" />
                       {advancedFilterCount > 0
@@ -963,36 +1003,38 @@ export const CasesPage = () => {
                       />
                     </Button>
                   </CollapsibleTrigger>
-                  <Button
-                    variant="outline"
-                    type="button"
-                    onClick={() => void handleCopySearch()}
-                    disabled={canonicalSearchParams.size === 0}
-                    className="h-10 rounded-xl border-slate-200 bg-white px-4 text-slate-700 shadow-none hover:bg-slate-50"
-                    aria-label="Copy search link"
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    Copy search
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    onClick={clearAllFilters}
-                    disabled={!hasActiveFilters}
-                    className="h-10 rounded-xl px-4 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  >
-                    Clear all
-                  </Button>
+                  <div className="ml-auto flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      type="button"
+                      onClick={() => void handleCopySearch()}
+                      disabled={canonicalSearchParams.size === 0}
+                      className="h-10 rounded-xl border-border bg-card px-4 text-foreground shadow-none hover:bg-muted-subtle"
+                      aria-label="Copy search link"
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copy search
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      onClick={clearAllFilters}
+                      disabled={!hasActiveFilters}
+                      className="h-10 rounded-xl px-4 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      Clear all
+                    </Button>
+                  </div>
                 </div>
               </div>
 
               <CollapsibleContent>
-                <div className="mt-4 border-t border-slate-200 pt-4">
-                  <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]">
+                <div className="mt-4 border-t border-border pt-4">
+                  <div>
                     <div className="space-y-4">
                       <div className="space-y-1">
-                        <p className="text-sm font-medium text-slate-900">Execution context</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm font-medium text-foreground">Execution context</p>
+                        <p className="text-xs text-muted-foreground">
                           Shows cases with at least one execution matching these filters.
                         </p>
                       </div>
@@ -1027,27 +1069,6 @@ export const CasesPage = () => {
                         })}
                       </div>
                     </div>
-
-                    <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-slate-900">Case metadata</p>
-                        <p className="text-xs text-slate-500">
-                          Narrow the result set using case-level metadata.
-                        </p>
-                      </div>
-                      <div className="grid gap-3">
-                        {renderSelectField({
-                          label: 'Case group',
-                          value: caseGroupFilter,
-                          placeholder: 'All case groups',
-                          options: caseGroupOptions,
-                          onValueChange: (value) => {
-                            setCaseGroupFilter(value);
-                            table.setPageIndex(0);
-                          },
-                        })}
-                      </div>
-                    </div>
                   </div>
                 </div>
               </CollapsibleContent>
@@ -1059,16 +1080,16 @@ export const CasesPage = () => {
               {activeFilterPills.map((filter) => (
                 <span
                   key={`${filter.key}-${filter.value}`}
-                  className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm shadow-slate-200/30"
+                  className="inline-flex items-center rounded-full border border-border bg-card px-3 py-1.5 text-sm text-foreground shadow-sm shadow-border/30"
                 >
-                  <span className="mr-2 text-xs font-medium uppercase tracking-[0.08em] text-slate-500">
+                  <span className="mr-2 text-xs font-medium text-muted-foreground">
                     {filter.label}
                   </span>
                   <span className="font-medium">{filter.value}</span>
                   <button
                     type="button"
                     aria-label={`Remove ${filter.label} filter`}
-                    className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                    className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     onClick={() => removeFilter(filter.key)}
                   >
                     <X className="h-3.5 w-3.5" />
@@ -1080,109 +1101,145 @@ export const CasesPage = () => {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        {isFetching ? (
-          <div className="border-b border-slate-200 bg-slate-50 px-4 py-2">
-            <LoadingState kind="inline" label="Refreshing cases" />
-          </div>
-        ) : null}
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id}>
-                      {header.isPlaceholder ? null : (
-                        <button
-                          type="button"
-                          className={
-                            header.column.getCanSort() ? 'select-none text-left' : 'text-left'
-                          }
-                          onClick={header.column.getToggleSortingHandler()}
-                        >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          {header.column.getIsSorted() === 'asc' && ' ▲'}
-                          {header.column.getIsSorted() === 'desc' && ' ▼'}
-                        </button>
-                      )}
-                    </TableHead>
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+        {loading ? (
+          <LoadingState className="rounded-none border-0" kind="section" label="Loading cases" />
+        ) : error && !hasCasePage ? (
+          <Alert variant="error" className="rounded-none border-0 p-6 text-center">
+            <p>Could not load cases.</p>
+            <Button
+              className="mt-3"
+              size="sm"
+              type="button"
+              variant="outline"
+              onClick={() => void refetchCases()}
+            >
+              Retry
+            </Button>
+          </Alert>
+        ) : (
+          <>
+            {isFetching ? (
+              <div className="border-b border-border bg-muted-subtle px-4 py-2">
+                <LoadingState kind="inline" label="Refreshing cases" />
+              </div>
+            ) : null}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => {
+                        const headerContent = header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext());
+                        const { header: label } = header.column.columnDef;
+
+                        return header.column.getCanSort() && typeof label === 'string' ? (
+                          <SortableTableHead
+                            key={header.id}
+                            label={label}
+                            direction={header.column.getIsSorted()}
+                            onSort={() => header.column.toggleSorting()}
+                          />
+                        ) : (
+                          <TableHead key={header.id}>{headerContent}</TableHead>
+                        );
+                      })}
+                    </TableRow>
                   ))}
-                </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {table.getRowModel().rows.length > 0 ? (
-                table.getRowModel().rows.map((row) => {
-                  const isExpanded = expandedCaseId === row.original.id;
+                </TableHeader>
+                <TableBody>
+                  {table.getRowModel().rows.length > 0 ? (
+                    table.getRowModel().rows.map((row) => {
+                      const isExpanded = expandedCaseId === row.original.id;
 
-                  return (
-                    <Fragment key={row.id}>
-                      <TableRow
-                        className="cursor-pointer hover:bg-muted/40"
-                        onClick={() =>
-                          setExpandedCaseId((current) =>
-                            current === row.original.id ? null : row.original.id,
-                          )
-                        }
+                      return (
+                        <Fragment key={row.id}>
+                          <TableRow
+                            className="cursor-pointer hover:bg-muted/40"
+                            onClick={() =>
+                              setExpandedCaseId((current) =>
+                                current === row.original.id ? null : row.original.id,
+                              )
+                            }
+                          >
+                            {row.getVisibleCells().map((cell) => (
+                              <TableCell key={cell.id} className="align-top">
+                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                          {isExpanded && (
+                            <TableRow className="bg-muted-subtle/40 hover:bg-muted-subtle/40">
+                              <TableCell colSpan={columns.length} className="p-0">
+                                {renderExpandedContent(row.original)}
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </Fragment>
+                      );
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell
+                        colSpan={columns.length}
+                        className="py-10 text-center text-muted-foreground"
                       >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id} className="align-top">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                      {isExpanded && (
-                        <TableRow className="bg-slate-50/40 hover:bg-slate-50/40">
-                          <TableCell colSpan={columns.length} className="p-0">
-                            {renderExpandedContent(row.original)}
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </Fragment>
-                  );
-                })
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="py-10 text-center text-muted-foreground"
-                  >
-                    No cases match the current filters.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                        {hasActiveFilters ? (
+                          <>
+                            <p>No cases match the current filters.</p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="mt-4"
+                              onClick={clearAllFilters}
+                            >
+                              Reset filters
+                            </Button>
+                          </>
+                        ) : (
+                          'No cases yet.'
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="flex flex-col gap-3 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
-        <div>
-          Showing {table.getRowModel().rows.length} of {casePage?.total ?? 0} filtered cases
+      {hasCasePage ? (
+        <div className="flex flex-col gap-3 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
+          <div>
+            Showing {table.getRowModel().rows.length} of {casePage.total} filtered cases
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              Previous
+            </Button>
+            <span>
+              Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount() || 1}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              Next
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Previous
-          </Button>
-          <span>
-            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount() || 1}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next
-          </Button>
-        </div>
-      </div>
+      ) : null}
     </div>
   );
 };

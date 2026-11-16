@@ -13,8 +13,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
+from app.common.model_dates import normalize_model_date
 from app.common.utils import _normalize_hpc_username
-from app.features.ingestion.ingest import _normalize_path_candidate, _parse_date_field
+from app.features.ingestion.ingest import _normalize_path_candidate
 from app.features.ingestion.parsers.parser import (
     FILE_SPECS,
     _find_casedocs_dirs,
@@ -54,11 +55,32 @@ from app.scripts.ingestion.v3_data.lcrc_v3_archive_ingestor import (
 FIELD_NAMES = {
     "simulation-dates": ("simulation_start_date", "simulation_end_date"),
     "run-script": ("run_script",),
+    "component-set": ("compset_long_name", "compset_alias"),
+    "git-repository": ("git_repository_source",),
+    "grid": ("grid_long_name", "grid_alias"),
+    "initialization": ("initialization_type",),
+    "source-code-path": ("source_code_path",),
+    "git-commit-hash": ("git_commit_hash",),
+}
+FIELD_FILES = {
+    "simulation-dates": ("case_docs_env_run", "cpl_log"),
+    "run-script": (),
+    "component-set": ("readme_case",),
+    "git-repository": ("git_config",),
+    "grid": ("readme_case", "case_docs_env_build"),
+    "initialization": ("case_docs_env_run",),
+    "source-code-path": (),
+    # Only GIT_LOG has full hashes; never backfill abbreviated GIT_DESCRIBE values.
+    "git-commit-hash": ("git_log",),
 }
 
 
 class _IncompleteExecutionError(ValueError):
     """An execution lacks a required identity file for backfill."""
+
+
+class _MissingSourceError(Exception):
+    """Optional source metadata is absent, so the record is skipped."""
 
 
 def main() -> int:
@@ -72,7 +94,17 @@ def main() -> int:
     parser.add_argument(
         "--fields",
         nargs="+",
-        choices=["source-directories", "simulation-dates", "run-script"],
+        choices=[
+            "source-directories",
+            "simulation-dates",
+            "run-script",
+            "component-set",
+            "git-repository",
+            "grid",
+            "initialization",
+            "source-code-path",
+            "git-commit-hash",
+        ],
         required=True,
     )
     parser.add_argument(
@@ -133,11 +165,8 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
     Enforce the expected machine when provided; bootstrap accepts any source machine.
     """
     keys = ["case_docs_env_case", "e3sm_timing"]
+    keys.extend(dict.fromkeys(key for field in fields for key in FIELD_FILES[field]))
 
-    if "simulation-dates" in fields:
-        keys.extend(["case_docs_env_run", "cpl_log"])
-
-    files = {}
     directories = _find_casedocs_dirs(str(path))
     watched = [path, *(Path(directory) for directory in directories)]
     watched.extend(
@@ -148,19 +177,14 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
     )
     before = [(item.stat().st_mtime_ns, item.stat().st_size) for item in watched]
 
-    for key in keys:
-        matches = _find_spec_matches(str(path), directories, FILE_SPECS[key])
-        if len(matches) > 1:
-            raise ValueError(f"Ambiguous {key}: {path}")
-        if not matches and key in ("case_docs_env_case", "e3sm_timing"):
-            raise _IncompleteExecutionError(f"Missing identity file {key}: {path}")
-        files[key] = matches[0] if matches else None
+    files = _locate_backfill_files(path, directories, keys)
 
     timing_identity = FILE_SPECS["e3sm_timing"]["parser"](files["e3sm_timing"])
     if timing_identity.get("execution_id") != path.name:
         raise ValueError(f"Timing identity does not match execution directory: {path}")
 
     parsed = _parse_all_files(str(path), files)
+    _validate_required_metadata(parsed, path, fields)
 
     if before != [(item.stat().st_mtime_ns, item.stat().st_size) for item in watched]:
         raise ValueError(f"Source changed while reading: {path}")
@@ -173,6 +197,34 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
         raise ValueError(f"Missing case identity: {path}")
 
     return parsed
+
+
+def _validate_required_metadata(parsed, path: Path, fields: list[str]) -> None:
+    if "git-repository" in fields and not parsed.git_repository_source:
+        raise ValueError(f"Missing repository source: {path}")
+
+    for group, field, entry in (
+        ("component-set", "compset_long_name", "COMPSET"),
+        ("grid", "grid_long_name", "GRID"),
+        ("initialization", "initialization_type", "RUN_TYPE"),
+    ):
+        if group in fields and not getattr(parsed, field):
+            raise ValueError(f"Missing XML {entry}: {path}")
+
+
+def _locate_backfill_files(path: Path, directories: list[str], keys: list[str]) -> dict:
+    files = {}
+    for key in keys:
+        matches = _find_spec_matches(str(path), directories, FILE_SPECS[key])
+        if len(matches) > 1:
+            raise ValueError(f"Ambiguous {key}: {path}")
+        if not matches and key in ("case_docs_env_case", "e3sm_timing"):
+            raise _IncompleteExecutionError(f"Missing identity file {key}: {path}")
+        if not matches and key == "readme_case":
+            raise ValueError(f"Missing README source {key}: {path}")
+        files[key] = matches[0] if matches else None
+
+    return files
 
 
 def _request(
@@ -486,27 +538,62 @@ def _observed_values(record: dict, args: argparse.Namespace) -> dict:
             ) != (record["case_name"], record["hpc_username"], record["execution_id"]):
                 raise ValueError("Source identity does not match database owner")
 
-            observations.append(
-                {
-                    "simulation_start_date": _normalized_date(
-                        parsed.simulation_start_date
-                    ),
-                    "simulation_end_date": _normalized_date(parsed.simulation_end_date),
-                    "run_script": _normalize_path_candidate(parsed.run_script_path),
-                }
-            )
+            observations.append(_observation(parsed, args.fields))
         except (ValueError, OSError) as exc:
             raise ValueError(f"Cannot safely backfill from {path}: {exc}") from exc
 
-    values = {}
+    _require_optional_sources(observations, args.fields)
     names = [name for group in args.fields for name in FIELD_NAMES[group]]
 
+    return _consistent_values(observations, names)
+
+
+def _require_optional_sources(observations: list[dict], fields: list[str]) -> None:
+    """Skip, after identity checks, when no mapped directory has the value."""
+    for group, name, source in (
+        ("source-code-path", "source_code_path", "XML SRCROOT"),
+        ("git-commit-hash", "git_commit_hash", "GIT_LOG commit hash"),
+    ):
+        if group in fields and observations and not any(o[name] for o in observations):
+            raise _MissingSourceError(f"Missing {source}")
+
+
+def _observation(parsed, fields: list[str]) -> dict:
+    """Map parsed source values to the requested metadata names."""
+    observation = {
+        "simulation_start_date": _normalized_date(parsed.simulation_start_date),
+        "simulation_end_date": _normalized_date(parsed.simulation_end_date),
+        "run_script": _normalize_path_candidate(parsed.run_script_path),
+    }
+    for group in fields:
+        if group not in ("simulation-dates", "run-script"):
+            observation.update(
+                {name: getattr(parsed, name) for name in FIELD_NAMES[group]}
+            )
+
+    return observation
+
+
+def _consistent_values(observations: list[dict], names: list[str]) -> dict:
+    values = {}
     for name in names:
-        distinct = {o[name] for o in observations if o[name] is not None}
+        distinct = {
+            o[name].casefold()
+            if name == "compset_alias" and o[name] is not None
+            else o[name]
+            for o in observations
+            if o[name] is not None or name in ("compset_alias", "grid_alias")
+        }
         if len(distinct) > 1:
             raise ValueError(f"Conflicting source values for {name}")
         if distinct:
-            values[name] = distinct.pop()
+            # Source paths are sorted by the caller. Keep the first spelling
+            # when CIME-equivalent aliases differ only in case.
+            values[name] = next(
+                o[name]
+                for o in observations
+                if o[name] is not None or name in ("compset_alias", "grid_alias")
+            )
 
     if not values:
         raise ValueError("No requested metadata from available mapped directories")
@@ -556,11 +643,7 @@ def _source_path(value: str) -> Path:
 
 
 def _normalized_date(value: str | None) -> str | None:
-    parsed = _parse_date_field(value)
-    if value and parsed is None:
-        raise ValueError(f"Invalid source date: {value}")
-
-    return parsed.isoformat() if parsed else None
+    return normalize_model_date(value) if value else None
 
 
 def _backfill_metadata(args: argparse.Namespace, api: str, token: str) -> int:
@@ -619,6 +702,18 @@ def _backfill_metadata(args: argparse.Namespace, api: str, token: str) -> int:
                 result = _request(api, token, "ingestions/metadata-backfill", payload)
                 outcomes[result["outcome"]] = outcomes.get(result["outcome"], 0) + 1
                 print(json.dumps(result))
+            except _MissingSourceError as exc:
+                outcome = "skipped_missing_source"
+                outcomes[outcome] = outcomes.get(outcome, 0) + 1
+                print(
+                    json.dumps(
+                        {
+                            "record_id": record["record_id"],
+                            "outcome": outcome,
+                            "reason": str(exc),
+                        }
+                    )
+                )
             except (ValueError, OSError, IngestionRequestError) as exc:
                 failures += 1
                 print(
@@ -658,6 +753,7 @@ def _log_metadata_summary(
                 outcomes.get("changed", 0),
             ),
             ("Records unchanged", outcomes.get("unchanged", 0)),
+            ("Skipped missing source", outcomes.get("skipped_missing_source", 0)),
             ("Record/request failures", failures),
         ],
         failures,

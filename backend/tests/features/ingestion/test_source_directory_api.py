@@ -278,7 +278,7 @@ def test_ingestion_endpoints_accept_explicit_directory_payloads(
             },
             files={"file": ("case.tar.gz", b"archive")},
         )
-    assert response.status_code == 201
+    assert response.status_code == (200 if endpoint == "from-path" else 201)
     assert response.json()["duplicate_count"] == 1
     assert db.query(SourceDirectory).count() == 2
 

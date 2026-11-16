@@ -19,7 +19,8 @@ export interface PageParams {
   search?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
-  [key: string]: string | number | string[] | undefined;
+  recentExecution?: boolean;
+  [key: string]: string | number | boolean | string[] | undefined;
 }
 
 export interface CaseFilterOptionsParams extends PageParams {

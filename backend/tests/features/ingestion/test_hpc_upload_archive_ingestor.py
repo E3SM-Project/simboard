@@ -508,6 +508,33 @@ def test_post_hpc_upload_ingestion_request_handles_timeout(
         )
 
 
+def test_post_hpc_upload_ingestion_request_retries_dropped_connections(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    case_dir = tmp_path / "case_a"
+    (case_dir / "100.1-1").mkdir(parents=True)
+
+    monkeypatch.setattr(
+        upload_ingestor_module.urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ConnectionResetError("reset")),
+    )
+
+    with pytest.raises(IngestionRequestError, match="Connection error: reset") as exc:
+        _post_hpc_upload_ingestion_request(
+            "http://backend:8000/api/v1/ingestions/from-hpc-upload",
+            "token",
+            str(case_dir),
+            "pm",
+            processed_execution_ids=["100.1-1"],
+            timeout_seconds=12,
+        )
+
+    assert exc.value.status_code is None
+    assert exc.value.transient is True
+
+
 def test_run_ingestor_uploads_once_then_second_run_is_noop(
     tmp_path: Path,
     monkeypatch,
@@ -851,11 +878,14 @@ def test_run_ingestor_returns_failure_when_state_fetch_fails(
         max_attempts=1,
         request_timeout_seconds=30,
     )
+    status_file = tmp_path / "job-status.json"
+    monkeypatch.setenv("SIMBOARD_JOB_STATUS_FILE", str(status_file))
 
     exit_code = _run_ingestor(config, metadata_locator=lambda *_: {})
 
     assert exit_code == 1
     assert any(event == "state_fetch_failed" for event, _ in logged_events)
+    assert json.loads(status_file.read_text())["reason"] == "api_request"
 
 
 def test_run_ingestor_default_dry_run_fetches_archive_checkpoints_before_state(

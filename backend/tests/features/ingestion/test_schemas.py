@@ -17,6 +17,37 @@ from app.features.ingestion.schemas import (
 
 
 class TestIngestionSchemas:
+    @pytest.mark.parametrize(
+        "prefix",
+        ["", "chrysalis_e3sm_", "compy_e3sm_", "machine_name_project_tag_"],
+    )
+    def test_archive_checkpoint_accepts_pace_snapshot_formats(
+        self, prefix: str
+    ) -> None:
+        name = f"performance_archive_{prefix}2026_07_15_12_00_00"
+        snapshot = ArchiveCheckpointEntry(archive_month="2026-07", snapshot_name=name)
+
+        assert snapshot.snapshot_name == name
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "performance_archive_chrysalis_2026_07_15_12_00_00",
+            "performance_archive_chrysalis__2026_07_15_12_00_00",
+            "performance_archive_chrysalis_e3sm_2026_07_15_12_00",
+            "performance_archive_chrysalis_e3sm_2026_07_15_12_00_00_extra",
+            "performance_archive_chrysalis/e3sm_2026_07_15_12_00_00",
+            "performance_archive_chrysalis\\e3sm_2026_07_15_12_00_00",
+            "performance_archive_chrysalis e3sm_2026_07_15_12_00_00",
+            "other_performance_archive_chrysalis_e3sm_2026_07_15_12_00_00",
+        ],
+    )
+    def test_archive_checkpoint_rejects_malformed_snapshot_names(
+        self, name: str
+    ) -> None:
+        with pytest.raises(ValidationError):
+            ArchiveCheckpointEntry(archive_month="2026-07", snapshot_name=name)
+
     def test_archive_checkpoints_request_strips_identity(self) -> None:
         snapshot = ArchiveCheckpointEntry(
             archive_month="2026-07",
@@ -64,6 +95,25 @@ class TestIngestionSchemas:
         assert payload.archive_path == "/tmp/archive.zip"
         assert payload.machine_name == "chrysalis"
         assert payload.processed_execution_ids == ["101.1-1"]
+        assert payload.selected_execution_ids is None
+
+    @pytest.mark.parametrize("selected_ids", [None, ["101.1-1"]])
+    def test_path_request_accepts_optional_execution_selection(self, selected_ids):
+        payload = IngestFromPathRequest(
+            archive_path="/tmp/case",
+            machine_name="perlmutter",
+            selected_execution_ids=selected_ids,
+        )
+
+        assert payload.selected_execution_ids == selected_ids
+
+    def test_path_request_rejects_empty_execution_selection(self):
+        with pytest.raises(ValidationError):
+            IngestFromPathRequest(
+                archive_path="/tmp/case",
+                machine_name="perlmutter",
+                selected_execution_ids=[],
+            )
 
     def test_ingest_archive_request_missing_fields(self) -> None:
         with pytest.raises(ValidationError):

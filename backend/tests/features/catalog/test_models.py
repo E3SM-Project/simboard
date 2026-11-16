@@ -147,10 +147,10 @@ def _create_execution(
     execution = Execution(
         case_id=case_id,
         execution_id=execution_id,
-        compset="AQUAPLANET",
+        compset_long_name="AQUAPLANET",
         compset_alias="QPC4",
-        grid_name="f19_f19",
-        grid_resolution="1.9x2.5",
+        grid_alias="f19_f19",
+        grid_long_name="1.9x2.5",
         status=ExecutionStatus.CREATED,
         initialization_type="startup",
         simulation_start_date=date(2023, 1, 1),

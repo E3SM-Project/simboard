@@ -18,8 +18,44 @@ class IngestionSourceType(StrEnum):
 
 
 class ExecutionDiscoveryOutcome(StrEnum):
-    """Immutable outcome of validating one discovered execution."""
+    """Current outcome of validating one discovered execution."""
 
     ACCEPTED = "accepted"
     REJECTED_INCOMPLETE = "rejected_incomplete"
     REJECTED_INVALID = "rejected_invalid"
+
+
+class ScheduledJobRunStatus(StrEnum):
+    """Lifecycle state of one scheduled job run."""
+
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class ScheduledJobFailureReason(StrEnum):
+    """Coarse cause reported for a failed scheduled job run."""
+
+    API_REQUEST = "api_request"
+    FILESYSTEM = "filesystem"
+    UNEXPECTED = "unexpected"
+
+
+class ScheduledJobHealth(StrEnum):
+    """Derived health of a scheduled job."""
+
+    HEALTHY = "healthy"
+    FAILED = "failed"
+    RUNNING = "running"
+    STALE = "stale"
+
+
+class ScheduledJobUploadFailureCategory(StrEnum):
+    """Coarse category of a case upload's final HTTP status or network error."""
+
+    AUTH = "auth"
+    BAD_UPLOAD = "bad_upload"
+    CONFLICT = "conflict"
+    SERVER = "server"
+    UNAVAILABLE = "unavailable"
+    OTHER = "other"

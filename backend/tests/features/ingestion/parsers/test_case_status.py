@@ -1,6 +1,8 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from app.features.ingestion.parsers.case_status import parse_case_status
 
 
@@ -23,6 +25,21 @@ class TestCaseStatusParser:
             "status": "unknown",
         }
         mock_warning.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "error",
+        [OSError("boom"), UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid")],
+    )
+    def test_strict_read_propagates_errors(self, monkeypatch, error) -> None:
+        def unreadable(path):
+            raise error
+
+        monkeypatch.setattr(
+            "app.features.ingestion.parsers.case_status._open_text", unreadable
+        )
+
+        with pytest.raises(type(error)):
+            parse_case_status("CaseStatus.001.gz", strict_read=True)
 
     def test_extracts_completed_status_from_latest_attempt(self, tmp_path) -> None:
         case_status = tmp_path / "CaseStatus.001"
@@ -76,11 +93,14 @@ class TestCaseStatusParser:
         assert result["run_end_date"] is None
         assert result["status"] == "running"
 
-    def test_returns_unknown_status_without_case_run_entries(self, tmp_path) -> None:
+    @pytest.mark.parametrize("strict_read", [False, True])
+    def test_returns_unknown_status_without_case_run_entries(
+        self, tmp_path, strict_read
+    ) -> None:
         case_status = tmp_path / "CaseStatus.001"
         case_status.write_text("2025-01-01 00:00:00: xmlchange success")
 
-        result = parse_case_status(case_status)
+        result = parse_case_status(case_status, strict_read=strict_read)
 
         assert result["run_start_date"] is None
         assert result["run_end_date"] is None

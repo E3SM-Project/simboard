@@ -277,6 +277,98 @@ confirming no archiver is running, and avoid overlapping repository refreshes.
 Use `tar -tzf <archive>` to inspect members without extracting into `raw_logs/`.
 Archives do not expire automatically. API summarization is a separate task.
 
+### Report scheduled job health
+
+Live cron commands (`DRY_RUN=false`) with `SIMBOARD_JOB_ID` report each run's
+start and finish to their API environment. Failed runs include a reason
+(`api_request`, `filesystem`, or `unexpected`) and a short message. Reporting
+is best effort: failures are logged as `job_report_failed` and never change the
+ingestion result. Dry runs and manual runs without a job ID do not report.
+
+A job registers itself on its first report. Its owner is the service account
+whose token that environment's `env.*.sh` file uses, and only that account may
+report the job's runs. New jobs get default thresholds for their scan mode:
+
+| Scan mode     | `max_silence_minutes` | `max_duration_minutes` |
+| ------------- | --------------------- | ---------------------- |
+| `staging`     | `45`                  | `60`                   |
+| `archive`     | `1560`                | `720`                  |
+| `diagnostics` | `420`                 | `300`                  |
+
+Reports for a registered job ID from another machine or scan mode are rejected,
+so give each job a unique ID per API environment.
+
+Optionally, an administrator can register a job to change its thresholds or
+service account, or so it shows `stale` before its first run (see
+[HPC API token authentication](hpc-api-token-authentication.md) for the
+administrator credential):
+
+```bash
+curl -X PUT "<api-base-url>/api/v1/ingestions/jobs/chrysalis-staging" \
+  -H "Authorization: Bearer <ADMIN_TOKEN_OR_OAUTH>" \
+  -H "Content-Type: application/json" \
+  -d '{"machine_name": "chrysalis", "scan_mode": "staging",
+       "service_account_email": "<service-account-email>",
+       "max_silence_minutes": 45, "max_duration_minutes": 60}'
+```
+
+Set `max_duration_minutes` to the longest expected run and
+`max_silence_minutes` to at least the schedule interval plus a margin for
+skipped runs. `GET /api/v1/ingestions/jobs` (administrators and service
+accounts) returns each job's `healthy`, `failed`, `running`, or `stale` state.
+A job is `stale` when it has been silent too long, its newest run exceeded its
+allowed duration without finishing, or it was pre-registered but has never
+reported. Other jobs appear only after their first report, so confirm each new
+job is listed after its first scheduled run. Run records are kept for 90 days.
+
+Finish reports also include case uploads that failed after retries, including
+errors returned by a proxy (for example, an NGINX `413`). In the response, each
+job's `latest_upload_run` is the latest run that reached the upload step. Its
+`upload_failures` has complete `counts` by HTTP status (or `network`) and up to
+50 failed `cases`; `truncated` is `true` when more cases failed. Every such run
+retries failed cases, so this list is the current set of stuck cases; a run
+that ends before uploading does not replace it. `upload_failure_daily_counts`
+sums failures by UTC day, machine, and category:
+
+| Category      | Status                                     |
+| ------------- | ------------------------------------------ |
+| `auth`        | `401`, `403`                               |
+| `bad_upload`  | `400`, `413`, `422`                        |
+| `conflict`    | `409`                                      |
+| `server`      | `500`                                      |
+| `unavailable` | `408`, `429`, `502`, `503`, `504`, network |
+| `other`       | Any other status                           |
+
+### Operations dashboard
+
+Administrators can open **Operations** in the SimBoard navigation
+(`/admin/operations`) to see each environment's state on one read-only page:
+
+- **Site summary:** per site, job problems, new executions and cases, the last
+  day with new executions, rejections (new / total), and failed uploads. Rows
+  are attributed by each machine's site. Click a site to filter the page.
+- **Job health:** each job's status, last report, and **Stale after**
+  (`last_reported_at` + `max_silence_minutes`), when a silent job turns
+  `stale`. This is not the next scheduled run. Problem details appear under each
+  non-healthy status, and a legend below the table defines every status. Jobs
+  that never reported appear separately from `stale` and `failed` jobs.
+- **Failed uploads:** cases still failing in each job's latest upload run, and
+  daily failure counts.
+- **Rejected executions:** current rejections grouped by first validation error.
+
+The **Site** and **Date range** (last 7–90 UTC days) filters apply to every
+section. **Job type** in Job health filters only that table.
+
+`GET /api/v1/ingestions/rejected-executions` (administrators and service
+accounts) groups executions that the latest validation rejected as incomplete
+or invalid by site, outcome, and first error's `code` and `file_spec` or
+`field`. Each group has execution and case counts, `new_in_range` (first
+detected in [`start_date`, `end_date`)), the latest detection time, and the
+newest example. It requires `start_date` and `end_date` (at most 90 days) and
+accepts `machine_name` and `site_name`, like `GET /api/v1/ingestions/summary`.
+A rejection is updated only when a scan visits its execution again, so one whose
+directory was removed stays listed.
+
 ### Reference: configuration files and variables
 
 | Location                        | Configure                                                                                                                                                            |
@@ -290,7 +382,7 @@ Archives do not expire automatically. API summarization is a separate task.
 | `operations/env.dev.sh`         | Development `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`                                                                                                         |
 | `operations/env.prod.sh`        | Production `SIMBOARD_API_BASE_URL` and `SIMBOARD_API_TOKEN`                                                                                                          |
 | Copied crontab                  | `SIMBOARD_ROOT`; optional `DRY_RUN`, `LOG_RETENTION_DAYS`, `MAX_CASES_PER_RUN`, `ARCHIVE_YEAR_START`, and `ARCHIVE_YEAR_END`                                                               |
-| Each cron command               | `SIMBOARD_ENV_FILE` pointing to `env.dev.sh` or `env.prod.sh`                                                                                                        |
+| Each cron command               | `SIMBOARD_ENV_FILE` pointing to `env.dev.sh` or `env.prod.sh`; `SIMBOARD_JOB_ID` for [job health reporting](#report-scheduled-job-health)                            |
 
 Do not put tokens in the site config or crontab. `DRY_RUN_USE_REMOTE_STATE=false` is available only for a credential-free offline scan.
 
@@ -372,6 +464,26 @@ make ingest-apply machine=perlmutter env=dev scan_mode=archive env_file=/path/to
 - **Environment:** Loads API settings from `env_file`, or uses exported settings if omitted. **`env` alone does not switch credentials.**
 - **Execution:** Uses `perlmutter.config` and the NERSC archive ingestor with the current checkout’s backend Python. Override Python with `PYTHON_BIN`; `SIMBOARD_ROOT` is not required.
 - **Output and locking:** Output goes to the terminal or scheduler. This path adds no launcher file logs or locks. **Avoid overlap with scheduled NERSC jobs.**
+
+#### Single-Execution Ingestion
+
+From the repository root, select an existing absolute execution directory under
+the configured archive root. Use `scan_mode=staging` for the staging root.
+
+```bash
+make ingest-dry-run machine=perlmutter env=dev scan_mode=archive \
+    env_file="$HOME/.config/simboard/env.dev.sh" \
+    execution_dir="/global/cfs/cdirs/e3sm/OLD_PERF/2026-10/performance_archive_2026_10_12_10_02_55/COMPLETED/mahf708/E1.baseline.pm-gpu.r04/59694792.261011-211434"
+```
+
+Review discovery results before switching to `ingest-apply`. `env_file` selects
+the API destination; dry runs do not test server-side parsing or persistence.
+
+- Only the selected execution is eligible; layout rules and archive bounds still apply.
+- Targeted runs bypass completed snapshot checkpoints but never complete a snapshot.
+- Existing execution-state and duplicate checks remain active; selection does not force re-ingestion or metadata overwrite.
+- Invalid selections fail rather than trigger a broad scan.
+- For Chrysalis, use `machine=chrysalis SIMBOARD_ROOT=<deployment-root>` and a directory under its configured source root.
 
 ## NERSC Spin operations
 

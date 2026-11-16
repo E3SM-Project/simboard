@@ -32,7 +32,7 @@ _CITATION_REGISTRY = {
         source_type="execution_field",
         label="Description",
     ),
-    "execution.compset": CitationRegistryEntry(
+    "execution.compset_long_name": CitationRegistryEntry(
         source_type="execution_field",
         label="Compset",
     ),
@@ -40,13 +40,13 @@ _CITATION_REGISTRY = {
         source_type="execution_field",
         label="Compset alias",
     ),
-    "execution.grid_name": CitationRegistryEntry(
+    "execution.grid_alias": CitationRegistryEntry(
         source_type="execution_field",
-        label="Grid name",
+        label="Grid alias",
     ),
-    "execution.grid_resolution": CitationRegistryEntry(
+    "execution.grid_long_name": CitationRegistryEntry(
         source_type="execution_field",
-        label="Grid resolution",
+        label="Grid long name",
     ),
     "execution.status": CitationRegistryEntry(
         source_type="execution_field",
@@ -96,9 +96,9 @@ _CITATION_REGISTRY = {
         source_type="execution_field",
         label="Notes",
     ),
-    "execution.git_repository_url": CitationRegistryEntry(
+    "execution.git_repository_source": CitationRegistryEntry(
         source_type="execution_field",
-        label="Git repository URL",
+        label="Git repository source",
     ),
     "execution.git_branch": CitationRegistryEntry(
         source_type="execution_field",

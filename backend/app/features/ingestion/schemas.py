@@ -1,8 +1,9 @@
-from datetime import datetime
-from typing import Annotated
+from datetime import date, datetime
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import (
+    AwareDatetime,
     BaseModel,
     ConfigDict,
     Field,
@@ -15,7 +16,26 @@ from app.features.ingestion.enums import (
     ExecutionDiscoveryOutcome,
     IngestionSourceType,
     IngestionStatus,
+    ScheduledJobFailureReason,
+    ScheduledJobHealth,
+    ScheduledJobRunStatus,
+    ScheduledJobUploadFailureCategory,
 )
+from app.features.ingestion.models import FAILURE_MESSAGE_MAX_LENGTH
+
+# PACE producers use either a bare timestamp or an opaque machine/project prefix.
+ARCHIVE_SNAPSHOT_NAME_PATTERN = (
+    r"^performance_archive_(?:[A-Za-z0-9-]+(?:_[A-Za-z0-9-]+)+_)?"
+    r"\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}$"
+)
+SCHEDULED_JOB_ID_PATTERN = r"^[a-z0-9][a-z0-9_-]{0,99}$"
+# One year keeps derived deadlines within datetime range.
+SCHEDULED_JOB_MAX_THRESHOLD_MINUTES = 525_600
+ScheduledJobScanMode = Literal["staging", "archive", "diagnostics"]
+UPLOAD_FAILURE_CASES_MAX = 50
+UPLOAD_FAILURE_MESSAGE_MAX_LENGTH = 200
+# Failure counts are keyed by HTTP status, or "network" for errors and timeouts.
+UploadFailureKey = Annotated[str, Field(pattern=r"^(?:network|[1-5]\d\d)$")]
 
 
 class IngestionExecutionSummary(BaseModel):
@@ -82,6 +102,14 @@ class IngestFromPathRequest(BaseModel):
 
     archive_path: Annotated[str, Field(..., description="Path to the archive file")]
     source_directories: list[SourceDirectoryObservation] = Field(default_factory=list)
+    selected_execution_ids: Annotated[
+        list[str] | None,
+        Field(
+            default=None,
+            min_length=1,
+            description="Only parse these execution directory names; omitted means all",
+        ),
+    ] = None
     machine_name: Annotated[
         str,
         Field(..., description="Name of the machine associated with the executions"),
@@ -169,11 +197,12 @@ class IngestionStateCase(BaseModel):
 
 
 class ExecutionDiscoveryResultEntry(BaseModel):
-    """One immutable execution discovery result."""
+    """One execution discovery result; rejections can change after revalidation."""
 
     case_identity: Annotated[str, Field(..., min_length=1)]
     execution_id: Annotated[str, Field(..., min_length=1)]
     outcome: ExecutionDiscoveryOutcome
+    errors: list[dict[str, str]] = Field(default_factory=list)
 
     @field_validator("case_identity", "execution_id")
     @classmethod
@@ -185,7 +214,7 @@ class ExecutionDiscoveryResultEntry(BaseModel):
 
 
 class ExecutionDiscoveryResultsRequest(BaseModel):
-    """Batch of immutable discovery results for one machine."""
+    """Batch of discovery results for one machine."""
 
     machine_name: Annotated[str, Field(..., min_length=1)]
     results: Annotated[list[ExecutionDiscoveryResultEntry], Field(..., min_length=1)]
@@ -212,10 +241,45 @@ class ExecutionDiscoveryResultsRequest(BaseModel):
 
 
 class ExecutionDiscoveryResultsResponse(BaseModel):
-    """Persistence summary for a discovery-result batch."""
+    """Persistence summary; existing_count includes refreshed rejected rows."""
 
     inserted_count: int
     existing_count: int
+
+
+class RejectedExecutionExample(BaseModel):
+    """The newest rejected execution in a group."""
+
+    machine_name: str
+    case_identity: str
+    execution_id: str
+    message: str | None
+
+
+class RejectedExecutionGroup(BaseModel):
+    """Rejected executions sharing a site, outcome, and first error.
+
+    ``code`` and ``target`` are None when the first error lacks them, including
+    executions rejected without errors.
+    """
+
+    site_name: str
+    outcome: ExecutionDiscoveryOutcome
+    code: str | None
+    target: str | None
+    executions: int
+    cases: int
+    new_in_range: int
+    latest_detected_at: datetime
+    example: RejectedExecutionExample
+
+
+class RejectedExecutionsResponse(BaseModel):
+    """Current rejections grouped by first error, with overall counts."""
+
+    groups: list[RejectedExecutionGroup] = Field(default_factory=list)
+    total: int = 0
+    new_in_range: int = 0
 
 
 class ArchiveCheckpointEntry(BaseModel):
@@ -226,7 +290,7 @@ class ArchiveCheckpointEntry(BaseModel):
         str,
         Field(
             ...,
-            pattern=(r"^performance_archive_\d{4}_\d{2}_\d{2}_\d{2}_\d{2}_\d{2}$"),
+            pattern=ARCHIVE_SNAPSHOT_NAME_PATTERN,
         ),
     ]
 
@@ -277,9 +341,40 @@ class IngestionStateResponse(BaseModel):
         dict[str, list[ExecutionDiscoveryResultEntry]],
         Field(
             default_factory=dict,
-            description="Normalized case identity to immutable discovery results",
+            description="Normalized case identity to discovery results",
         ),
     ]
+
+
+class IngestionSummaryRow(BaseModel):
+    day: date
+    machine: str
+    case_id: UUID
+    case_name: str
+    hpc_username: str
+    new_executions: int
+
+
+class IngestionSummaryTotals(BaseModel):
+    new_executions: int = 0
+    distinct_cases: int = 0
+
+
+class IngestionSummaryDayTotals(IngestionSummaryTotals):
+    day: date
+
+
+class IngestionSummaryMachineTotals(IngestionSummaryDayTotals):
+    machine: str
+
+
+class IngestionSummaryResponse(BaseModel):
+    rows: list[IngestionSummaryRow] = Field(default_factory=list)
+    daily_machine_totals: list[IngestionSummaryMachineTotals] = Field(
+        default_factory=list
+    )
+    daily_totals: list[IngestionSummaryDayTotals] = Field(default_factory=list)
+    totals: IngestionSummaryTotals = Field(default_factory=IngestionSummaryTotals)
 
 
 class IngestionCreate(BaseModel):
@@ -375,3 +470,134 @@ class IngestionRead(BaseModel):
             description="SHA256 hash of the ingested archive, if available",
         ),
     ]
+
+
+class ScheduledJobRegister(BaseModel):
+    """Admin registration of one scheduled job and its health thresholds."""
+
+    machine_name: str
+    scan_mode: ScheduledJobScanMode
+    service_account_email: str
+    max_silence_minutes: Annotated[
+        int, Field(gt=0, le=SCHEDULED_JOB_MAX_THRESHOLD_MINUTES)
+    ]
+    max_duration_minutes: Annotated[
+        int, Field(gt=0, le=SCHEDULED_JOB_MAX_THRESHOLD_MINUTES)
+    ]
+
+
+class ScheduledJobReport(BaseModel):
+    """Job identity sent with every report; it registers an unknown job."""
+
+    machine_name: str
+    scan_mode: ScheduledJobScanMode
+
+
+class ScheduledJobRunStart(ScheduledJobReport):
+    started_at: AwareDatetime
+
+
+class ScheduledJobFailure(BaseModel):
+    reason: ScheduledJobFailureReason
+    message: Annotated[str, Field(max_length=FAILURE_MESSAGE_MAX_LENGTH)]
+    status_code: Annotated[int, Field(ge=100, le=599)] | None = None
+    transient: bool | None = None
+
+
+class ScheduledJobUploadFailure(BaseModel):
+    """One case upload that failed after retries."""
+
+    case_path: Annotated[str, Field(max_length=4096)]
+    # None for network errors and timeouts.
+    status_code: Annotated[int, Field(ge=100, le=599)] | None
+    attempts: Annotated[int, Field(ge=0)]
+    message: Annotated[str, Field(max_length=UPLOAD_FAILURE_MESSAGE_MAX_LENGTH)]
+
+
+class ScheduledJobUploadFailures(BaseModel):
+    """Complete failure counts with a bounded list of failed cases."""
+
+    counts: dict[UploadFailureKey, Annotated[int, Field(gt=0)]]
+    cases: Annotated[
+        list[ScheduledJobUploadFailure], Field(max_length=UPLOAD_FAILURE_CASES_MAX)
+    ]
+    truncated: bool
+
+    @model_validator(mode="after")
+    def _require_cases_to_match_counts(self) -> "ScheduledJobUploadFailures":
+        total = sum(self.counts.values())
+        if total < len(self.cases) or self.truncated != (total > len(self.cases)):
+            raise ValueError("Counts must cover all cases; truncated when more failed.")
+
+        return self
+
+
+class ScheduledJobRunFinish(ScheduledJobReport):
+    """Finish report; the start time lets a lost start report be recovered."""
+
+    started_at: AwareDatetime
+    finished_at: AwareDatetime
+    exit_code: Annotated[int, Field(ge=0, le=255)]
+    failure: ScheduledJobFailure | None = None
+    upload_failures: ScheduledJobUploadFailures | None = None
+
+    @model_validator(mode="after")
+    def _require_failure_for_nonzero_exit(self) -> "ScheduledJobRunFinish":
+        if (self.exit_code == 0) != (self.failure is None):
+            raise ValueError("A failure is required exactly when exit_code is nonzero.")
+
+        return self
+
+
+class ScheduledJobRunRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    status: ScheduledJobRunStatus
+    started_at: datetime
+    finished_at: datetime | None
+    reported_at: datetime
+    finish_reported_at: datetime | None
+    exit_code: int | None
+    failure_reason: ScheduledJobFailureReason | None
+    failure_message: str | None
+    failure_status_code: int | None
+    failure_transient: bool | None
+    upload_failures: ScheduledJobUploadFailures | None
+
+
+class ScheduledJobRead(BaseModel):
+    id: str
+    machine_name: str
+    scan_mode: str
+    max_silence_minutes: int
+    max_duration_minutes: int
+
+
+class ScheduledJobHealthRead(ScheduledJobRead):
+    """Latest completed outcome is kept separate from active-run state."""
+
+    health: ScheduledJobHealth
+    last_reported_at: datetime | None
+    latest_completed_run: ScheduledJobRunRead | None
+    active_run: ScheduledJobRunRead | None
+    active_run_count: int
+    # Runs that end before the upload step report no uploads, so the latest run
+    # that reached it holds the cases whose uploads still fail.
+    latest_upload_run: ScheduledJobRunRead | None
+
+
+class ScheduledJobUploadFailureDailyCount(BaseModel):
+    """Failed case uploads on one UTC day, by machine and category."""
+
+    day: date
+    machine_name: str
+    category: ScheduledJobUploadFailureCategory
+    count: int
+
+
+class ScheduledJobHealthResponse(BaseModel):
+    jobs: list[ScheduledJobHealthRead] = Field(default_factory=list)
+    upload_failure_daily_counts: list[ScheduledJobUploadFailureDailyCount] = Field(
+        default_factory=list
+    )

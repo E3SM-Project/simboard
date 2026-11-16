@@ -42,6 +42,7 @@ from app.features.ingestion.parsers.e3sm_timing import parse_e3sm_timing
 from app.features.ingestion.parsers.git_info import (
     parse_git_config,
     parse_git_describe,
+    parse_git_log,
     parse_git_status,
 )
 from app.features.ingestion.parsers.readme_case import parse_readme_case
@@ -128,6 +129,13 @@ FILE_SPECS: dict[str, FileSpec] = {
         "parser": parse_git_describe,
         "required": True,
     },
+    "git_log": {
+        "pattern": r"GIT_LOG\.\d+\.\d+-\d+(?:\.gz)?$",
+        "display_pattern": "GIT_LOG.<execution_id>[.gz]",
+        "location": "root",
+        "parser": parse_git_log,
+        "required": False,
+    },
     "git_config": {
         "pattern": r"GIT_CONFIG\..*\.gz",
         "display_pattern": "GIT_CONFIG..*.gz",
@@ -157,6 +165,8 @@ def main_parser(
     output_dir: str | Path,
     *,
     strict_validation: bool = False,
+    selected_execution_ids: list[str] | None = None,
+    validation_errors: list[dict[str, str]] | None = None,
 ) -> tuple[list[ParsedExecution], int]:
     """Main entrypoint for parser workflow.
 
@@ -174,6 +184,10 @@ def main_parser(
         directory.
     output_dir : str
         Directory to extract and process files.
+    selected_execution_ids : list[str] | None
+        Only parse matching execution directory names; None parses all executions.
+    validation_errors : list[dict[str, str]] | None
+        Optional collector for structured rejections when skipping invalid runs.
 
     Returns
     -------
@@ -210,7 +224,10 @@ def main_parser(
     results: list[ParsedExecution] = []
     skipped_count = 0
 
-    validation_errors: list[dict[str, str]] = []
+    parser_errors: list[dict[str, str]] = []
+    selected_ids = (
+        None if selected_execution_ids is None else set(selected_execution_ids)
+    )
 
     for case_dir, exec_dirs in case_to_executions_dirs.items():
         sorted_exec_dirs = sorted(exec_dirs)
@@ -220,22 +237,23 @@ def main_parser(
         )
 
         for exec_dir in sorted_exec_dirs:
+            if selected_ids is not None and Path(exec_dir).name not in selected_ids:
+                continue
             parsed_execution, exec_validation_errors, exec_skipped_count = (
                 _process_execution_dir(exec_dir, strict_validation=strict_validation)
             )
             skipped_count += exec_skipped_count
-            validation_errors.extend(exec_validation_errors)
+            parser_errors.extend(exec_validation_errors)
 
             if parsed_execution is not None:
                 results.append(parsed_execution)
 
-    if validation_errors:
-        raise ArchiveValidationError(validation_errors)
+    if parser_errors and strict_validation:
+        raise ArchiveValidationError(parser_errors)
+    if validation_errors is not None:
+        validation_errors.extend(parser_errors)
 
-    if skipped_count:
-        logger.info(
-            f"Skipped {skipped_count} incomplete run(s) missing required files."
-        )
+    logger.info(f"Skipped {skipped_count} incomplete run(s) missing required files.")
 
     logger.info("Completed parsing all execution directories.")
 
@@ -253,7 +271,7 @@ def _process_execution_dir(
             return None, exc.errors, 0
 
         logger.warning("Skipping incomplete run in '%s': %s", exec_dir, exc)
-        return None, [], 1
+        return None, exc.errors, 1
     except ArchiveValidationError as exc:
         if strict_validation:
             return None, exc.errors, 0
@@ -263,13 +281,13 @@ def _process_execution_dir(
             exec_dir,
             "; ".join(error["message"] for error in exc.errors),
         )
-        return None, [], 1
+        return None, exc.errors, 1
     except FileNotFoundError as exc:
         if strict_validation:
             return None, [_build_file_not_found_validation_error(exec_dir, exc)], 0
 
         logger.warning("Skipping incomplete run in '%s': %s", exec_dir, exc)
-        return None, [], 1
+        return None, [_build_file_not_found_validation_error(exec_dir, exc)], 1
 
 
 def _extract_archive(archive_path: str, output_dir: str) -> None:
@@ -577,6 +595,14 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedExecu
     )
 
     execution_id = _resolve_execution_id(metadata.get("execution_id"), exec_dir)
+    compset_alias = metadata.get("compset_alias")
+    compset_long_name = metadata.get("compset_long_name")
+    if (
+        compset_alias
+        and compset_long_name
+        and compset_alias.casefold() == compset_long_name.casefold()
+    ):
+        compset_alias = None
 
     return ParsedExecution(
         execution_dir=exec_dir,
@@ -585,10 +611,10 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedExecu
         case_group=metadata.get("case_group"),
         machine=metadata.get("machine"),
         hpc_username=metadata.get("user"),
-        compset=metadata.get("compset"),
-        compset_alias=metadata.get("compset_alias"),
-        grid_name=metadata.get("grid_name"),
-        grid_resolution=metadata.get("grid_resolution"),
+        compset_long_name=compset_long_name,
+        compset_alias=compset_alias,
+        grid_alias=metadata.get("grid_alias"),
+        grid_long_name=metadata.get("grid_long_name"),
         campaign=metadata.get("campaign"),
         experiment_type=metadata.get("experiment_type"),
         initialization_type=metadata.get("initialization_type"),
@@ -597,14 +623,17 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedExecu
         run_start_date=metadata.get("run_start_date"),
         run_end_date=metadata.get("run_end_date"),
         compiler=metadata.get("compiler"),
-        git_repository_url=metadata.get("git_repository_url"),
+        git_repository_source=metadata.get("git_repository_source"),
         git_branch=metadata.get("git_branch"),
         git_tag=metadata.get("git_tag"),
-        git_commit_hash=metadata.get("git_commit_hash"),
+        # GIT_LOG has the full hash; GIT_DESCRIBE only has an abbreviated one.
+        git_commit_hash=metadata.get("git_log_commit_hash")
+        or metadata.get("git_commit_hash"),
         status=metadata.get("status") or ExecutionStatus.UNKNOWN.value,
         output_path=metadata.get("output_path"),
         archive_path=metadata.get("archive_path"),
         case_root=metadata.get("case_root"),
+        source_code_path=metadata.get("source_code_path"),
         postprocessing_script=metadata.get("postprocessing_script"),
         case_hash=metadata.get("case_hash"),
         run_script_path=_resolve_run_script_path(

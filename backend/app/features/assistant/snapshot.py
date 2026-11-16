@@ -48,10 +48,10 @@ class SnapshotExecutionFields(BaseModel):
     id: str
     execution_id: str
     description: str | None = None
-    compset: str
-    compset_alias: str
-    grid_name: str
-    grid_resolution: str
+    compset_long_name: str
+    compset_alias: str | None = None
+    grid_alias: str | None
+    grid_long_name: str
     status: str
     campaign: str | None = None
     experiment_type: str | None = None
@@ -64,7 +64,7 @@ class SnapshotExecutionFields(BaseModel):
     key_features: str | None = None
     known_issues: str | None = None
     notes_markdown: str | None = None
-    git_repository_url: str | None = None
+    git_repository_source: str | None = None
     git_branch: str | None = None
     git_tag: str | None = None
     git_commit_hash: str | None = None
@@ -210,23 +210,23 @@ def build_execution_snapshot(
             id=str(execution.id),
             execution_id=execution.execution_id,
             description=execution.description,
-            compset=execution.compset,
+            compset_long_name=execution.compset_long_name,
             compset_alias=execution.compset_alias,
-            grid_name=execution.grid_name,
-            grid_resolution=execution.grid_resolution,
+            grid_alias=execution.grid_alias,
+            grid_long_name=execution.grid_long_name,
             status=_enum_value(execution.status) or "unknown",
             campaign=execution.campaign,
             experiment_type=execution.experiment_type,
             initialization_type=execution.initialization_type,
-            simulation_start_date=_isoformat(execution.simulation_start_date),
-            simulation_end_date=_isoformat(execution.simulation_end_date),
+            simulation_start_date=execution.simulation_start_date,
+            simulation_end_date=execution.simulation_end_date,
             run_start_date=_isoformat(execution.run_start_date),
             run_end_date=_isoformat(execution.run_end_date),
             compiler=execution.compiler,
             key_features=execution.key_features,
             known_issues=execution.known_issues,
             notes_markdown=execution.notes_markdown,
-            git_repository_url=execution.git_repository_url,
+            git_repository_source=execution.git_repository_source,
             git_branch=execution.git_branch,
             git_tag=execution.git_tag,
             git_commit_hash=execution.git_commit_hash,

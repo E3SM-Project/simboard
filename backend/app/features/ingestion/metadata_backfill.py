@@ -1,23 +1,41 @@
 """Narrow updates to existing execution metadata, never ingestion state."""
 
-from datetime import date, datetime, timezone
+import re
+from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
+from app.common.model_dates import ModelDate
 from app.features.catalog.enums import ArtifactKind
 from app.features.catalog.history import changed_metadata, snapshot_metadata
 from app.features.catalog.models import Artifact, Execution, MetadataChange
+
+# Groups that update one stored scalar from one source value.
+SCALAR_FIELDS = {
+    "git-repository": "git_repository_source",
+    "initialization": "initialization_type",
+    "source-code-path": "source_code_path",
+    "git-commit-hash": "git_commit_hash",
+}
 
 
 class MetadataValues(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    simulation_start_date: date | None = None
-    simulation_end_date: date | None = None
+    simulation_start_date: ModelDate | None = None
+    simulation_end_date: ModelDate | None = None
     run_script: str | None = Field(default=None, max_length=1000, min_length=1)
+    compset_long_name: str | None = None
+    compset_alias: str | None = None
+    git_repository_source: str | None = None
+    grid_long_name: str | None = None
+    grid_alias: str | None = None
+    initialization_type: str | None = Field(default=None, max_length=50)
+    source_code_path: str | None = None
+    git_commit_hash: str | None = Field(default=None, max_length=64)
 
     @model_validator(mode="after")
     def ordered_dates(self):
@@ -36,13 +54,83 @@ class MetadataUpdate(BaseModel):
     case_name: str = Field(min_length=1)
     hpc_username: str = Field(min_length=1)
     execution_id: str = Field(min_length=1)
-    fields: list[Literal["simulation-dates", "run-script"]] = Field(
-        min_length=1, max_length=2
-    )
+    fields: list[
+        Literal[
+            "simulation-dates",
+            "run-script",
+            "component-set",
+            "git-repository",
+            "grid",
+            "initialization",
+            "source-code-path",
+            "git-commit-hash",
+        ]
+    ] = Field(min_length=1, max_length=8)
     values: MetadataValues
     expected: MetadataValues
     overwrite: bool = False
     dry_run: bool = True
+
+    @model_validator(mode="after")
+    def complete_metadata_groups(self):
+        if "git-repository" in self.fields:
+            for label, values in (("values", self.values), ("expected", self.expected)):
+                if "git_repository_source" not in values.model_fields_set:
+                    raise ValueError(f"Explicit repository source required in {label}")
+            if not self.values.git_repository_source:
+                raise ValueError("Repository source is required")
+
+        if "component-set" in self.fields:
+            for label, values in (("values", self.values), ("expected", self.expected)):
+                if (
+                    not {"compset_long_name", "compset_alias"}
+                    <= values.model_fields_set
+                ):
+                    raise ValueError(f"Explicit component-set pair required in {label}")
+            if (
+                not self.values.compset_long_name
+                or not self.values.compset_long_name.strip()
+            ):
+                raise ValueError("Required component-set long name missing in values")
+
+        return self
+
+    @model_validator(mode="after")
+    def complete_grid(self):
+        if "grid" in self.fields:
+            for label, values in (("values", self.values), ("expected", self.expected)):
+                if not {"grid_long_name", "grid_alias"} <= values.model_fields_set:
+                    raise ValueError(f"Explicit grid pair required in {label}")
+            if not self.values.grid_long_name or not self.values.grid_long_name.strip():
+                raise ValueError("Required grid long name missing in values")
+
+        return self
+
+    @model_validator(mode="after")
+    def complete_initialization(self):
+        if "initialization" in self.fields:
+            value = self.values.initialization_type
+            if not value or not value.strip():
+                raise ValueError("Required initialization type missing in values")
+
+        return self
+
+    @model_validator(mode="after")
+    def complete_source_code(self):
+        for group, name in (
+            ("source-code-path", "source_code_path"),
+            ("git-commit-hash", "git_commit_hash"),
+        ):
+            value = getattr(self.values, name)
+            if group in self.fields and (not value or not value.strip()):
+                raise ValueError(f"Required {name} missing in values")
+        # Stored values may be abbreviated; repairs must write full hashes.
+        if "git-commit-hash" in self.fields and not re.fullmatch(
+            r"[0-9a-f]{40}|[0-9a-f]{64}", self.values.git_commit_hash or ""
+        ):
+            raise ValueError("Full git_commit_hash required in values")
+
+        return self
 
 
 def stored_values(execution: Execution) -> MetadataValues:
@@ -54,6 +142,14 @@ def stored_values(execution: Execution) -> MetadataValues:
         simulation_start_date=execution.simulation_start_date,
         simulation_end_date=execution.simulation_end_date,
         run_script=scripts[0].uri if scripts else None,
+        compset_long_name=execution.compset_long_name,
+        compset_alias=execution.compset_alias,
+        git_repository_source=execution.git_repository_source,
+        grid_long_name=execution.grid_long_name,
+        grid_alias=execution.grid_alias,
+        initialization_type=execution.initialization_type,
+        source_code_path=execution.source_code_path,
+        git_commit_hash=execution.git_commit_hash,
     )
 
 
@@ -139,11 +235,18 @@ def update_metadata(
         names.extend(["simulation_start_date", "simulation_end_date"])
     if "run-script" in payload.fields:
         names.append("run_script")
+    names.extend(_component_set_fields(old, payload))
+    names.extend(_grid_fields(old, payload))
+    names.extend(
+        name for group, name in SCALAR_FIELDS.items() if group in payload.fields
+    )
 
     for name in names:
         before = getattr(old, name)
         after = getattr(payload.values, name)
-        if after is None or before == after:
+        if before == after or (
+            after is None and name not in ("compset_alias", "grid_alias")
+        ):
             continue
         if before is not None and not payload.overwrite:
             continue
@@ -164,3 +267,49 @@ def update_metadata(
         "changes": changes,
         "dry_run": payload.dry_run,
     }
+
+
+def _component_set_fields(old: MetadataValues, payload: MetadataUpdate) -> list[str]:
+    if "component-set" not in payload.fields:
+        return []
+
+    fields = ["compset_long_name", "compset_alias"]
+    # Compare the pair, even if one member is unchanged. Never clear an alias
+    # against a long name that changed after source observation.
+    for name in fields:
+        before = getattr(old, name)
+        if before != getattr(payload.expected, name) and before != getattr(
+            payload.values, name
+        ):
+            raise ValueError(f"Stored {name} changed; rerun backfill")
+
+    # Treat the pair atomically when fill-only mode cannot replace a member.
+    needs_overwrite = any(
+        getattr(old, name) is not None
+        and getattr(old, name) != getattr(payload.values, name)
+        for name in fields
+    )
+
+    return fields if payload.overwrite or not needs_overwrite else []
+
+
+def _grid_fields(old: MetadataValues, payload: MetadataUpdate) -> list[str]:
+    if "grid" not in payload.fields:
+        return []
+
+    fields = ["grid_long_name", "grid_alias"]
+    # Compare both members, including unchanged values, before updating the pair.
+    for name in fields:
+        before = getattr(old, name)
+        if before != getattr(payload.expected, name) and before != getattr(
+            payload.values, name
+        ):
+            raise ValueError(f"Stored {name} changed; rerun backfill")
+
+    needs_overwrite = any(
+        getattr(old, name) is not None
+        and getattr(old, name) != getattr(payload.values, name)
+        for name in fields
+    )
+
+    return fields if payload.overwrite or not needs_overwrite else []

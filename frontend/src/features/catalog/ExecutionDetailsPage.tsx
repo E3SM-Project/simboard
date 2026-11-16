@@ -181,7 +181,7 @@ export const ExecutionDetailsPage = () => {
   if (!readableIdentity) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500">Invalid execution identity</div>
+        <div className="text-center text-muted-foreground">Invalid execution identity</div>
       </div>
     );
   }
@@ -201,7 +201,7 @@ export const ExecutionDetailsPage = () => {
   if (!currentExecution) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center text-gray-500">Execution not found</div>
+        <div className="text-center text-muted-foreground">Execution not found</div>
       </div>
     );
   }

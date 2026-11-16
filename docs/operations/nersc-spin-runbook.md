@@ -349,6 +349,7 @@ Key table for `nersc-staging-ingestor-env`:
 | `PERF_SOURCE_ROOT`      | Yes | `/global/cfs/cdirs/e3sm/performance_archive`; absolute host prefix for recorded source directories only | `nersc-staging-ingestor` |
 | `MACHINE_NAME`          | Yes      | `perlmutter`                                               | `nersc-staging-ingestor` |
 | `DRY_RUN`               | No       | `true` or `false`                                          | `nersc-staging-ingestor` |
+| `SIMBOARD_JOB_ID`       | No       | `spin-perlmutter-staging`; enables job health reporting    | `nersc-staging-ingestor` |
 
 Key table for `nersc-archive-ingestor-env`:
 
@@ -361,12 +362,18 @@ Key table for `nersc-archive-ingestor-env`:
 | `OLD_PERF_SOURCE_ROOT`  | Yes | `/global/cfs/cdirs/e3sm/OLD_PERF`; canonical absolute host prefix for recorded source directories only (`projectdirs` is an alias) | `nersc-archive-ingestor` |
 | `MACHINE_NAME`          | Yes                       | `perlmutter`                                               | `nersc-archive-ingestor` |
 | `DRY_RUN`               | No                        | `true` or `false`                                          | `nersc-archive-ingestor` |
+| `SIMBOARD_JOB_ID`       | No                        | `spin-perlmutter-archive`; enables job health reporting    | `nersc-archive-ingestor` |
 | `ARCHIVE_YEAR_START`    | No, defaults to `2025-01` | `2025-01`; explicit earlier bounds for backfills            | `nersc-archive-ingestor` |
 | `ARCHIVE_YEAR_END`      | No, scoped backfills only | `2025` or `2025-03`                                        | `nersc-archive-ingestor` |
 
 `OLD_PERF_ARCHIVE_ROOT` must point at archive root whose immediate children are
-`YYYY-MM` buckets containing immutable `performance_archive_<timestamp>`
-snapshots. The runner stores completed snapshot checkpoints in SimBoard's
+`YYYY-MM` buckets containing immutable `performance_archive_<timestamp>` or
+`performance_archive_<machine>_<project-tag>_<timestamp>` snapshots, where
+`<timestamp>` is `YYYY_MM_DD_HH_MM_SS`. NERSC uses the timestamp-only format;
+the shared scanner also accepts machine/project-prefixed names produced by the
+PACE shell script on sites such as Chrysalis and Compy. Prefix values may contain
+underscores and do not determine machine identity. Both formats receive the same
+snapshot checkpoint handling. The runner stores completed snapshot checkpoints in SimBoard's
 database, so no separate checkpoint file or persistent checkpoint volume is
 needed. `ARCHIVE_YEAR_START` is the earliest month considered; newly arriving
 snapshots in any eligible month are discovered automatically.
@@ -396,20 +403,25 @@ completed archive snapshots remain skipped, and dry runs do not write source pat
 4. **Create/update CronJob `nersc-staging-ingestor`**
    - Use the **Staging CronJob** section below.
    - Configure secret-backed environment variables from `nersc-staging-ingestor-env`.
-   - Keep the CronJob command on `python -m app.scripts.ingestion.nersc_archive_ingestor`. Do not switch this workload to `app/scripts/ingestion/sites/site_ingestion_launcher.sh`; that launcher is for host-side NERSC cron usage and loads host filesystem paths and API configuration that do not match this Spin workload.
+   - Run the ingestor through the job health wrapper: `python -m app.scripts.ingestion.job_health run app.scripts.ingestion.nersc_archive_ingestor`. Do not switch this workload to `app/scripts/ingestion/sites/site_ingestion_launcher.sh`; that launcher is for host-side NERSC cron usage and loads host filesystem paths and API configuration that do not match this Spin workload.
 
 5. **Create/update CronJob `nersc-archive-ingestor`**
    - Use the **Archive CronJob** section below.
    - Configure secret-backed environment variables from `nersc-archive-ingestor-env`.
-   - Keep the CronJob command on `python -m app.scripts.ingestion.nersc_archive_ingestor`. Do not switch this workload to `app/scripts/ingestion/sites/site_ingestion_launcher.sh`; that launcher is for host-side NERSC cron usage and loads host filesystem paths and API configuration that do not match this Spin workload.
+   - Run the ingestor through the job health wrapper: `python -m app.scripts.ingestion.job_health run app.scripts.ingestion.nersc_archive_ingestor`. Do not switch this workload to `app/scripts/ingestion/sites/site_ingestion_launcher.sh`; that launcher is for host-side NERSC cron usage and loads host filesystem paths and API configuration that do not match this Spin workload.
 
 6. **Validate both jobs once with dry run**
    - Set `DRY_RUN=true` in both ingestion secrets.
    - Trigger a one-off job from each CronJob.
    - Confirm logs include `scan_completed` and submission-qualified case discovery during collection.
-   - Remove `DRY_RUN` (or set `DRY_RUN=false`) in each secret after validation.
+   - Set `DRY_RUN=false` in each secret after validation; an unset `DRY_RUN` runs a dry run.
 
-7. **Verify steady-state behavior**
+7. **Enable job health reporting**
+   - Add `SIMBOARD_JOB_ID` to each secret, and `SIMBOARD_JOB_SCAN_MODE=diagnostics` to the diagnostics secret (the ingestion secrets already set `SCAN_MODE`). The wrapper reports only live runs (`DRY_RUN=false`) with a job ID; it always exits with the module's exit code, and report failures appear only as `job_report_failed` log events.
+   - Each job registers itself on its first report with default thresholds; no admin step is needed. See [Report scheduled job health](setup-ingestion-operations.md#report-scheduled-job-health) to change thresholds.
+   - Trigger a one-off job and confirm `job_report_sent` events and the job in `GET /api/v1/ingestions/jobs`.
+
+8. **Verify steady-state behavior**
    - Confirm `nersc-staging-ingestor` runs every 15 minutes.
    - Confirm `nersc-archive-ingestor` runs daily at `0 12 * * *`.
    - Confirm unchanged cases are not re-ingested.
@@ -455,6 +467,11 @@ still prevents already processed executions from being submitted again.
 | Successful jobs history limit | `3`                                            |
 | Failed jobs history limit     | `3`                                            |
 
+In Rancher, use **⋮ → Edit YAML** to remove
+`spec.jobTemplate.spec.ttlSecondsAfterFinished`, then save and verify it is absent.
+TTL overrides history retention: `3600` expires Jobs after one hour; `0` permits
+immediate cleanup. Removing it affects future Jobs only.
+
 ##### 2. Pod tab
 
 `Security Context`:
@@ -489,7 +506,7 @@ still prevents already processed executions from being submitted again.
 | Pull policy           | `Always` for `:dev`; `IfNotPresent` for versioned tags |
 | Image pull secret     | `registry-nersc`                                       |
 | Command               | `python`                                               |
-| Arguments             | `-m app.scripts.ingestion.nersc_archive_ingestor`      |
+| Arguments             | `-m app.scripts.ingestion.job_health run app.scripts.ingestion.nersc_archive_ingestor` |
 | Environment Variables | Type: Secret, Secret: `nersc-staging-ingestor-env`     |
 
 `Security Context`:
@@ -526,8 +543,13 @@ still prevents already processed executions from being submitted again.
 | Rancher field                 | Value                                          |
 | ----------------------------- | ---------------------------------------------- |
 | Concurrency policy            | `Skip next run if current run hasn't finished` |
-| Successful jobs history limit | `3`                                            |
+| Successful jobs history limit | `7`                                            |
 | Failed jobs history limit     | `3`                                            |
+
+In Rancher, use **⋮ → Edit YAML** to remove
+`spec.jobTemplate.spec.ttlSecondsAfterFinished`, then save and verify it is absent.
+TTL overrides history retention: `3600` expires Jobs after one hour; `0` permits
+immediate cleanup. Removing it affects future Jobs only.
 
 ##### 2. Pod tab
 
@@ -563,7 +585,7 @@ still prevents already processed executions from being submitted again.
 | Pull policy           | `Always` for `:dev`; `IfNotPresent` for versioned tags |
 | Image pull secret     | `registry-nersc`                                       |
 | Command               | `python`                                               |
-| Arguments             | `-m app.scripts.ingestion.nersc_archive_ingestor`      |
+| Arguments             | `-m app.scripts.ingestion.job_health run app.scripts.ingestion.nersc_archive_ingestor` |
 | Environment Variables | Type: Secret, Secret: `nersc-archive-ingestor-env`     |
 
 `Security Context`:
@@ -615,7 +637,7 @@ Source: [NERSC Spin Storage - NERSC Global File Systems](https://docs.nersc.gov/
 
 Create this CronJob in Rancher for each target API namespace. It links published
 diagnostics to existing cases independently of the ingestion CronJobs. Run the
-Python scanner directly, not the host-side launcher.
+Python scanner through the job health wrapper, not the host-side launcher.
 
 #### Setup procedure
 
@@ -643,6 +665,8 @@ Under **Storage -> Secrets**, create the **Opaque** secret
 | `DRY_RUN` | `false` |
 | `SIMBOARD_API_BASE_URL` | `http://backend:8000` |
 | `SIMBOARD_API_TOKEN` | Ingestion service-account token authorized for diagnostics |
+| `SIMBOARD_JOB_ID` | `spin-perlmutter-diagnostics`; enables [job health reporting](#workload-3-nersc-archive-collection-cronjobs) (Workload 3, step 7) |
+| `SIMBOARD_JOB_SCAN_MODE` | `diagnostics`; required with `SIMBOARD_JOB_ID` |
 
 Use the same namespace's backend image and API credentials. Keep `DRY_RUN=false`
 for linking; `true` is an optional offline scan. Omitting it defaults to dry run.
@@ -662,9 +686,14 @@ Open **Workloads -> CronJobs -> Create**:
 | Rancher field | Value |
 | --- | --- |
 | Concurrency policy | `Skip next run if current run hasn't finished` (`Forbid`) |
-| Successful jobs history limit | `3` |
+| Successful jobs history limit | `4` |
 | Failed jobs history limit | `3` |
 | Job backoff limit | `0` (retry at the next schedule) |
+
+In Rancher, use **⋮ → Edit YAML** to remove
+`spec.jobTemplate.spec.ttlSecondsAfterFinished`, then save and verify it is absent.
+TTL overrides history retention: `3600` expires Jobs after one hour; `0` permits
+immediate cleanup. Removing it affects future Jobs only.
 
 Scans run every six hours at 02:00, 08:00, 14:00, and 20:00 UTC, retaining the
 14:00 run after 12:00 archive ingestion. If the time-zone field is unavailable,
@@ -701,7 +730,7 @@ verify the controller uses UTC. Avoid overlapping manual jobs;
 | Image pull secret | `registry-nersc` |
 | Working directory | `/app` |
 | Command | `python` |
-| Arguments | `-m app.scripts.ingestion.diagnostics_link_scanner` |
+| Arguments | `-m app.scripts.ingestion.job_health run app.scripts.ingestion.diagnostics_link_scanner` |
 | Environment Variables | Type: Secret, Secret: `nersc-diagnostics-scanner-env` |
 
 `Security Context`:
@@ -849,7 +878,8 @@ Ingress annotation if that backend limit changes.
 8. Create/update CronJobs `nersc-staging-ingestor` and `nersc-archive-ingestor`, run one-off dry runs (`DRY_RUN=true`) for both, then set `DRY_RUN=false`.
    Separately create `nersc-diagnostics-scanner-env` and `nersc-diagnostics-scanner`
    using Workload 4 with `DRY_RUN=false`, verify its archive mount and live linking.
-   Keep existing ingestion workloads unchanged.
+   Keep existing ingestion workloads unchanged. Then enable job health reporting
+   for all three CronJobs (Workload 3, step 7).
 9. Verify ingress routing under **Service Discovery → Ingresses** for `lb` and confirm both frontend and backend hosts resolve via HTTPS.
 
 ## Failure Handling

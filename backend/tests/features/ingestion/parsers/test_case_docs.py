@@ -12,6 +12,30 @@ from app.features.ingestion.parsers.case_docs import (
 
 
 class TestParseEnvCase:
+    @pytest.mark.parametrize("value", ["1850_EAM_ELM_MPASSI_MPASO", "", "   "])
+    def test_component_long_name_comes_from_xml(self, tmp_path, value):
+        path = tmp_path / "env_case.xml"
+        path.write_text(f'<config><entry id="COMPSET" value="{value}"/></config>')
+
+        result = parse_env_case(path)
+
+        assert result["compset_long_name"] == (value.strip() or None)
+        assert "compset_alias" not in result
+
+    @pytest.mark.parametrize(
+        ("entry", "expected"),
+        [
+            ('<entry id="SRCROOT" value=" /model/source " />', "/model/source"),
+            ('<entry id="SRCROOT" value="  " />', None),
+            ("", None),
+        ],
+    )
+    def test_source_code_path_comes_from_srcroot(self, tmp_path, entry, expected):
+        path = tmp_path / "env_case.xml"
+        path.write_text(f"<config>{entry}</config>")
+
+        assert parse_env_case(path)["source_code_path"] == expected
+
     def test_extracts_case_root(self, tmp_path):
         xml_case = """
         <config>
@@ -207,7 +231,30 @@ class TestParseEnvRun:
         result = parse_env_run(path)
         assert result["simulation_start_date"] is None
         assert result["simulation_end_date"] is None
+        assert result["initialization_type"] == "restart"
+
+    @pytest.mark.parametrize("run_type", ["startup", "branch", "hybrid"])
+    @pytest.mark.parametrize(
+        "continue_run", ['<entry id="CONTINUE_RUN" value="FALSE" />', ""]
+    )
+    def test_first_execution_keeps_run_type_and_dates(
+        self, tmp_path, run_type, continue_run
+    ):
+        path = tmp_path / "env_run.xml"
+        path.write_text(f"""<config>
+            <entry id="RUN_TYPE" value="{run_type}" />
+            {continue_run}
+            <entry id="RUN_STARTDATE" value="1850-01-01" />
+            <entry id="RUN_REFDATE" value="0201-01-01" />
+            <entry id="STOP_OPTION" value="nyears" />
+            <entry id="STOP_N" value="1" />
+        </config>""")
+        result = parse_env_run(path)
+        start = "0201-01-01" if run_type == "branch" else "1850-01-01"
+        end = "0202-01-01" if run_type == "branch" else "1851-01-01"
         assert result["initialization_type"] == run_type
+        assert result["simulation_start_date"] == start
+        assert result["simulation_end_date"] == end
 
     def test_extracts_path_artifact_values(self, tmp_path):
         xml_run = """
@@ -291,6 +338,27 @@ class TestParseEnvRun:
         result = parse_env_run(tmp_run)
 
         assert result["simulation_end_date"] == "2020-01-11"
+
+    @pytest.mark.parametrize(
+        "start, option, count, stop_date, expected",
+        [
+            ("0000-01-02", "ndays", "10", "", "0000-01-12"),
+            ("0000-01-31", "nmonths", "1", "", "0000-02-29"),
+            ("0000-01-02", "nyears", "1", "", "0001-01-02"),
+            ("0000-01-02", "date", "", "00001231", "0000-12-31"),
+        ],
+    )
+    def test_year_zero_dates(self, tmp_path, start, option, count, stop_date, expected):
+        path = tmp_path / "env_run.xml"
+        path.write_text(f"""<config>
+            <entry id="RUN_STARTDATE" value="{start}" />
+            <entry id="STOP_OPTION" value="{option}" />
+            <entry id="STOP_N" value="{count}" />
+            <entry id="STOP_DATE" value="{stop_date}" />
+        </config>""")
+        result = parse_env_run(path)
+        assert result["simulation_start_date"] == start
+        assert result["simulation_end_date"] == expected
 
     def test_stop_option_nmonths(self, tmp_path):
         xml_run = """

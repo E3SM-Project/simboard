@@ -101,6 +101,189 @@ after selection also fails the record. Explicit `--sources archive` and
 `--sources staging` remain strict: every selected mapping must be readable.
 These rules do not change source-directory bootstrap.
 
+### Git repository repair (#427)
+
+Deploy the backend, ingestion/backfill clients, and frontend together. Apply
+revision `20261023_040000` before starting the new backend. This is a breaking
+API change: `gitRepositorySource` replaces `gitRepositoryUrl`, with no legacy
+alias. Update external clients and payloads to use the source field.
+
+`gitRepositorySource` is the sole stored repository value. Archive ingestion
+preserves the extracted `GIT_CONFIG` value as text, including HTTP(S), SSH,
+local paths, and unsupported remotes. Browser-link validation does not affect
+ingestion. Details and comparison views display the original source and derive
+links only for valid HTTP(S) URLs and recognized GitHub SCP-style or
+`ssh://git@github.com/owner/repo` remotes. Local paths, unknown hosts, custom SSH
+ports, malformed values, and credential-bearing URLs remain non-clickable.
+
+The raw source is returned under the same access controls as other execution
+metadata. It can contain internal paths. Do not ingest repository configurations
+containing embedded credentials; this field preserves source text, not a redacted
+display value. Browser links reject embedded credentials, but source storage
+does not redact them.
+
+After bootstrapping source-directory mappings, preview a scoped repair:
+
+```bash
+make metadata-backfill machine=perlmutter env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--fields git-repository --sources archive --case-name exact-case-name --hpc-username exact-user --dry-run'
+```
+
+Repair reads archived `GIT_CONFIG` and updates only the source field. Missing
+source values, conflicting directories, or stale expected values fail safely.
+Fill-only mode skips existing sources. Use `--overwrite` to preview corrections
+to existing values. Apply requires separate live-write authorization;
+replace `--dry-run` with `--apply` only after reviewing the intended changes.
+Changes enter metadata history; repeating a successful repair makes no changes.
+
+Duplicate ingestion does not repair existing records. Executions never created
+must instead be replayed after deployment. Other schema failures may still block
+those executions; a successful Git scalar check does not establish full recovery.
+The source-only migration renames the stored URL column to the source column
+directly after grid revision `20261023_020000`. It preserves all existing values
+but cannot recover original SSH syntax from normalized URLs. Source-backed repair
+is still needed for those records. Downgrade renames the column back without
+changing values; legacy HTTP-only API schemas may reject SSH remotes or local
+paths stored since upgrade. Resolve those values before rolling back the backend.
+The removed, unreleased provenance revision `20261023_030000` must not have been
+applied to a deployed database; this migration chain does not support that state.
+
+### Component-set repair (#425)
+
+Deploy the component-set schema migration, API, ingestion clients, and frontend
+together. Execution payloads now use `compsetLongName` (`compset_long_name` in
+Python); execution filters and sorting use `compset_long_name`. The old `compset`
+field is no longer part of the contract. `compsetAlias` can be null. This is a
+breaking API change: update external clients and saved filter/sort requests too.
+
+The migration preserves existing values; it does **not** repair their meaning.
+Source-based repair with `--overwrite` is a required deployment step for existing
+records, not an optional follow-up. Keep catalog consumers in maintenance while
+the trusted repair API is available. Before restoring catalog access, reconcile
+the full intended record scope, verify repaired values, and resolve failures or
+unavailable provenance explicitly. Do not describe unresolved records as repaired.
+Do not swap columns or replay duplicates to repair records. The source-based
+`component-set` group reads XML `COMPSET` and the README creation argument from
+verified mapped executions. Both source files must be present and readable.
+Missing XML `COMPSET`, ambiguous sources, identity mismatches, and conflicting
+observations fail the record without changes. An absent README argument or a
+long-name argument produces an explicit null alias. Null and non-null alias
+observations conflict rather than silently selecting the non-null value.
+
+On an archive-access host, first verify source-directory mappings and preview a
+single case against the dev API:
+
+```bash
+make metadata-backfill machine=perlmutter env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--fields component-set --sources archive --case-name EXACT_CASE --hpc-username USER --overwrite --dry-run'
+```
+
+Review each before/after pair against XML and README, including intentional alias
+clearing. Obtain separate authorization before replacing `--dry-run` with
+`--apply` or widening the scope. Updates retain expected-value checks, record
+locking, and metadata history. Reruns with unchanged sources are no-ops.
+No ingestion state or discovery checkpoints change.
+
+After applying, verify execution detail, list, and exported execution JSON. Confirm
+`compsetLongName` matches source XML and `compsetAlias` matches the README alias or
+is null. Verify a scoped new execution through API ingestion as well; scalar
+checks alone do not establish full schema/database compatibility or recovery.
+
+CIME defines long names as unbounded strings and can append component modifiers;
+the database uses `TEXT` rather than the old `VARCHAR(120)`. See the upstream
+[component-set schema](https://github.com/ESMCI/cime/blob/master/CIME/data/config/xml_schemas/config_compsets.xsd)
+and [long-name construction](https://github.com/ESMCI/cime/blob/master/CIME/case/case.py).
+Aliases follow CIME's XML NCName syntax; numeric time-prefixed, percent-modified,
+and colon-labelled long-name arguments are not aliases. Underscores alone do
+not identify a long name. Downgrade refuses null aliases or names longer than
+120 characters until an operator explicitly resolves incompatible records.
+
+### Grid repair (#426)
+
+Deploy the grid migration, API, ingestion clients, and frontend together. Payloads
+use `gridAlias` (nullable) and `gridLongName` (required); Python fields, filters,
+and sorting use `grid_alias` and `grid_long_name`. Filter options use `gridAliases`
+and `gridLongNames`. Update external consumers and saved requests: the old names
+are no longer supported. The development seed contains illustrative grid specifications,
+not source-verified production metadata.
+
+The migration renames columns without repairing historical values. Keep catalog
+consumers in maintenance while the trusted repair API remains available. Reconcile
+the intended scope before restoring access; report unresolved records explicitly.
+Never swap values or rely on duplicate replay to update existing executions.
+
+The `grid` backfill group reads `env_build.xml` entry `GRID` and README `--res` or
+`-res`, including `flag=value`. Missing alias arguments yield explicit null.
+Both source files must be present and readable. Missing or blank XML `GRID`, source
+identity mismatches, ambiguous files, and conflicting observations fail without
+changes. Null and non-null alias observations conflict. Pair updates retain
+expected-value checks, locking, metadata history, and source-change detection.
+
+After verifying source-directory mappings, preview one case on an archive-access host:
+
+```bash
+make metadata-backfill machine=perlmutter env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--fields grid --sources archive --case-name EXACT_CASE --hpc-username USER --overwrite --dry-run'
+```
+
+Review both before/after values against XML and README. Obtain separate authorization
+before replacing `--dry-run` with `--apply` or widening scope. Reruns with unchanged
+sources are no-ops; checkpoints and ingestion state remain unchanged. Verify detail,
+list, and exported execution JSON after repair. Verify a new execution through full
+dev API ingestion too; scalar checks alone do not establish recovery.
+
+`gridLongName` is the resolved grid specification, not numeric spacing. Component-specific
+physical resolution, units, and authoritative sources require a separate issue.
+Downgrade refuses null aliases until an operator explicitly resolves those records.
+
+### Initialization repair (#438)
+
+The `initialization` group reads each execution's `env_run.xml`: `restart` when
+`CONTINUE_RUN` is TRUE, otherwise `RUN_TYPE`. It never infers continuation from
+execution order. Missing `env_run.xml` or `RUN_TYPE` fails without changes. Stored
+values always exist, so corrections require `--overwrite`:
+
+```bash
+make metadata-backfill machine=chrysalis env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--fields initialization --sources archive --case-name EXACT_CASE --hpc-username USER --overwrite --dry-run'
+```
+
+Review before/after values against `env_run.xml`. Obtain separate authorization
+before replacing `--dry-run` with `--apply` or widening scope.
+
+### Source-code path and model commit hash (#443)
+
+Apply revision `20261116_000000` before starting the new backend. It adds a
+nullable `sourceCodePath` execution field; existing API fields are unchanged.
+
+New ingestion reads `SRCROOT` from `env_case.xml` and the full hash from the first
+`GIT_LOG` line. Without `GIT_LOG`, it stores the abbreviated `GIT_DESCRIBE` hash.
+
+The `source-code-path` group reads `SRCROOT`. The `git-commit-hash` group reads
+only `GIT_LOG`, so backfill never writes an abbreviated hash; the API also rejects
+abbreviated values. When no mapped directory has the source value, the execution
+is reported as `skipped_missing_source`, not a failure, and keeps its stored
+values. Run the groups separately: one missing source skips the whole record.
+Identity mismatches, conflicting directories, and stale expected values still
+fail.
+
+```bash
+make metadata-backfill machine=chrysalis env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--fields source-code-path --sources archive --case-name EXACT_CASE --hpc-username USER --dry-run'
+```
+
+Fill-only mode populates missing paths and hashes. Existing executions already
+store abbreviated hashes, so replacing them with full hashes requires
+`--fields git-commit-hash --overwrite`. Until then, Case Details can show one
+commit as differing values when a case mixes abbreviated and full hashes. Review
+the dry run and obtain separate authorization before replacing `--dry-run` with
+`--apply`.
+
 ### Review and apply
 
 Dry runs resolve owners through the API without writing mappings. **`matched` means the existing owner resolved**, not that a new mapping was inserted.
@@ -202,7 +385,8 @@ not proof that the simulation failed. Missing machine metadata, ambiguous or
 malformed metadata, and permission errors remain failures.
 
 For database-first updates, the summary shows records with **planned changes**
-in dry-run mode, **records changed** in apply mode, unchanged records, and
+in dry-run mode, **records changed** in apply mode, unchanged records, records
+skipped for a missing optional source (`skipped_missing_source`), and
 record/request failures. Matched owners and planned changes do not mean writes
 occurred during a dry run.
 

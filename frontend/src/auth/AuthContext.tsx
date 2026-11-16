@@ -66,7 +66,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           title: 'Signed Out',
           description: (
             <div className="flex items-center gap-2">
-              <LogOut className="h-5 w-5 text-gray-600" />
+              <LogOut className="h-5 w-5 text-muted-foreground" />
               You’ve been logged out.
             </div>
           ),

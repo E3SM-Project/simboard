@@ -20,10 +20,10 @@ def _make_snapshot() -> ExecutionSnapshot:
         execution=SnapshotExecutionFields(
             id="execution-1",
             execution_id="assistant-llm-exec",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             status="completed",
             initialization_type="startup",
         ),

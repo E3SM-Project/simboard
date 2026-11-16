@@ -4,9 +4,9 @@ import argparse
 import gzip
 import json
 import logging
+import shutil
 import urllib.error
 from argparse import Namespace
-from datetime import date
 from functools import partial
 from pathlib import Path
 from uuid import uuid4
@@ -21,6 +21,7 @@ from app.features.ingestion.metadata_backfill import MetadataUpdate, update_meta
 from app.features.ingestion.v3_classification import V3_SIMULATIONS
 from app.scripts.ingestion.backfill import metadata
 from app.scripts.ingestion.backfill.metadata import _execution_paths, _read_execution
+from tests.fixtures.continuation_case import stage_continuation_case
 
 
 @pytest.fixture
@@ -54,6 +55,296 @@ def _read_execution_stub(record, path, machine, fields):
 
 def _unreadable_execution(*args):
     raise OSError("unreadable")
+
+
+def _missing_git_log(*args):
+    raise metadata._MissingSourceError("Missing GIT_LOG commit hash")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "/global/homes/user/E3SM",
+        "ssh://git@github.com/owner/repo.git",
+    ],
+)
+def test_repository_repair_reads_archive_provenance(tmp_path, source):
+    case = stage_continuation_case(tmp_path)
+    execution = sorted(case.iterdir())[0]
+    config = execution / f"GIT_CONFIG.{execution.name}.gz"
+    with gzip.open(config, "wt") as stream:
+        stream.write(f'[remote "origin"]\n    url = {source}\n')
+    parsed = _read_execution(execution, "chrysalis", ["git-repository"])
+    record = {
+        "case_name": parsed.case_name,
+        "hpc_username": parsed.hpc_username,
+        "execution_id": parsed.execution_id,
+        "error": None,
+        "values": {"git_repository_source": "https://untrusted.example/"},
+        "directories": [{"kind": "archive", "path": str(execution)}],
+    }
+    values = metadata._observed_values(
+        record,
+        Namespace(machine="chrysalis", sources="archive", fields=["git-repository"]),
+    )
+    assert values == {"git_repository_source": source}
+    config.unlink()
+    with pytest.raises(ValueError, match="Missing repository source"):
+        _read_execution(execution, "chrysalis", ["git-repository"])
+
+
+def test_repository_repair_rejects_conflicting_sources():
+    with pytest.raises(ValueError, match="Conflicting source values"):
+        metadata._consistent_values(
+            [
+                {"git_repository_source": "/local/repo"},
+                {"git_repository_source": "https://github.com/owner/repo"},
+            ],
+            ["git_repository_source"],
+        )
+
+
+@pytest.mark.parametrize(
+    "argument,alias",
+    [("-res arcticx4", "arcticx4"), ("--res=arcticx4", "arcticx4"), ("", None)],
+)
+def test_grid_repair_reads_sources_not_stored_values(tmp_path, argument, alias):
+    case = stage_continuation_case(tmp_path)
+    execution = sorted(case.iterdir())[0]
+    for path in execution.glob("CaseDocs.*/README.case.*.gz"):
+        with gzip.open(path, "wt") as stream:
+            stream.write(f"create_newcase {argument}\n")
+    parsed = _read_execution(execution, "chrysalis", ["grid"])
+    record = {
+        "case_name": parsed.case_name,
+        "hpc_username": parsed.hpc_username,
+        "execution_id": parsed.execution_id,
+        "error": None,
+        "values": {"grid_long_name": "untrusted", "grid_alias": "also-untrusted"},
+        "directories": [{"kind": "archive", "path": str(execution)}],
+    }
+    values = metadata._observed_values(
+        record, Namespace(machine="chrysalis", sources="archive", fields=["grid"])
+    )
+
+    assert values["grid_long_name"].startswith("a%ne30np4.pg2_l%r05_")
+    assert values["grid_alias"] == alias
+    assert set(values) == {"grid_long_name", "grid_alias"}
+
+
+def test_initialization_repair_reads_continue_run_not_execution_order(tmp_path):
+    case = stage_continuation_case(tmp_path)
+    # The earliest archived execution is still a continuation in its source XML.
+    execution = sorted(case.iterdir())[0]
+    parsed = _read_execution(execution, "chrysalis", ["initialization"])
+    record = {
+        "case_name": parsed.case_name,
+        "hpc_username": parsed.hpc_username,
+        "execution_id": parsed.execution_id,
+        "error": None,
+        "values": {"initialization_type": "hybrid"},
+        "directories": [{"kind": "archive", "path": str(execution)}],
+    }
+    args = Namespace(machine="chrysalis", sources="archive", fields=["initialization"])
+
+    assert metadata._observed_values(record, args) == {"initialization_type": "restart"}
+
+    # A missing source value fails even when another selected group is readable.
+    for path in execution.glob("CaseDocs.*/env_run.xml.*"):
+        path.unlink()
+    args.fields = ["run-script", "initialization"]
+    with pytest.raises(ValueError, match="Missing XML RUN_TYPE"):
+        metadata._observed_values(record, args)
+
+
+def test_source_code_repair_reads_srcroot_and_full_git_log_hash(tmp_path):
+    # The real case has SRCROOT and GIT_DESCRIBE but no GIT_LOG.
+    execution = sorted(stage_continuation_case(tmp_path).iterdir())[0]
+    parsed = _read_execution(execution, "chrysalis", [])
+    record = {
+        "case_name": parsed.case_name,
+        "hpc_username": parsed.hpc_username,
+        "execution_id": parsed.execution_id,
+        "error": None,
+        "values": {},
+        "directories": [{"kind": "archive", "path": str(execution)}],
+    }
+    args = Namespace(machine="chrysalis", sources="archive", fields=[])
+
+    args.fields = ["source-code-path"]
+    assert metadata._observed_values(record, args) == {
+        "source_code_path": (
+            "/lcrc/group/e3sm2/ac.kai.zhang/E3SMv3/v3.LR.piClim-histGHG/code/20241217/E3SM"
+        )
+    }
+
+    # The abbreviated GIT_DESCRIBE hash is never a backfill source.
+    args.fields = ["git-commit-hash"]
+    with pytest.raises(metadata._MissingSourceError, match="Missing GIT_LOG"):
+        metadata._observed_values(record, args)
+
+    # Identity checks fail before a missing source can be skipped.
+    record["case_name"] = "other-case"
+    with pytest.raises(ValueError, match="Source identity does not match"):
+        metadata._observed_values(record, args)
+    record["case_name"] = parsed.case_name
+
+    # Another mapped copy supplies the value; the copy without GIT_LOG is not a skip.
+    copy = tmp_path / "copy" / execution.name
+    shutil.copytree(execution, copy)
+    full_hash = "7c4ec379a6" + "0" * 30
+    (copy / f"GIT_LOG.{copy.name}").write_text(f"{full_hash} Subject\n")
+    record["directories"].append({"kind": "archive", "path": str(copy)})
+    assert metadata._observed_values(record, args) == {"git_commit_hash": full_hash}
+
+
+def test_missing_source_is_reported_as_skip_not_failure(monkeypatch, capsys, caplog):
+    record = {"record_id": str(uuid4()), "case_name": "case"}
+    calls = []
+    monkeypatch.setattr(metadata, "_request", partial(_request_stub, record, calls))
+    monkeypatch.setattr(metadata, "_observed_values", _missing_git_log)
+    args = Namespace(
+        v3=False,
+        machine="chrysalis",
+        case_name=None,
+        hpc_username=None,
+        sources="archive",
+        fields=["git-commit-hash"],
+        overwrite=False,
+        apply=False,
+    )
+
+    with caplog.at_level(logging.INFO):
+        assert metadata._backfill_metadata(args, "https://example.test", "token") == 0
+
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert lines[0] == {
+        "record_id": record["record_id"],
+        "outcome": "skipped_missing_source",
+        "reason": "Missing GIT_LOG commit hash",
+    }
+    assert lines[-1] == {"skipped_missing_source": 1, "failed": 0}
+    assert all(payload is None for _, payload in calls)
+    assert "RUN_SUMMARY Skipped missing source: 1" in caplog.text
+
+
+@pytest.mark.parametrize("source", ["readme", "xml-file", "xml-value"])
+def test_grid_repair_requires_readable_sources(tmp_path, source):
+    execution = sorted(stage_continuation_case(tmp_path).iterdir())[0]
+    if source == "readme":
+        next(execution.glob("CaseDocs.*/README.case.*.gz")).unlink()
+    else:
+        path = next(execution.glob("CaseDocs.*/env_build.xml.*.gz"))
+        if source == "xml-file":
+            path.unlink()
+        else:
+            with gzip.open(path, "wt") as stream:
+                stream.write("<config />")
+
+    with pytest.raises(ValueError, match="Missing"):
+        _read_execution(execution, "chrysalis", ["grid"])
+
+
+def test_grid_repair_rejects_null_alias_conflict():
+    with pytest.raises(ValueError, match="Conflicting source values for grid_alias"):
+        metadata._consistent_values(
+            [{"grid_alias": "alias"}, {"grid_alias": None}], ["grid_alias"]
+        )
+
+
+@pytest.mark.parametrize(
+    "argument,alias",
+    [("-compset F20TR-GHG", "F20TR-GHG"), ("--compset=1850_EAM_ELM", None), ("", None)],
+)
+def test_component_repair_reads_sources_not_stored_values(tmp_path, argument, alias):
+    case = stage_continuation_case(tmp_path)
+    execution = sorted(case.iterdir())[0]
+    for path in execution.glob("CaseDocs.*/README.case.*.gz"):
+        with gzip.open(path, "wt") as stream:
+            stream.write(f"create_newcase {argument}\n")
+    parsed = _read_execution(execution, "chrysalis", ["component-set"])
+    record = {
+        "case_name": parsed.case_name,
+        "hpc_username": parsed.hpc_username,
+        "execution_id": parsed.execution_id,
+        "error": None,
+        "values": {"compset_long_name": "untrusted", "compset_alias": "also-untrusted"},
+        "directories": [{"kind": "archive", "path": str(execution)}],
+    }
+    values = metadata._observed_values(
+        record,
+        Namespace(machine="chrysalis", sources="archive", fields=["component-set"]),
+    )
+
+    assert values["compset_long_name"].startswith("20TRSOI_EAM%")
+    assert values["compset_alias"] == alias
+    assert set(values) == {"compset_long_name", "compset_alias"}
+
+
+@pytest.mark.parametrize("source", ["readme", "xml-value"])
+def test_component_repair_requires_readable_sources(tmp_path, source):
+    case = stage_continuation_case(tmp_path)
+    execution = sorted(case.iterdir())[0]
+    if source == "readme":
+        next(execution.glob("CaseDocs.*/README.case.*.gz")).unlink()
+    else:
+        path = next(execution.glob("CaseDocs.*/env_case.xml.*.gz"))
+        with gzip.open(path, "rt") as stream:
+            content = stream.read()
+        with gzip.open(path, "wt") as stream:
+            stream.write(
+                "\n".join(
+                    line for line in content.splitlines() if 'id="COMPSET"' not in line
+                )
+            )
+
+    with pytest.raises(ValueError, match="Missing"):
+        _read_execution(execution, "chrysalis", ["component-set"])
+
+
+def test_component_repair_rejects_null_alias_conflict(tmp_path, monkeypatch):
+    paths = [tmp_path / "one", tmp_path / "two"]
+    for path in paths:
+        path.mkdir()
+    parsed = Namespace(
+        case_name="case",
+        hpc_username="alice",
+        execution_id="1.1-1",
+        simulation_start_date=None,
+        simulation_end_date=None,
+        run_script_path=None,
+        compset_long_name="1850_EAM_ELM",
+        compset_alias="F20TR-GHG",
+    )
+    observations = [parsed, Namespace(**{**vars(parsed), "compset_alias": None})]
+    monkeypatch.setattr(
+        metadata, "_read_execution", partial(_next_component_observation, observations)
+    )
+    record = {
+        "case_name": "case",
+        "hpc_username": "alice",
+        "execution_id": "1.1-1",
+        "error": None,
+        "directories": [{"kind": "archive", "path": str(path)} for path in paths],
+    }
+
+    with pytest.raises(ValueError, match="Conflicting source values for compset_alias"):
+        metadata._observed_values(
+            record,
+            Namespace(machine="chrysalis", sources="archive", fields=["component-set"]),
+        )
+
+
+def _next_component_observation(observations, *args):
+    return observations.pop(0)
+
+
+def test_component_alias_comparison_ignores_case_and_preserves_first_spelling():
+    observations = [{"compset_alias": "F20TR-GHG"}, {"compset_alias": "f20tr-ghg"}]
+
+    assert metadata._consistent_values(observations, ["compset_alias"]) == {
+        "compset_alias": "F20TR-GHG"
+    }
 
 
 def test_both_layouts_and_archive_bounds(tmp_path):
@@ -414,7 +705,7 @@ def _update_payload(row, **kwargs):
 
 
 def test_dry_run_fill_missing_overwrite_and_idempotency():
-    row = Execution(id=uuid4(), simulation_start_date=date(1850, 1, 1))
+    row = Execution(id=uuid4(), simulation_start_date="1850-01-01")
     unrelated = Artifact(kind=ArtifactKind.OUTPUT, uri="/keep")
     row.artifacts = [unrelated]
     editor = uuid4()
@@ -428,13 +719,13 @@ def test_dry_run_fill_missing_overwrite_and_idempotency():
 
     dry.dry_run = False
     update_metadata(db, row, dry, editor)
-    assert row.simulation_start_date == date(1850, 1, 1)
+    assert row.simulation_start_date == "1850-01-01"
     assert row.artifacts[0] is unrelated
     assert row.artifacts[1].uri == "/case/run.sh"
 
     dry.overwrite = True
     update_metadata(db, row, dry, editor)
-    assert row.simulation_start_date == date(2020, 1, 1)
+    assert row.simulation_start_date == "2020-01-01"
     assert update_metadata(db, row, dry, editor)["outcome"] == "unchanged"
     history = list(db.new)
     assert all(isinstance(item, MetadataChange) for item in history)
@@ -497,13 +788,13 @@ def test_overwrite_script_history_preserves_full_artifact_values():
 
 
 def test_stale_update_rejected_before_any_write():
-    row = Execution(id=uuid4(), simulation_start_date=date(1900, 1, 1))
+    row = Execution(id=uuid4(), simulation_start_date="1900-01-01")
     with pytest.raises(ValueError, match="changed"):
         update_metadata(
             None, row, _update_payload(row, overwrite=True, dry_run=False), uuid4()
         )
     assert row.artifacts == []
-    assert row.simulation_start_date == date(1900, 1, 1)
+    assert row.simulation_start_date == "1900-01-01"
 
 
 def test_database_first_uses_mappings_and_detects_conflicts(tmp_path, monkeypatch):
@@ -556,9 +847,9 @@ def test_metadata_schema_rejects_unknown_fields():
 
 
 def test_fill_dates_cannot_mix_intervals():
-    row = Execution(id=uuid4(), simulation_start_date=date(1850, 1, 1))
+    row = Execution(id=uuid4(), simulation_start_date="1850-01-01")
     request = _update_payload(row)
-    request.values.simulation_end_date = date(2030, 1, 1)
+    request.values.simulation_end_date = "2030-01-01"
     with pytest.raises(ValueError, match="different interval"):
         update_metadata(None, row, request, uuid4())
 

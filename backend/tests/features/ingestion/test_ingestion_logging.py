@@ -1,5 +1,6 @@
 """Tests of the public ingestion log contract without live API calls."""
 
+import gzip
 import io
 import json
 import logging
@@ -482,6 +483,58 @@ def test_real_discovery_partitions_and_submission_results(
         )
 
 
+def test_running_deferrals_combine_with_case_limit_in_metrics(
+    output, tmp_path, monkeypatch
+):
+    root = tmp_path / "performance_archive"
+    for case, execution_id, running in [
+        ("a", "100.1-1", False),
+        ("a", "101.1-1", True),
+        ("b", "200.1-1", False),
+        ("c", "300.1-1", True),
+    ]:
+        execution = root / "user" / case / execution_id
+        execution.mkdir(parents=True)
+        if running:
+            with gzip.open(execution / f"CaseStatus.{execution_id}.gz", "wt") as stream:
+                stream.write("2026-10-20 10:00:00: case.run starting\n")
+    monkeypatch.setenv("SIMBOARD_INGESTION_LOG_LEVEL", "DEBUG")
+    config = IngestorConfig(
+        api_base_url="https://example.test",
+        api_token="token",
+        archive_root=root,
+        machine_name="perlmutter",
+        dry_run=True,
+        max_cases_per_run=1,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        dry_run_use_remote_state=False,
+    )
+
+    @logs.logged_main
+    def main():
+        return runner._run_ingestor(config, metadata_locator=lambda path: {})
+
+    assert main() == 0
+    record = records(output)[0]
+    assert record["executions"] == {
+        "total": 4,
+        "selected": 1,
+        "skipped": 0,
+        "incomplete": 0,
+        "invalid": 0,
+        "unreadable": 0,
+        "deferred": 3,
+    }
+    assert record["cases"]["found"] == 3
+    assert record["cases"]["eligible"] == 2
+    assert record["cases"]["selected"] == 1
+    assert record["cases"]["deferred"] == 1
+    assert "outcome=deferred" in output.getvalue()
+    assert "reason=execution_running" in output.getvalue()
+    assert "reason=max_cases_per_run" in output.getvalue()
+
+
 @pytest.mark.parametrize(
     "kind",
     ["empty", "before_scan", "before_submission", "before_empty_submission", "partial"],
@@ -572,7 +625,7 @@ def test_test_only_consumer_deduplicates_and_reports_coverage():
     }
 
 
-def test_cached_archive_observations_and_processed_staging_are_skipped(
+def test_archive_rejections_are_revalidated_and_processed_staging_is_skipped(
     tmp_path, monkeypatch, output
 ):
     from app.scripts.ingestion.archive_discovery import _scan_archive
@@ -607,6 +660,15 @@ def test_cached_archive_observations_and_processed_staging_are_skipped(
             ]
         },
     }
+    validated = []
+
+    def locator(path):
+        validated.append(path)
+        if path.endswith("101.1-1"):
+            raise IncompleteArchiveError([])
+        if path.endswith("102.1-1"):
+            raise ArchiveValidationError([])
+        return {}
 
     @logs.logged_main
     def main():
@@ -614,13 +676,14 @@ def test_cached_archive_observations_and_processed_staging_are_skipped(
         result = _scan_archive(
             config,
             state,
-            metadata_locator=lambda path: pytest.fail("cached result revalidated"),
+            metadata_locator=locator,
         )
         _, candidates, eligible, stats, _ = result
         _log_scan_completed(candidates, eligible, stats)
         return 0
 
     assert main() == 0
+    assert len(validated) == 6
     record = records(output)[0]
     assert record["executions"] == {
         "total": 6,
@@ -644,6 +707,7 @@ def test_cached_archive_observations_and_processed_staging_are_skipped(
         }
     }
     assert main() == 0
+    assert len(validated) == 6
     record = records(output)[1]
     assert record["executions"]["skipped"] == 1
     assert record["executions"]["selected"] == 0

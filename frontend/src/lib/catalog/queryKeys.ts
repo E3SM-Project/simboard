@@ -2,17 +2,18 @@ const executionQueryKeys = {
   all: ['executions'] as const,
   pages: () => ['executions', 'page'] as const,
   page: (params: object) => ['executions', 'page', params] as const,
-  casePage: (caseId: string, params: object) => ['executions', 'case', caseId, params] as const,
+  case: (caseId: string) => ['executions', 'case', caseId] as const,
+  casePage: (caseId: string, params: object) =>
+    [...executionQueryKeys.case(caseId), params] as const,
   caseInfinite: (caseId: string, params: object) =>
-    ['executions', 'case', caseId, 'infinite', params] as const,
+    [...executionQueryKeys.case(caseId), 'infinite', params] as const,
   detail: (id: string) => ['executions', 'detail', id] as const,
   readableDetail: (
     machineName: string,
     hpcUsername: string,
     caseName: string,
     executionId: string,
-  ) =>
-    ['executions', 'readable-detail', machineName, hpcUsername, caseName, executionId] as const,
+  ) => ['executions', 'readable-detail', machineName, hpcUsername, caseName, executionId] as const,
   history: (id: string) => ['executions', 'detail', id, 'history'] as const,
 };
 

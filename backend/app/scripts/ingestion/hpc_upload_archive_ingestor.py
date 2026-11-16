@@ -38,12 +38,13 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable
 
-from app.features.ingestion.parsers.parser import _locate_metadata_files
+from app.features.ingestion.ingest import validate_execution_directory
 from app.scripts.ingestion.archive_client import (
     _authorization_headers,
     _build_archive_checkpoints_endpoint_url,
     _build_discovery_results_endpoint_url,
     _build_state_endpoint_url,
+    _connection_request_error,
     _fetch_archive_checkpoints,
     _fetch_ingestion_state,
     _http_request_error,
@@ -82,6 +83,7 @@ from app.scripts.ingestion.archive_workflow import (
     _persist_discovery_results,
     _validate_run_preconditions,
 )
+from app.scripts.ingestion.job_health import record_exception, record_request_failure
 
 
 @logged_main
@@ -155,6 +157,7 @@ def _prepare_run_state(
                 "archive_checkpoint_fetch_failed",
                 {"status_code": exc.status_code, "error": str(exc)},
             )
+            record_request_failure(exc)
             return None
 
     try:
@@ -173,6 +176,7 @@ def _prepare_run_state(
                 "error": str(exc),
             },
         )
+        record_request_failure(exc)
         return None
 
     return state, completed_snapshot_keys, endpoint_url
@@ -180,7 +184,7 @@ def _prepare_run_state(
 
 def _run_ingestor(
     config: IngestorConfig,
-    metadata_locator: MetadataLocator = _locate_metadata_files,
+    metadata_locator: MetadataLocator = validate_execution_directory,
     sleep_fn: SleepCallback = time.sleep,
     post_request_fn: CaseSubmissionCallback | None = None,
     discovery_post_request_fn: DiscoveryResultsPersistenceCallback | None = None,
@@ -238,6 +242,7 @@ def _run_ingestor(
             "archive_scan_failed",
             {"error": f"{exc.__class__.__name__}: {exc}"},
         )
+        record_exception(exc, f"{exc.__class__.__name__}: {exc}")
         return 1
 
     _log_scan_completed(
@@ -557,6 +562,9 @@ def _send_hpc_upload_request(
         raise _url_request_error(exc) from exc
     except TimeoutError as exc:
         raise _timeout_request_error() from exc
+    # urllib wraps only send errors; response read errors arrive as OSError.
+    except OSError as exc:
+        raise _connection_request_error(exc) from exc
 
 
 if __name__ == "__main__":

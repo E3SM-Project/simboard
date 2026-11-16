@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom';
 
 import { NavBar } from '@/components/layout/NavBar';
 import { normalizeSelectedExecutionIds } from '@/components/shared/normalizeSelectedExecutionIds';
+import { ComparisonBar } from '@/features/diagnostics/components/ComparisonBar';
 import { useMachines } from '@/features/machines/hooks/useMachines';
 import { useSites } from '@/features/sites/hooks/useSites';
 import { CaseCompareRoute } from '@/routes/CaseCompareRoute';
@@ -47,10 +48,9 @@ const App = () => {
       <AppRoutes
         machines={machines}
         sites={sites}
-        renderCaseCompareSection={({ caseId, onClose }) => (
+        renderCaseCompareSection={({ caseId }) => (
           <CaseCompareRoute
             caseId={caseId}
-            onClose={onClose}
             selectedCaseExecutionIdsByCase={selectedCaseExecutionIdsByCase}
             setSelectedCaseExecutionIdsForCase={setSelectedCaseExecutionIdsForCase}
           />
@@ -58,6 +58,7 @@ const App = () => {
         selectedCaseExecutionIdsByCase={selectedCaseExecutionIdsByCase}
         setSelectedCaseExecutionIdsForCase={setSelectedCaseExecutionIdsForCase}
       />
+      <ComparisonBar />
       <Toaster />
     </BrowserRouter>
   );

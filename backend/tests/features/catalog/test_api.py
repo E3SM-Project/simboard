@@ -37,6 +37,7 @@ from app.features.catalog.models import (
 from app.features.catalog.schemas import (
     CaseUpdate,
     ExecutionCreate,
+    ExecutionOut,
     ExecutionUpdate,
 )
 from app.features.ingestion.enums import IngestionSourceType, IngestionStatus
@@ -178,13 +179,13 @@ def _create_matching_execution(
     execution = Execution(
         case_id=case.id,
         execution_id=execution_id,
-        compset="AQUAPLANET",
+        compset_long_name="AQUAPLANET",
         compset_alias="QPC4",
-        grid_name="f19_f19",
-        grid_resolution="1.9x2.5",
+        grid_alias="f19_f19",
+        grid_long_name="1.9x2.5",
         initialization_type="startup",
         status=ExecutionStatus.CREATED,
-        simulation_start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
+        simulation_start_date="2023-01-01",
         created_by=user_id,
         last_updated_by=user_id,
         ingestion_id=ingestion.id,
@@ -194,6 +195,87 @@ def _create_matching_execution(
     db.commit()
 
     return case, execution
+
+
+@pytest.mark.parametrize("start", ["0000-01-01", "0000-01-02"])
+def test_year_zero_dates_survive_create_storage_and_catalog_reads(
+    client, db: Session, start: str
+):
+    case = _create_case(db, "year-zero")
+    db.commit()
+    response = client.post(
+        f"{API_BASE}/executions",
+        json={
+            "caseId": str(case.id),
+            "executionId": "year-zero-execution",
+            "compsetLongName": "AQUAPLANET",
+            "compsetAlias": "QPC4",
+            "gridAlias": "f19_f19",
+            "gridLongName": "1.9x2.5",
+            "initializationType": "startup",
+            "status": "created",
+            "simulationStartDate": start,
+            "simulationEndDate": "0000-12-31",
+        },
+    )
+    assert response.status_code == 201, response.text
+    record = response.json()
+    execution = db.get(Execution, record["id"])
+    db.refresh(execution)
+    assert execution.simulation_start_date == start
+    assert execution.simulation_end_date == "0000-12-31"
+
+    for path in (f"executions/{execution.id}", f"cases/{case.id}"):
+        response = client.get(f"{API_BASE}/{path}")
+        assert response.status_code == 200, response.text
+        record = response.json()
+        if path.startswith("cases/"):
+            record = record["executions"][0]
+        assert record["simulationStartDate"] == start
+        assert record["simulationEndDate"] == "0000-12-31"
+
+
+def test_component_long_name_and_null_alias_round_trip(client, db):
+    case = _create_case(db, "component-round-trip")
+    db.commit()
+    long_name = "1850_EAM%" + "MODIFIER" * 20 + "_ELM_MPASSI_MPASO"
+    response = client.post(
+        f"{API_BASE}/executions",
+        json={
+            "caseId": str(case.id),
+            "executionId": "component-round-trip",
+            "compsetLongName": long_name,
+            "gridAlias": "ne30",
+            "gridLongName": "ne30",
+            "initializationType": "startup",
+            "status": "created",
+            "simulationStartDate": "1850-01-01",
+        },
+    )
+    assert response.status_code == 201, response.text
+    execution = db.get(Execution, response.json()["id"])
+    db.refresh(execution)
+    assert execution.compset_long_name == long_name
+    assert execution.compset_alias is None
+
+    # Historical empty values must remain readable until provenance repair.
+    for value in (long_name, ""):
+        execution.compset_long_name = value
+        db.commit()
+        response = client.get(f"{API_BASE}/executions/{execution.id}")
+        assert response.status_code == 200, response.text
+        record = response.json()
+        assert record["compsetLongName"] == value
+        assert record["compsetAlias"] is None
+        assert "compset" not in record
+        exported = ExecutionOut.model_validate(record).model_dump_json(by_alias=True)
+        assert ExecutionOut.model_validate_json(exported).compset_alias is None
+        assert ExecutionOut.model_validate_json(exported).compset_long_name == value
+        response = client.get(
+            f"{API_BASE}/executions", params={"case_id": str(case.id)}
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["items"][0]["compsetLongName"] == value
 
 
 def test_openapi_exposes_only_canonical_execution_contract(client) -> None:
@@ -313,10 +395,10 @@ def _create_execution_record(
         case_id=case.id,
         execution_id=execution_id,
         description=description,
-        compset="AQUAPLANET",
+        compset_long_name="AQUAPLANET",
         compset_alias="QPC4",
-        grid_name="f19_f19",
-        grid_resolution="1.9x2.5",
+        grid_alias="f19_f19",
+        grid_long_name="1.9x2.5",
         initialization_type="startup",
         status=execution_status,
         campaign=campaign,
@@ -326,7 +408,7 @@ def _create_execution_record(
         key_features="Original features",
         known_issues="Original issues",
         notes_markdown="Original notes",
-        git_repository_url="https://example.com/original",
+        git_repository_source="https://example.com/original",
         git_branch="main",
         git_tag="v1.0",
         git_commit_hash="abc123",
@@ -389,10 +471,10 @@ class TestListCases:
             case_id=case.id,
             execution_id="case-nested-exec-1",
             case_hash="nested-hash-1",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             status="created",
             simulation_start_date=date(2023, 1, 1),
@@ -404,10 +486,10 @@ class TestListCases:
             case_id=case.id,
             execution_id="case-nested-exec-2",
             case_hash="nested-hash-2",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             status="created",
             simulation_start_date="2023-02-01T00:00:00Z",
@@ -866,7 +948,133 @@ class TestListCases:
         # Search and execution filters keep only the matching campaign.
         assert execution_facets["campaigns"] == ["campaign-a"]
 
-    def test_overview_is_fixed_size_and_recent_first(self, client, db: Session):
+    @pytest.mark.parametrize(
+        ("now", "cutoff"),
+        [
+            (
+                datetime(2026, 11, 4, 12, tzinfo=timezone.utc),
+                datetime(2026, 5, 4, 12, tzinfo=timezone.utc),
+            ),
+            (
+                datetime(2026, 8, 31, 12, tzinfo=timezone.utc),
+                datetime(2026, 2, 28, 12, tzinfo=timezone.utc),
+            ),
+            (
+                datetime(2024, 8, 31, 12, tzinfo=timezone.utc),
+                datetime(2024, 2, 29, 12, tzinfo=timezone.utc),
+            ),
+        ],
+    )
+    def test_recent_execution_filters_before_pagination(
+        self, client, db: Session, normal_user_sync, admin_user_sync, now, cutoff
+    ):
+        machine = db.query(Machine).first()
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        cases = {}
+        executions = []
+        scenarios = [
+            ("boundary", ExecutionStatus.COMPLETED, cutoff, None),
+            (
+                "end-fallback",
+                ExecutionStatus.COMPLETED,
+                cutoff - timedelta(days=1),
+                cutoff,
+            ),
+            (
+                "old",
+                ExecutionStatus.COMPLETED,
+                cutoff - timedelta(microseconds=1),
+                None,
+            ),
+            ("missing", ExecutionStatus.COMPLETED, None, None),
+            ("newer", ExecutionStatus.COMPLETED, now, None),
+            *[
+                (status.value, status, now, now)
+                for status in ExecutionStatus
+                if status != ExecutionStatus.COMPLETED
+            ],
+        ]
+        for name, execution_status, start, end in scenarios:
+            case = _create_case(db, name)
+            case.simulation_type = CaseSimulationType.PRODUCTION
+            cases[name] = case
+            execution = _create_execution_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=admin_user_sync["id"],
+                execution_id=name,
+                execution_status=execution_status,
+            )
+            execution.run_start_date = start
+            execution.run_end_date = end
+            executions.append(execution)
+        development = _create_case(db, "development")
+        development.simulation_type = CaseSimulationType.DEVELOPMENT
+        execution = _create_execution_record(
+            db,
+            case=development,
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="development",
+            execution_status=ExecutionStatus.COMPLETED,
+        )
+        execution.run_end_date = now
+        # A newer undated run must not hide a dated completed run.
+        _create_execution_record(
+            db,
+            case=cases["boundary"],
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="boundary-undated",
+            execution_status=ExecutionStatus.COMPLETED,
+        )
+        db.commit()
+
+        params = {
+            "simulation_type": "production",
+            "recent_execution": True,
+            "sort_by": "latest_run_activity",
+            "page_size": 1,
+        }
+        expected = [
+            "newer",
+            *sorted(["boundary", "end-fallback"], key=lambda name: cases[name].id),
+        ]
+        with patch("app.features.catalog.api.datetime") as clock:
+            clock.now.return_value = now
+            pages = [
+                client.get(f"{API_BASE}/cases", params={**params, "page": page}).json()
+                for page in range(1, 5)
+            ]
+            assert [page["total"] for page in pages] == [3] * 4
+            assert [
+                item["name"] for page in pages for item in page["items"]
+            ] == expected
+            for case in cases.values():
+                case.updated_at = now + timedelta(days=1)
+            for execution in executions:
+                execution.created_at = now + timedelta(days=1)
+                execution.updated_at = now + timedelta(days=1)
+            db.commit()
+            refreshed = client.get(f"{API_BASE}/cases", params=params).json()
+            assert refreshed["total"] == 3
+            assert refreshed["items"][0]["id"] == pages[0]["items"][0]["id"]
+            assert (
+                refreshed["items"][0]["latestExecution"]
+                == pages[0]["items"][0]["latestExecution"]
+            )
+            unfiltered = client.get(
+                f"{API_BASE}/cases", params={"simulation_type": "production"}
+            ).json()
+            assert unfiltered["total"] == len(scenarios)
+            assert "old" in {item["name"] for item in unfiltered["items"]}
+            assert "missing" in {item["name"] for item in unfiltered["items"]}
+
+    def test_overview_is_fixed_size_and_stable_without_dates(self, client, db: Session):
         cases = [_create_case(db, f"overview-{index}") for index in range(7)]
         for index, case in enumerate(cases):
             case.updated_at = datetime(2026, 1, index + 1, tzinfo=timezone.utc)
@@ -875,17 +1083,13 @@ class TestListCases:
         data = client.get(f"{API_BASE}/cases/overview").json()
         assert data["totalCases"] == 7
         assert data["totalExecutions"] == 0
-        assert data["totalExecutions"] == 0
         assert data["latestSubmission"] is None
         assert data["machineCounts"] == {str(cases[0].machine_id): 7}
         assert [item["name"] for item in data["recentCases"]] == [
-            "overview-6",
-            "overview-5",
-            "overview-4",
-            "overview-3",
-            "overview-2",
-            "overview-1",
+            case.name for case in sorted(cases, key=lambda case: case.id)[:6]
         ]
+        assert all(item["latestExecution"] is None for item in data["recentCases"])
+        assert all(item["hasDiagnostics"] is False for item in data["recentCases"])
 
     def test_overview_orders_by_latest_execution_activity(
         self, client, db: Session, normal_user_sync, admin_user_sync
@@ -897,16 +1101,19 @@ class TestListCases:
         active_case.updated_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
         inactive_case.updated_at = datetime(2026, 2, 1, tzinfo=timezone.utc)
         ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
-        _create_execution_record(
+        execution = _create_execution_record(
             db,
             case=active_case,
             ingestion_id=ingestion.id,
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
             execution_id="new-activity",
+            execution_status=ExecutionStatus.COMPLETED,
             created_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
             updated_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
         )
+        execution.run_start_date = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        execution.run_end_date = datetime(2025, 1, 2, tzinfo=timezone.utc)
         db.commit()
 
         data = client.get(f"{API_BASE}/cases/overview").json()
@@ -915,7 +1122,84 @@ class TestListCases:
             "old-case-with-new-run",
             "newer-inactive-case",
         ]
-        assert data["recentCases"][0]["updatedAt"] == "2026-03-01T00:00:00Z"
+        assert data["recentCases"][0]["updatedAt"] == "2026-01-01T00:00:00Z"
+        assert (
+            data["recentCases"][0]["latestExecution"]["runEndDate"]
+            == "2025-01-02T00:00:00Z"
+        )
+        execution.created_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
+        execution.updated_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
+        inactive_case.updated_at = datetime(2030, 1, 1, tzinfo=timezone.utc)
+        db.commit()
+        refreshed = client.get(f"{API_BASE}/cases/overview").json()
+        assert [item["id"] for item in refreshed["recentCases"]] == [
+            item["id"] for item in data["recentCases"]
+        ]
+        assert (
+            refreshed["recentCases"][0]["latestExecution"]
+            == data["recentCases"][0]["latestExecution"]
+        )
+
+    def test_has_diagnostics_lists_only_cases_with_diagnostic_links(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        with_diagnostic = _create_case(db, "with_diagnostic")
+        with_other_link = _create_case(db, "with_other_link")
+        _create_case(db, "without_links")
+        # Execution-owned diagnostic links do not count; only case-level ones do.
+        execution = _create_execution_record(
+            db,
+            case=with_other_link,
+            ingestion_id=_create_ingestion(
+                db, with_other_link.machine_id, normal_user_sync["id"]
+            ).id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+        )
+        db.add_all(
+            [
+                ExternalLink(
+                    execution_id=execution.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/execution-diagnostic",
+                ),
+                ExternalLink(
+                    case_id=with_diagnostic.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/diagnostic-a",
+                ),
+                ExternalLink(
+                    case_id=with_diagnostic.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/diagnostic-b",
+                ),
+                ExternalLink(
+                    case_id=with_other_link.id,
+                    kind=ExternalLinkKind.DOCS,
+                    url="https://example.com/docs",
+                ),
+            ]
+        )
+        db.commit()
+
+        everything = client.get(f"{API_BASE}/cases", params={"page_size": 100}).json()
+        filtered = client.get(
+            f"{API_BASE}/cases",
+            params={"has_diagnostics": True, "page_size": 1, "sort_by": "name"},
+        ).json()
+
+        assert {"with_other_link", "without_links"} <= {
+            item["name"] for item in everything["items"]
+        }
+        assert {
+            item["name"]: item["hasDiagnostics"] for item in everything["items"]
+        } == {
+            "with_diagnostic": True,
+            "with_other_link": False,
+            "without_links": False,
+        }
+        assert filtered["total"] == 1
+        assert [item["name"] for item in filtered["items"]] == ["with_diagnostic"]
 
 
 class TestListCaseNames:
@@ -1085,10 +1369,10 @@ class TestGetCase:
             case_id=case.id,
             execution_id="case-detail-exec-1",
             case_hash="detail-hash-1",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             status="created",
             simulation_start_date=date(2023, 1, 1),
@@ -1119,6 +1403,75 @@ class TestGetCase:
         assert data["executions"][0]["simulationStartDate"] == "2023-01-01"
         assert data["links"] == []
         assert data["artifacts"] == []
+
+    def test_detail_and_list_agree_on_latest_execution_with_tied_dates(
+        self, client, db: Session, normal_user_sync
+    ):
+        case = _create_case(db, "tied-latest-run")
+        ingestion = _create_ingestion(db, case.machine_id, normal_user_sync["id"])
+        for execution_id in ["run-a", "run-B", "run_a"]:
+            execution = _create_execution_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=normal_user_sync["id"],
+                execution_id=execution_id,
+                execution_status=ExecutionStatus.COMPLETED,
+            )
+            execution.run_end_date = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        db.commit()
+        detail = client.get(f"{API_BASE}/cases/{case.id}").json()
+        listing = client.get(f"{API_BASE}/cases", params={"name": case.name}).json()
+        assert detail["latestExecution"]["executionId"] == "run_a"
+        assert detail["latestExecution"] == listing["items"][0]["latestExecution"]
+
+    def test_detail_aggregates_include_executions_beyond_one_page(
+        self, client, db: Session, normal_user_sync
+    ):
+        case = _create_case(db, "all-executions-summary")
+        ingestion = _create_ingestion(db, case.machine_id, normal_user_sync["id"])
+        for index in range(105):
+            execution = _create_execution_record(
+                db,
+                case=case,
+                ingestion_id=ingestion.id,
+                created_by=normal_user_sync["id"],
+                last_updated_by=normal_user_sync["id"],
+                execution_id=f"run-{index:03d}",
+                execution_status=ExecutionStatus.COMPLETED,
+            )
+            execution.case_hash = "hash-one" if index < 104 else "hash-two"
+            execution.grid_alias = "grid-one" if index < 104 else "grid-two"
+            execution.simulation_start_date = f"{1850 + index:04d}-01-01"
+            execution.simulation_end_date = f"{1851 + index:04d}-01-01"
+            execution.run_end_date = datetime(
+                2026, 1, 1, tzinfo=timezone.utc
+            ) + timedelta(days=index)
+        db.commit()
+
+        page = client.get(
+            f"{API_BASE}/executions", params={"case_id": str(case.id), "page_size": 25}
+        )
+        assert page.status_code == 200
+        assert len(page.json()["items"]) == 25
+        response = client.get(f"{API_BASE}/cases/{case.id}")
+        assert response.status_code == 200
+        detail = response.json()
+        assert detail["simulationCoverage"]["years"] == 105
+        assert detail["latestExecution"]["executionId"] == "run-104"
+        assert detail["sharedConfiguration"]["grid_alias"]["varies"]
+        assert len(detail["configurationGroups"]) == 2
+        resolved = client.get(
+            f"{API_BASE}/cases/resolve",
+            params={
+                "machine": case.machine.name,
+                "hpc_username": case.hpc_username,
+                "case_name": case.name,
+            },
+        )
+        assert resolved.status_code == 200
+        assert resolved.json()["configurationGroups"] == detail["configurationGroups"]
 
     def test_endpoint_includes_artifacts_from_multiple_executions(
         self, client, db: Session, normal_user_sync, admin_user_sync
@@ -1222,10 +1575,10 @@ class TestGetCase:
                 case_id=case.id,
                 execution_id="case-detail-links-exec-1",
                 case_hash="detail-links-hash-1",
-                compset="AQUAPLANET",
+                compset_long_name="AQUAPLANET",
                 compset_alias="QPC4",
-                grid_name="f19_f19",
-                grid_resolution="1.9x2.5",
+                grid_alias="f19_f19",
+                grid_long_name="1.9x2.5",
                 initialization_type="startup",
                 status="created",
                 simulation_start_date="2023-01-01T00:00:00Z",
@@ -1278,10 +1631,10 @@ class TestCreateExecution:
         payload = {
             "caseId": str(case.id),
             "executionId": "1081156.251218-200923",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
-            "gridName": "f19_f19",
-            "gridResolution": "1.9x2.5",
+            "gridAlias": "f19_f19",
+            "gridLongName": "1.9x2.5",
             "initializationType": "startup",
             "status": "created",
             "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1326,10 +1679,10 @@ class TestCreateExecution:
         payload = {
             "caseId": str(uuid4()),
             "executionId": "1081156.251218-200923",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
-            "gridName": "f19_f19",
-            "gridResolution": "1.9x2.5",
+            "gridAlias": "f19_f19",
+            "gridLongName": "1.9x2.5",
             "initializationType": "startup",
             "status": "created",
             "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -1354,10 +1707,10 @@ class TestUpdateCase:
             execution = Execution(
                 case_id=case.id,
                 execution_id=execution_id,
-                compset="AQUAPLANET",
+                compset_long_name="AQUAPLANET",
                 compset_alias="QPC4",
-                grid_name="f19_f19",
-                grid_resolution="1.9x2.5",
+                grid_alias="f19_f19",
+                grid_long_name="1.9x2.5",
                 initialization_type="startup",
                 status=ExecutionStatus.CREATED,
                 simulation_start_date=date(2023, 1, 1),
@@ -1420,10 +1773,10 @@ class TestUpdateCase:
             machine=case.machine.name,
             hpc_username=case.hpc_username,
             case_group="original-group",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             simulation_start_date="2023-01-01",
             campaign=None,
@@ -1432,7 +1785,7 @@ class TestUpdateCase:
             run_start_date=None,
             run_end_date=None,
             compiler=None,
-            git_repository_url=None,
+            git_repository_source=None,
             git_branch=None,
             git_tag=None,
             git_commit_hash=None,
@@ -1478,10 +1831,10 @@ class TestUpdateCase:
             machine=case.machine.name,
             hpc_username=case.hpc_username,
             case_group="ingested-group",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             simulation_start_date="2023-01-01",
             campaign=None,
@@ -1490,7 +1843,7 @@ class TestUpdateCase:
             run_start_date=None,
             run_end_date=None,
             compiler=None,
-            git_repository_url=None,
+            git_repository_source=None,
             git_branch=None,
             git_tag=None,
             git_commit_hash=None,
@@ -2215,10 +2568,10 @@ class TestUpdateCase:
         payload = {
             "caseId": str(case.id),
             "executionId": "1081156.251218-200923",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
-            "gridName": "f19_f19",
-            "gridResolution": "1.9x2.5",
+            "gridAlias": "f19_f19",
+            "gridLongName": "1.9x2.5",
             "initializationType": "startup",
             "status": "created",
             "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2246,10 +2599,10 @@ class TestUpdateCase:
         payload = {
             "caseId": str(case.id),
             "executionId": "1081156.251218-200924",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
-            "gridName": "f19_f19",
-            "gridResolution": "1.9x2.5",
+            "gridAlias": "f19_f19",
+            "gridLongName": "1.9x2.5",
             "initializationType": "startup",
             "status": "created",
             "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2273,10 +2626,10 @@ class TestUpdateCase:
 
         payload = {
             "executionId": "1081156.251218-200923",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
-            "gridName": "f19_f19",
-            "gridResolution": "1.9x2.5",
+            "gridAlias": "f19_f19",
+            "gridLongName": "1.9x2.5",
             "initializationType": "startup",
             "status": "created",
             "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2308,10 +2661,10 @@ class TestUpdateCase:
         payload = {
             "caseId": str(case.id),
             "executionId": "1081156.251218-200923",
-            "compset": "AQUAPLANET",
+            "compsetLongName": "AQUAPLANET",
             "compsetAlias": "QPC4",
-            "gridName": "f19_f19",
-            "gridResolution": "1.9x2.5",
+            "gridAlias": "f19_f19",
+            "gridLongName": "1.9x2.5",
             "initializationType": "startup",
             "status": "created",
             "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2335,10 +2688,10 @@ class TestUpdateCase:
             {
                 "caseId": str(case_id),
                 "executionId": "reload-missing-exec-1",
-                "compset": "AQUAPLANET",
+                "compsetLongName": "AQUAPLANET",
                 "compsetAlias": "QPC4",
-                "gridName": "f19_f19",
-                "gridResolution": "1.9x2.5",
+                "gridAlias": "f19_f19",
+                "gridLongName": "1.9x2.5",
                 "initializationType": "startup",
                 "status": "created",
                 "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -2401,10 +2754,10 @@ class TestListExecutions:
                 Execution(
                     case_id=case.id,
                     execution_id=execution_id,
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
-                    grid_name="f19_f19",
-                    grid_resolution="1.9x2.5",
+                    grid_alias="f19_f19",
+                    grid_long_name="1.9x2.5",
                     initialization_type="startup",
                     status="created",
                     simulation_start_date="2023-01-01T00:00:00Z",
@@ -2516,9 +2869,9 @@ class TestListExecutions:
         execution.git_branch = "unique-search-branch"
         execution.git_tag = "unique-search-tag"
         execution.git_commit_hash = "unique-search-commit"
-        execution.grid_name = "unique-search-grid"
-        execution.grid_resolution = "unique-search-resolution"
-        execution.compset = "unique-search-compset"
+        execution.grid_alias = "unique-search-grid"
+        execution.grid_long_name = "unique-search-resolution"
+        execution.compset_long_name = "unique-search-compset"
         execution.compset_alias = "unique-search-alias"
         db.commit()
 
@@ -2605,9 +2958,9 @@ class TestListExecutions:
             execution.simulation_start_date = timestamp
             execution.simulation_end_date = timestamp
             execution.run_start_date = timestamp
-            execution.grid_resolution = f"{prefix}-resolution"
-            execution.compset = f"{prefix}-compset"
-            execution.grid_name = f"{prefix}-grid"
+            execution.grid_long_name = f"{prefix}-resolution"
+            execution.compset_long_name = f"{prefix}-compset"
+            execution.grid_alias = f"{prefix}-grid"
             execution.created_at = timestamp
             execution.updated_at = timestamp
         db.commit()
@@ -2629,9 +2982,9 @@ class TestListExecutions:
             "simulation_end_date",
             "run_start_date",
             "run_activity",
-            "grid_resolution",
-            "compset",
-            "grid_name",
+            "grid_long_name",
+            "compset_long_name",
+            "grid_alias",
             "machine_name",
         ):
             data = client.get(
@@ -2760,10 +3113,10 @@ class TestListExecutions:
             Execution(
                 case_id=case.id,
                 execution_id="filter-options",
-                compset="AQUAPLANET",
+                compset_long_name="AQUAPLANET",
                 compset_alias="QPC4",
-                grid_name="f19_f19",
-                grid_resolution="1.9x2.5",
+                grid_alias="f19_f19",
+                grid_long_name="1.9x2.5",
                 initialization_type="startup",
                 status="created",
                 simulation_start_date="2023-01-01T00:00:00Z",
@@ -2817,10 +3170,10 @@ class TestListExecutions:
         execution = Execution(
             case_id=case.id,
             execution_id="list-test-exec-1",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",
@@ -2882,10 +3235,10 @@ class TestListExecutions:
         execution = Execution(
             case_id=case.id,
             execution_id="list-test-exec-misconfigured",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",
@@ -2928,10 +3281,10 @@ class TestListExecutions:
                 Execution(
                     case_id=case.id,
                     execution_id=exec_id,
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
-                    grid_name="f19_f19",
-                    grid_resolution="1.9x2.5",
+                    grid_alias="f19_f19",
+                    grid_long_name="1.9x2.5",
                     initialization_type="startup",
                     status="created",
                     simulation_start_date="2023-01-01T00:00:00Z",
@@ -2989,10 +3342,10 @@ class TestListExecutions:
                 Execution(
                     case_id=case.id,
                     execution_id=exec_id,
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
-                    grid_name="f19_f19",
-                    grid_resolution="1.9x2.5",
+                    grid_alias="f19_f19",
+                    grid_long_name="1.9x2.5",
                     initialization_type="startup",
                     status="created",
                     simulation_start_date="2023-01-01T00:00:00Z",
@@ -3052,10 +3405,10 @@ class TestListExecutions:
                 Execution(
                     case_id=first_case.id,
                     execution_id="normalized-exec-1",
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
-                    grid_name="f19_f19",
-                    grid_resolution="1.9x2.5",
+                    grid_alias="f19_f19",
+                    grid_long_name="1.9x2.5",
                     initialization_type="startup",
                     status="created",
                     simulation_start_date="2023-01-01T00:00:00Z",
@@ -3066,10 +3419,10 @@ class TestListExecutions:
                 Execution(
                     case_id=second_case.id,
                     execution_id="normalized-exec-2",
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
-                    grid_name="f19_f19",
-                    grid_resolution="1.9x2.5",
+                    grid_alias="f19_f19",
+                    grid_long_name="1.9x2.5",
                     initialization_type="startup",
                     status="created",
                     simulation_start_date="2023-01-02T00:00:00Z",
@@ -3120,10 +3473,10 @@ class TestListExecutions:
                 Execution(
                     case_id=c.id,
                     execution_id=exec_id,
-                    compset="AQUAPLANET",
+                    compset_long_name="AQUAPLANET",
                     compset_alias="QPC4",
-                    grid_name="f19_f19",
-                    grid_resolution="1.9x2.5",
+                    grid_alias="f19_f19",
+                    grid_long_name="1.9x2.5",
                     initialization_type="startup",
                     status="created",
                     simulation_start_date="2023-01-01T00:00:00Z",
@@ -3170,10 +3523,10 @@ class TestListExecutions:
         execution = Execution(
             case_id=case.id,
             execution_id="list-links-exec-1",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",
@@ -3307,16 +3660,17 @@ class TestGetExecution:
             case_id=case.id,
             execution_id="get-test-exec-1",
             case_hash="abc123casehash",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",
             compute_type="cpu",
             git_tag="v1.0",
             git_commit_hash="abc123",
+            source_code_path="/model/source",
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
             ingestion_id=ingestion.id,
@@ -3336,6 +3690,13 @@ class TestGetExecution:
         }
         assert data["caseHash"] == "abc123casehash"
         assert data["computeType"] == "cpu"
+        assert data["gitCommitHash"] == "abc123"
+        assert data["sourceCodePath"] == "/model/source"
+
+        items = client.get(
+            f"{API_BASE}/executions", params={"case_id": str(case.id)}
+        ).json()["items"]
+        assert items[0]["sourceCodePath"] == "/model/source"
 
     def test_endpoint_reports_deterministic_only_capabilities_when_llm_misconfigured(
         self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
@@ -3367,10 +3728,10 @@ class TestGetExecution:
         execution = Execution(
             case_id=case.id,
             execution_id="get-test-exec-misconfigured",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",
@@ -3420,10 +3781,10 @@ class TestGetExecution:
         execution = Execution(
             case_id=case.id,
             execution_id="get-links-exec-1",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",
@@ -3524,7 +3885,8 @@ class TestUpdateExecution:
         assert data["campaign"] == payload["campaign"]
         assert data["notesMarkdown"] == payload["notesMarkdown"]
         assert data["compiler"] == "gcc"
-        assert data["gitRepositoryUrl"] == "https://example.com/original"
+        assert data["gitRepositorySource"] == "https://example.com/original"
+        assert "gitRepositoryUrl" not in data
         assert data["gitTag"] == "v1.0"
         assert data["hpcUsername"] == "test-user"
         assert data["lastUpdatedBy"] == str(normal_user_sync["id"])
@@ -3540,7 +3902,7 @@ class TestUpdateExecution:
         assert updated_execution.campaign == payload["campaign"]
         assert updated_execution.notes_markdown == payload["notesMarkdown"]
         assert updated_execution.compiler == "gcc"
-        assert updated_execution.git_repository_url == "https://example.com/original"
+        assert updated_execution.git_repository_source == "https://example.com/original"
         assert updated_execution.git_tag == "v1.0"
         assert updated_execution.last_updated_by == normal_user_sync["id"]
         assert updated_execution.updated_at > original_updated_at
@@ -4071,7 +4433,7 @@ class TestUpdateExecution:
         "payload",
         [
             {"compiler": "intel"},
-            {"gitRepositoryUrl": "https://example.com/updated"},
+            {"gitRepositorySource": "https://example.com/updated"},
             {"gitBranch": "feature/test"},
             {"gitTag": "v2.0"},
             {"gitCommitHash": "deadbeef"},
@@ -4310,10 +4672,10 @@ class TestExecutionBrowserIncludesCaseMetadata:
         execution = Execution(
             case_id=case.id,
             execution_id="browser-exec-1",
-            compset="AQUAPLANET",
+            compset_long_name="AQUAPLANET",
             compset_alias="QPC4",
-            grid_name="f19_f19",
-            grid_resolution="1.9x2.5",
+            grid_alias="f19_f19",
+            grid_long_name="1.9x2.5",
             initialization_type="startup",
             status="created",
             simulation_start_date="2023-01-01T00:00:00Z",

@@ -1,5 +1,6 @@
 """Focused tests for archive discovery decisions and snapshot settlement."""
 
+import gzip
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal
@@ -27,11 +28,107 @@ from app.scripts.ingestion.archive_layout import (
     _build_case_path_filter,
     _build_walk_dir_filter,
 )
+from tests.fixtures.continuation_case import (
+    ENV_BUILD,
+    ENV_CASE,
+    EXECUTIONS,
+    stage_continuation_case,
+)
 
 _build_case_scan_results = discovery_module._build_case_scan_results
 _build_ingestion_candidates = discovery_module._build_ingestion_candidates
 _discover_case_executions = discovery_module._discover_case_executions
 _validate_execution_dir = discovery_module._validate_execution_dir
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_schema_preflight_tracks_invalid_execution_and_accepts_corrected_metadata(
+    tmp_path, cached
+):
+    case = stage_continuation_case(tmp_path)
+    invalid_id = next(iter(EXECUTIONS))
+    grid_file = next((case / invalid_id).glob("CaseDocs.*/env_build.xml.*.gz"))
+    with gzip.open(grid_file, "wt") as stream:
+        stream.write('<config><entry id="COMPILER" value="intel" /></config>')
+    results = []
+    logs = {}
+    stats = discovery_module._new_discovery_stats()
+    grouped = _discover_case_executions(
+        case,
+        discovery_results=results,
+        case_collection_data=logs,
+        stats=stats,
+        discovery_results_by_key=(
+            {(str(case.resolve()), invalid_id): "accepted"} if cached else {}
+        ),
+    )
+
+    assert grouped[str(case.resolve())] == sorted(set(EXECUTIONS) - {invalid_id})
+    result = next(result for result in results if result.execution_id == invalid_id)
+    assert result.outcome == "rejected_invalid"
+    assert result.errors[0]["field"] == "grid_long_name"
+    assert result.errors[0]["code"] == "string_type"
+    assert result.errors[0]["message"] == "Input should be a valid string"
+    decision = logs[str(case.resolve())].rejected_decisions[0]
+    assert decision.to_log_fields()["errors"] == result.errors
+    assert stats["rejected_invalid_execution_ids"] == 1
+    candidates = _build_ingestion_candidates(
+        _build_case_scan_results(grouped), _fresh_state(), None
+    )
+    assert candidates[0].new_execution_ids == sorted(set(EXECUTIONS) - {invalid_id})
+
+    with gzip.open(grid_file, "wt") as stream:
+        stream.write(ENV_BUILD)
+    results = []
+    grouped = _discover_case_executions(case, discovery_results=results)
+
+    assert grouped[str(case.resolve())] == sorted(EXECUTIONS)
+    assert all(result.outcome == "accepted" and not result.errors for result in results)
+
+
+@pytest.mark.parametrize("invalid", [False, True])
+def test_preflight_allows_request_username_and_tracks_missing_timing_lid(
+    tmp_path, invalid
+):
+    case = stage_continuation_case(tmp_path)
+    execution_id = next(iter(EXECUTIONS))
+    execution = case / execution_id
+    xml = next(execution.glob("CaseDocs.*/env_case.xml.*.gz"))
+    with gzip.open(xml, "wt") as stream:
+        stream.write(
+            "\n".join(
+                line for line in ENV_CASE.splitlines() if 'id="REALUSER"' not in line
+            )
+        )
+    if invalid:
+        next(execution.glob("e3sm_timing.*")).write_text("Case : case\n")
+    results = []
+    grouped = _discover_case_executions(case, discovery_results=results)
+
+    assert (execution_id in grouped[str(case.resolve())]) is not invalid
+    result = next(result for result in results if result.execution_id == execution_id)
+    assert result.outcome == ("rejected_incomplete" if invalid else "accepted")
+    if invalid:
+        assert result.errors[0]["code"] == "missing_required_value"
+    else:
+        assert result.errors == []
+
+
+def test_preflight_tracks_missing_case_identity(tmp_path):
+    case = stage_continuation_case(tmp_path)
+    execution_id = next(iter(EXECUTIONS))
+    xml = next((case / execution_id).glob("CaseDocs.*/env_case.xml.*.gz"))
+    with gzip.open(xml, "wt") as stream:
+        stream.write(
+            "\n".join(line for line in ENV_CASE.splitlines() if 'id="MACH"' not in line)
+        )
+    results = []
+    _discover_case_executions(case, discovery_results=results)
+
+    result = next(result for result in results if result.execution_id == execution_id)
+    assert result.outcome == "rejected_invalid"
+    assert result.errors[0]["field"] == "machine"
+    assert result.errors[0]["code"] == "missing_required_value"
 
 
 @pytest.mark.parametrize("invalid", [False, True])
@@ -124,21 +221,21 @@ def test_single_execution_rejects_excluded_archive_month(tmp_path) -> None:
             "accepted",
             None,
             {"101.1-1"},
-            {"execution_dirs_accepted": 1},
+            {"execution_dirs_scanned": 1, "execution_dirs_accepted": 1},
         ),
         (
             "102.1-1",
             "rejected_incomplete",
             None,
-            set(),
-            {"skipped_incomplete": 1, "rejected_incomplete_execution_ids": 1},
+            {"102.1-1"},
+            {"execution_dirs_scanned": 1, "execution_dirs_accepted": 1},
         ),
         (
             "103.1-1",
             "rejected_invalid",
             None,
-            set(),
-            {"skipped_invalid": 1, "rejected_invalid_execution_ids": 1},
+            {"103.1-1"},
+            {"execution_dirs_scanned": 1, "execution_dirs_accepted": 1},
         ),
         (
             "104.1-1",
@@ -191,7 +288,7 @@ def test_collect_case_execution_records_each_decision_source(
     expected: dict[str, int],
 ) -> None:
     case_dir = tmp_path / "case-a"
-    case_dir.mkdir()
+    (case_dir / execution_id).mkdir(parents=True)
     grouped: dict[str, set[str]] = {}
     logs: dict[str, CaseCollectionLogData] = {}
     stats = discovery_module._new_discovery_stats()
@@ -201,8 +298,6 @@ def test_collect_case_execution_records_each_decision_source(
         processed[str(case_dir.resolve())].add(execution_id)
 
     def metadata_locator(_: str) -> object:
-        if stored_outcome is not None:
-            pytest.fail("stored discovery outcomes must bypass validation")
         if error is not None:
             raise error
         return {}
@@ -229,6 +324,9 @@ def test_collect_case_execution_records_each_decision_source(
     assert stats == {key: expected.get(key, 0) for key in stats}
 
     expected_results = {
+        "101.1-1": [(execution_id, "accepted")],
+        "102.1-1": [(execution_id, "accepted")],
+        "103.1-1": [(execution_id, "accepted")],
         "104.1-1": [(execution_id, "accepted")],
         "105.1-1": [(execution_id, "rejected_incomplete")],
         "106.1-1": [(execution_id, "rejected_invalid")],
@@ -240,8 +338,6 @@ def test_collect_case_execution_records_each_decision_source(
     assert log_data.valid_execution_ids == expected_grouped
     expected_rejection_reason = {
         "100.1-1": "already_processed",
-        "102.1-1": "incomplete",
-        "103.1-1": "invalid",
         "105.1-1": "incomplete",
         "106.1-1": "invalid",
         "107.1-1": "transient",
@@ -249,6 +345,157 @@ def test_collect_case_execution_records_each_decision_source(
     assert [decision.reason for decision in log_data.rejected_decisions] == (
         [] if expected_rejection_reason is None else [expected_rejection_reason]
     )
+
+
+@pytest.mark.parametrize("scan_mode", ["staging", "archive"])
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize("terminal", [None, "success", "error", "unknown"])
+def test_staging_readiness_checks_current_status_before_acceptance(
+    tmp_path, scan_mode, cached, terminal
+) -> None:
+    case = tmp_path / "case"
+    execution = case / "100.1-1"
+    execution.mkdir(parents=True)
+    content = "2026-10-20 10:00:00: case.run starting 100\n"
+    if terminal == "unknown":
+        content = "2026-10-20 10:00:00: case.setup success\n"
+    elif terminal is not None:
+        content += f"2026-10-20 11:00:00: case.run {terminal} 100\n"
+    with gzip.open(execution / "CaseStatus.100.1-1.gz", "wt") as stream:
+        stream.write(content)
+    grouped = {}
+    logs = {}
+    stats = discovery_module._new_discovery_stats()
+    results = []
+    validations = []
+    case_identity = str(case.resolve())
+    cache_key = discovery_module._case_identity_key(case_identity, scan_mode)
+
+    discovery_module._collect_case_execution(
+        grouped,
+        case,
+        execution.name,
+        metadata_locator=lambda path: validations.append(path),
+        stats=stats,
+        case_collection_data=logs,
+        processed_ids_by_key=None,
+        scan_mode=scan_mode,
+        staging_root_basename="performance_archive",
+        discovery_results=results,
+        discovery_results_by_key=(
+            {(cache_key, execution.name): "accepted"} if cached else {}
+        ),
+    )
+
+    deferred = scan_mode == "staging" and terminal is None
+    assert grouped == ({} if deferred else {case_identity: {execution.name}})
+    assert validations == ([] if deferred else [str(execution)])
+    assert len(results) == int(not deferred)
+    assert logs[case_identity].rejected_decisions == []
+    decisions = logs[case_identity].deferred_decisions
+    assert [decision.reason for decision in decisions] == (
+        ["execution_running"] if deferred else []
+    )
+    assert stats["execution_dirs_accepted"] == int(not deferred)
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_missing_case_status_requires_validation_despite_cached_acceptance(
+    tmp_path, cached
+) -> None:
+    case = stage_continuation_case(tmp_path)
+    execution = next(case.iterdir())
+    next(execution.glob("CaseStatus.*.gz")).unlink()
+    results = []
+    logs = {}
+
+    grouped = _discover_case_executions(
+        case,
+        discovery_results=results,
+        case_collection_data=logs,
+        discovery_results_by_key=(
+            {(str(case.resolve()), execution.name): "accepted"} if cached else {}
+        ),
+    )
+
+    assert execution.name not in grouped[str(case.resolve())]
+    assert [
+        result.outcome for result in results if result.execution_id == execution.name
+    ] == ["rejected_incomplete"]
+    assert logs[str(case.resolve())].deferred_decisions == []
+
+
+def test_staging_readiness_access_error_is_retryable(tmp_path, monkeypatch) -> None:
+    execution = tmp_path / "case" / "100.1-1"
+    execution.mkdir(parents=True)
+    logs = {}
+    results = []
+    stats = discovery_module._new_discovery_stats()
+
+    def unreadable(*args):
+        raise PermissionError("temporarily inaccessible")
+
+    monkeypatch.setattr(discovery_module, "_find_spec_matches", unreadable)
+    grouped = _discover_case_executions(
+        tmp_path,
+        stats=stats,
+        discovery_results=results,
+        case_collection_data=logs,
+    )
+
+    assert grouped == {}
+    assert results == []
+    assert stats["skipped_transient"] == 1
+    assert stats["transient_execution_ids"] == 1
+    assert (
+        logs[str(execution.parent.resolve())].rejected_decisions[0].reason
+        == "transient"
+    )
+
+
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize(
+    "failure", ["truncated", "bad_header", "bad_crc", "bad_deflate"]
+)
+def test_unreadable_case_status_is_retryable_without_aborting_scan(
+    tmp_path, cached, failure
+) -> None:
+    case = tmp_path / "case"
+    execution = case / "100.1-1"
+    execution.mkdir(parents=True)
+    (case / "101.1-1").mkdir()
+    content = gzip.compress(b"2026-10-20 10:00:00: case.run starting\n")
+    if failure == "truncated":
+        content = content[:-8]
+    elif failure == "bad_header":
+        content = b"not a gzip file"
+    elif failure == "bad_crc":
+        content = content[:-8] + bytes([content[-8] ^ 0xFF]) + content[-7:]
+    else:
+        content = content[:10] + b"\x07" + content[-8:]
+    (execution / "CaseStatus.100.1-1.gz").write_bytes(content)
+    stats = discovery_module._new_discovery_stats()
+    results = []
+    logs = {}
+
+    grouped = _discover_case_executions(
+        tmp_path,
+        metadata_locator=lambda path: {},
+        stats=stats,
+        discovery_results=results,
+        case_collection_data=logs,
+        discovery_results_by_key=(
+            {(str(case.resolve()), execution.name): "accepted"} if cached else {}
+        ),
+    )
+
+    assert grouped == {str(case.resolve()): ["101.1-1"]}
+    assert stats["skipped_transient"] == 1
+    assert stats["transient_execution_ids"] == 1
+    assert logs[str(case.resolve())].rejected_decisions[0].reason == "transient"
+    assert [(result.execution_id, result.outcome) for result in results] == [
+        ("101.1-1", "accepted")
+    ]
 
 
 def test_collection_outcomes_preserve_order_fields_and_limit_counters(
@@ -786,13 +1033,16 @@ def test_build_ingestion_candidates_keeps_raw_staging_paths_without_root_basenam
     assert candidates[0].new_execution_ids == ["100.1-1"]
 
 
-def test_build_ingestion_candidates_dedupes_archive_snapshots_against_staging_state() -> (
-    None
-):
+@pytest.mark.parametrize(
+    "prefix", ["", "chrysalis_e3sm_", "compy_e3sm_", "machine_name_project_tag_"]
+)
+def test_build_ingestion_candidates_dedupes_archive_snapshots_against_staging_state(
+    prefix: str,
+) -> None:
     scan_results = [
         CaseScanResult(
             case_path=(
-                "/archive/2026-05/performance_archive_2026_05_22_08_01_32/"
+                f"/archive/2026-05/performance_archive_{prefix}2026_05_22_08_01_32/"
                 "COMPLETED/user_a/case_a"
             ),
             execution_ids=["100.1-1"],
@@ -800,7 +1050,7 @@ def test_build_ingestion_candidates_dedupes_archive_snapshots_against_staging_st
         ),
         CaseScanResult(
             case_path=(
-                "/archive/2026-06/performance_archive_2026_06_01_08_01_32/user_a/case_a"
+                f"/archive/2026-06/performance_archive_{prefix}2026_06_01_08_01_32/user_a/case_a"
             ),
             execution_ids=["100.1-1", "101.1-1"],
             fingerprint="fp-2",
@@ -1062,14 +1312,18 @@ def test_discover_case_executions_ignores_root_symlink_for_year_filter(
     assert stats["execution_dirs_scanned"] == 0
 
 
+@pytest.mark.parametrize(
+    "prefix", ["", "chrysalis_e3sm_", "compy_e3sm_", "machine_name_project_tag_"]
+)
 def test_discover_case_executions_ignores_non_completed_archive_status_dirs(
     tmp_path: Path,
+    prefix: str,
 ) -> None:
     archive_root = tmp_path / "old_perf"
     completed_case = (
         archive_root
         / "2025-01"
-        / "performance_archive_2025_01_01_00_00_00"
+        / f"performance_archive_{prefix}2025_01_01_00_00_00"
         / "COMPLETED"
         / "user_a"
         / "case_a"
@@ -1078,7 +1332,7 @@ def test_discover_case_executions_ignores_non_completed_archive_status_dirs(
     stopped_case = (
         archive_root
         / "2025-01"
-        / "performance_archive_2025_01_01_00_00_00"
+        / f"performance_archive_{prefix}2025_01_01_00_00_00"
         / "STOPPED"
         / "user_a"
         / "case_a"
@@ -1087,7 +1341,7 @@ def test_discover_case_executions_ignores_non_completed_archive_status_dirs(
     pending_case = (
         archive_root
         / "2025-01"
-        / "performance_archive_2025_01_01_00_00_00"
+        / f"performance_archive_{prefix}2025_01_01_00_00_00"
         / "PENDING"
         / "user_a"
         / "case_a"
@@ -1392,18 +1646,20 @@ def test_discovery_results_capture_typed_outcomes_but_not_transient_errors(
     ]
 
 
-def test_stored_accepted_discovery_result_bypasses_validation(tmp_path: Path) -> None:
+def test_stored_accepted_discovery_result_requires_validation(tmp_path: Path) -> None:
     archive_root = tmp_path / "archive"
     case_dir = archive_root / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
 
+    validated = []
     grouped = _discover_case_executions(
         archive_root,
-        metadata_locator=lambda *_: pytest.fail("validation should be bypassed"),
+        metadata_locator=lambda path: validated.append(path),
         discovery_results_by_key={(str(case_dir.resolve()), "100.1-1"): "accepted"},
     )
 
     assert grouped == {str(case_dir.resolve()): ["100.1-1"]}
+    assert validated == [str(case_dir / "100.1-1")]
 
 
 @pytest.mark.parametrize(
@@ -1437,26 +1693,100 @@ def test_transient_os_errors_are_counted_but_not_persisted(
     assert results == []
 
 
-def test_stored_rejected_results_bypass_validation_and_candidacy(
+@pytest.mark.parametrize("fresh_outcome", ["accepted", "incomplete", "invalid"])
+def test_stored_rejected_results_are_revalidated(
     tmp_path: Path,
+    fresh_outcome: str,
 ) -> None:
     archive_root = tmp_path / "archive"
     case_dir = archive_root / "case_a"
     (case_dir / "100.1-1").mkdir(parents=True)
     (case_dir / "101.1-1").mkdir(parents=True)
 
+    reads = []
+    results = []
+
+    def locator(path):
+        reads.append(path)
+        if fresh_outcome == "incomplete":
+            raise IncompleteArchiveError([])
+        if fresh_outcome == "invalid":
+            raise ArchiveValidationError([])
+        return {}
+
     grouped = _discover_case_executions(
         archive_root,
-        metadata_locator=lambda *_: pytest.fail(
-            "stored rejection must bypass validation"
-        ),
+        metadata_locator=locator,
+        discovery_results=results,
         discovery_results_by_key={
             (str(case_dir.resolve()), "100.1-1"): "rejected_incomplete",
             (str(case_dir.resolve()), "101.1-1"): "rejected_invalid",
         },
     )
 
-    assert grouped == {}
+    assert set(reads) == {str(case_dir / "100.1-1"), str(case_dir / "101.1-1")}
+    assert grouped == (
+        {str(case_dir): ["100.1-1", "101.1-1"]} if fresh_outcome == "accepted" else {}
+    )
+    expected = (
+        "accepted" if fresh_outcome == "accepted" else f"rejected_{fresh_outcome}"
+    )
+    assert len(results) == 2
+    assert all(result.outcome == expected for result in results)
+
+
+@pytest.mark.parametrize("accepted_first", [False, True])
+def test_fresh_acceptance_wins_across_archive_snapshots(tmp_path, accepted_first):
+    root = tmp_path / "OLD_PERF"
+    cases = [
+        root
+        / "2026-10"
+        / f"performance_archive_2026_10_{day:02}_10_00_00"
+        / "COMPLETED"
+        / "user"
+        / "case"
+        for day in (1, 2)
+    ]
+    for case in cases:
+        (case / "100.1-1").mkdir(parents=True)
+    accepted_case = cases[0 if accepted_first else 1]
+
+    def locate(path):
+        if Path(path).parent != accepted_case:
+            raise IncompleteArchiveError([])
+        return {}
+
+    state = _fresh_state()
+    state["discovery_results"]["user/case"] = [
+        {
+            "case_identity": "user/case",
+            "execution_id": "100.1-1",
+            "outcome": "rejected_invalid",
+        }
+    ]
+    config = IngestorConfig(
+        api_base_url="https://example.test",
+        api_token="token",
+        archive_root=root,
+        machine_name="perlmutter",
+        scan_mode="archive",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+    )
+    results = []
+
+    _, candidates, _, _, _ = discovery_module._scan_archive(
+        config, state, locate, discovery_results=results
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0].case_path == str(accepted_case)
+    assert candidates[0].new_execution_ids == ["100.1-1"]
+    assert [
+        result.outcome for result in core_module._deduplicate_discovery_results(results)
+    ] == ["accepted"]
 
 
 def test_validate_execution_dir_compacts_incomplete_archive_errors(
@@ -1497,6 +1827,7 @@ def test_validate_execution_dir_compacts_incomplete_archive_errors(
         "error_count": 2,
         "error_codes": ["missing_required_file"],
         "missing_file_specs": ["README.case..*.gz", "env_run.xml..*"],
+        "errors": decision.errors,
     }
     assert stats["skipped_incomplete"] == 1
 
@@ -1539,14 +1870,20 @@ def test_validate_execution_dir_compacts_archive_validation_errors(
         "error_count": 2,
         "error_codes": ["missing_required_file", "multiple_matching_files"],
         "missing_file_specs": ["env_run.xml..*"],
+        "errors": decision.errors,
     }
     assert stats["skipped_invalid"] == 1
 
 
-def test_archive_scan_skips_database_completed_snapshots(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "prefix", ["", "chrysalis_e3sm_", "compy_e3sm_", "machine_name_project_tag_"]
+)
+def test_archive_scan_skips_database_completed_snapshots(
+    tmp_path: Path, prefix: str
+) -> None:
     archive_root = tmp_path / "OLD_PERF"
-    first_key = "2025-01/performance_archive_2025_01_01_00_00_00"
-    second_key = "2025-01/performance_archive_2025_01_02_00_00_00"
+    first_key = f"2025-01/performance_archive_{prefix}2025_01_01_00_00_00"
+    second_key = f"2025-01/performance_archive_{prefix}2025_01_02_00_00_00"
     for key, execution_id in ((first_key, "100.1-1"), (second_key, "101.1-1")):
         (archive_root / key / "COMPLETED" / "case-a" / execution_id).mkdir(parents=True)
     visited: list[str] = []
@@ -1576,6 +1913,7 @@ def test_archive_scan_skips_database_completed_snapshots(tmp_path: Path) -> None
     ]
     assert results[4].eligible_keys == {first_key, second_key}
     assert results[4].completed_keys == {first_key}
+    assert results[4].references_by_key == {second_key: {("case-a", "101.1-1")}}
 
 
 def test_archive_scan_falls_back_when_month_has_no_snapshot_directory(
@@ -1609,6 +1947,74 @@ def test_archive_scan_falls_back_when_month_has_no_snapshot_directory(
         str(execution_dir.parent.resolve())
     ]
     assert results[4].eligible_keys == set()
+
+
+@pytest.mark.parametrize("stored_outcome", ["rejected_incomplete", "rejected_invalid"])
+@pytest.mark.parametrize(
+    "error",
+    [
+        FileNotFoundError("temporary"),
+        PermissionError("temporary"),
+        OSError("temporary"),
+    ],
+)
+def test_cached_rejection_cannot_settle_after_transient_revalidation(
+    tmp_path: Path, stored_outcome: str, error: OSError
+) -> None:
+    archive_root = tmp_path / "OLD_PERF"
+    snapshot_key = "2025-01/performance_archive_2025_01_01_00_00_00"
+    execution_dir = archive_root / snapshot_key / "COMPLETED" / "case-a" / "100.1-1"
+    execution_dir.mkdir(parents=True)
+    state = _fresh_state()
+    state["discovery_results"]["case-a"] = [
+        {
+            "case_identity": "case-a",
+            "execution_id": "100.1-1",
+            "outcome": stored_outcome,
+        }
+    ]
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="pm",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="archive",
+        archive_year_start="2025-01",
+    )
+    results: list[ExecutionDiscoveryResult] = []
+
+    def locator(path: str) -> object:
+        assert path == str(execution_dir)
+        raise error
+
+    _, candidates, _, stats, snapshot_scan = discovery_module._scan_archive(
+        config, state, locator, discovery_results=results
+    )
+
+    assert candidates == []
+    assert stats["skipped_transient"] == 1
+    assert results == []
+    assert (
+        discovery_module._settled_archive_snapshot_keys(snapshot_scan, state, results)
+        == set()
+    )
+
+    # Without a checkpoint, a normal scan retries the same execution.
+    _, candidates, _, stats, snapshot_scan = discovery_module._scan_archive(
+        config, state, lambda path: {}, discovery_results=results
+    )
+
+    assert stats["execution_dirs_scanned"] == 1
+    assert candidates[0].new_execution_ids == ["100.1-1"]
+    assert [result.outcome for result in results] == ["accepted"]
+    assert (
+        discovery_module._settled_archive_snapshot_keys(snapshot_scan, state, results)
+        == set()
+    )
 
 
 def test_snapshot_settlement_requires_ingested_or_immutable_rejected() -> None:

@@ -107,6 +107,9 @@ def test_duplicate_only_scan_records_paths_without_upload(
 )
 @pytest.mark.parametrize("fail_mapping", [False, True])
 @pytest.mark.parametrize("source_root", [None, Path("/host/OLD_PERF")])
+@pytest.mark.parametrize(
+    "prefix", ["", "chrysalis_e3sm_", "compy_e3sm_", "machine_name_project_tag_"]
+)
 def test_archive_mappings_precede_checkpoints(
     tmp_path,
     monkeypatch,
@@ -114,11 +117,12 @@ def test_archive_mappings_precede_checkpoints(
     runner,
     fail_mapping,
     source_root,
+    prefix,
 ):
     root = tmp_path / "OLD_PERF"
     snapshot_names = [
-        "performance_archive_2025_01_01_00_00_00",
-        "performance_archive_2025_01_02_00_00_00",
+        f"performance_archive_{prefix}2025_01_01_00_00_00",
+        f"performance_archive_{prefix}2025_01_02_00_00_00",
     ]
     case_paths = [
         root / "2025-01" / name / "COMPLETED" / "user" / "case"
@@ -140,6 +144,7 @@ def test_archive_mappings_precede_checkpoints(
         return {"status_code": 200, "body": {}}
 
     def checkpoint(*args, **kwargs):
+        assert kwargs["snapshot_keys"] == [f"2025-01/{name}" for name in snapshot_names]
         events.append("checkpoint")
         return {"status_code": 200, "body": {}}
 
@@ -247,6 +252,28 @@ def test_source_submission_retries_same_batch(tmp_path, parsed_metadata):
     assert sleeps == [1]
 
 
+def test_final_source_submission_failure_is_recorded(
+    tmp_path, monkeypatch, parsed_metadata
+):
+    case_path = tmp_path / "case"
+    state = {"cases": {str(case_path): {"processed_execution_ids": ["100.1-1"]}}}
+    status_file = tmp_path / "job-status.json"
+    monkeypatch.setenv("SIMBOARD_JOB_STATUS_FILE", str(status_file))
+
+    def reject(*_args, **_kwargs):
+        raise IngestionRequestError("HTTP 422", status_code=422, transient=False)
+
+    assert not source_module._persist_visited_source_directories(
+        [(case_path, "100.1-1")], state, _config(tmp_path), lambda _: None, reject
+    )
+    assert json.loads(status_file.read_text()) == {
+        "reason": "api_request",
+        "message": "HTTP 422",
+        "status_code": 422,
+        "transient": False,
+    }
+
+
 @pytest.mark.parametrize("error_type", [FileNotFoundError, PermissionError])
 def test_source_file_errors_preserve_other_observations(
     tmp_path, monkeypatch, parsed_metadata, error_type
@@ -294,6 +321,61 @@ def test_source_file_errors_preserve_other_observations(
             },
         )
     ]
+
+
+def test_local_staging_ingests_only_ready_siblings(tmp_path, monkeypatch, db, client):
+    user, _, _ = _create_dependencies(db)
+    user.role = UserRole.SERVICE_ACCOUNT
+    db.flush()
+    monkeypatch.setitem(app.dependency_overrides, current_active_user, lambda: user)
+    root = tmp_path / "performance_archive"
+    case_path = stage_continuation_case(root / "user")
+    running_id = next(iter(EXECUTIONS))
+    status_file = case_path / running_id / f"CaseStatus.{running_id}.gz"
+    starting = "2026-10-20 10:00:00: case.run starting\n"
+    with gzip.open(status_file, "wt") as stream:
+        stream.write(starting)
+    submissions = []
+
+    @contextmanager
+    def urlopen(request, timeout):
+        payload = json.loads(request.data) if request.data else None
+        if request.full_url.endswith("/from-path"):
+            submissions.append(payload)
+        response = client.request(request.get_method(), request.full_url, json=payload)
+        assert response.is_success, response.text
+        yield SimpleNamespace(
+            status=response.status_code, read=lambda: response.content
+        )
+
+    monkeypatch.setattr(source_module.urllib.request, "urlopen", urlopen)
+    config = replace(_config(root), api_base_url="http://testserver")
+    assert nersc_archive_ingestor._run_ingestor(config) == 0
+    ready_ids = sorted(set(EXECUTIONS) - {running_id})
+    assert submissions[0]["selected_execution_ids"] == ready_ids
+    assert sorted(row.execution_id for row in db.query(Execution).all()) == ready_ids
+    assert (
+        db.query(Ingestion)
+        .filter_by(source_reference=str(case_path))
+        .one()
+        .processed_execution_ids
+        == ready_ids
+    )
+
+    # A repeated scan must not ingest the running sibling through the case path.
+    assert nersc_archive_ingestor._run_ingestor(config) == 0
+    assert len(submissions) == 1
+    assert db.query(Execution).count() == len(ready_ids)
+
+    with gzip.open(status_file, "wt") as stream:
+        stream.write(starting + "2026-10-20 11:00:00: case.run success\n")
+    assert nersc_archive_ingestor._run_ingestor(config) == 0
+    assert submissions[1]["selected_execution_ids"] == [running_id]
+    assert db.query(Execution).count() == len(EXECUTIONS)
+    assert (
+        db.query(Execution).filter_by(execution_id=running_id).one().status
+        == "completed"
+    )
 
 
 @pytest.mark.parametrize(

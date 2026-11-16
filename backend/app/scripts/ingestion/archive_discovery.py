@@ -5,16 +5,21 @@ from __future__ import annotations
 import os
 import re
 import time
+import zlib
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
+from app.features.catalog.enums import ExecutionStatus
+from app.features.ingestion.ingest import validate_execution_directory
+from app.features.ingestion.parsers.case_status import parse_case_status
 from app.features.ingestion.parsers.parser import (
+    FILE_SPECS,
     ArchiveValidationError,
     IncompleteArchiveError,
-    _locate_metadata_files,
+    _find_spec_matches,
 )
 from app.scripts.ingestion.archive_ingestor_core import (
     DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES,
@@ -325,7 +330,7 @@ def _handle_archive_walk_error(
 
 def _discover_case_executions(
     archive_root: Path,
-    metadata_locator: MetadataLocator = _locate_metadata_files,
+    metadata_locator: MetadataLocator = validate_execution_directory,
     stats: DiscoveryStats | None = None,
     case_collection_data: dict[str, CaseCollectionLogData] | None = None,
     *,
@@ -505,20 +510,23 @@ def _collect_case_execution(
         _record_already_processed_execution(case_path, execution_id, log_data, stats)
         return
 
-    stored_outcome = (
-        None
-        if discovery_results_by_key is None
-        else discovery_results_by_key.get((case_identity_key, execution_id))
-    )
-    if _record_stored_discovery_outcome(
-        stored_outcome,
-        grouped=grouped,
-        case_path=case_path,
-        execution_id=execution_id,
-        log_data=log_data,
-        stats=stats,
-    ):
-        return
+    if scan_mode == "staging":
+        readiness_decision = _check_staging_readiness(case_dir, execution_id)
+        if readiness_decision is not None:
+            if stats is not None:
+                stats["execution_dirs_scanned"] += 1
+                if readiness_decision.reason == "transient":
+                    stats["skipped_transient"] += 1
+                    stats["transient_execution_ids"] += 1
+            if log_data is not None:
+                if readiness_decision.decision == "deferred":
+                    log_data.deferred_decisions.append(readiness_decision)
+                else:
+                    log_data.rejected_decisions.append(readiness_decision)
+            return
+
+    # Stored acceptance may predate schema validation or changed metadata.
+    # Only successfully processed executions can bypass current preflight.
 
     _collect_fresh_execution(
         grouped,
@@ -530,6 +538,36 @@ def _collect_case_execution(
         stats=stats,
         log_data=log_data,
         discovery_results=discovery_results,
+    )
+
+
+def _check_staging_readiness(
+    case_dir: Path, execution_id: str
+) -> ExecutionCollectionDecision | None:
+    """Defer a known-running execution without caching a metadata rejection."""
+    case_path = str(case_dir.resolve())
+    try:
+        matches = _find_spec_matches(
+            str(case_dir / execution_id), [], FILE_SPECS["case_status"]
+        )
+        # Missing or ambiguous files do not establish readiness. Fresh discovery
+        # validates them; cached acceptance retains its existing reuse behavior.
+        if len(matches) != 1:
+            return None
+        status = parse_case_status(matches[0], strict_read=True)["status"]
+    except (OSError, EOFError, UnicodeDecodeError, zlib.error) as exc:
+        return _build_rejected_execution_decision(
+            case_path, execution_id, "transient", exc
+        )
+
+    if status != ExecutionStatus.RUNNING.value:
+        return None
+
+    return ExecutionCollectionDecision(
+        case_path=case_path,
+        execution_id=execution_id,
+        decision="deferred",
+        reason="execution_running",
     )
 
 
@@ -553,43 +591,6 @@ def _record_already_processed_execution(
         )
 
 
-def _record_stored_discovery_outcome(
-    stored_outcome: str | None,
-    *,
-    grouped: dict[str, set[str]],
-    case_path: str,
-    execution_id: str,
-    log_data: CaseCollectionLogData | None,
-    stats: DiscoveryStats | None,
-) -> bool:
-    """Record immutable stored discovery outcome, returning whether handled."""
-    if stored_outcome == "accepted":
-        _record_accepted_execution(grouped, case_path, execution_id, log_data, stats)
-        return True
-    if stored_outcome not in {"rejected_incomplete", "rejected_invalid"}:
-        return False
-
-    reason = "incomplete" if stored_outcome == "rejected_incomplete" else "invalid"
-    if stats is not None:
-        if reason == "incomplete":
-            stats["skipped_incomplete"] += 1
-            stats["rejected_incomplete_execution_ids"] += 1
-        else:
-            stats["skipped_invalid"] += 1
-            stats["rejected_invalid_execution_ids"] += 1
-    if log_data is not None:
-        log_data.rejected_decisions.append(
-            ExecutionCollectionDecision(
-                case_path=case_path,
-                execution_id=execution_id,
-                decision="rejected",
-                reason=reason,
-                detail="stored_discovery_result",
-            )
-        )
-    return True
-
-
 def _collect_fresh_execution(
     grouped: dict[str, set[str]],
     case_dir: Path,
@@ -602,7 +603,7 @@ def _collect_fresh_execution(
     log_data: CaseCollectionLogData | None,
     discovery_results: list[ExecutionDiscoveryResult] | None,
 ) -> None:
-    """Validate and record one execution without a stored outcome."""
+    """Validate a new execution or revalidate a previously rejected execution."""
     if stats is not None:
         stats["execution_dirs_scanned"] += 1
 
@@ -641,7 +642,7 @@ def _record_rejected_discovery_result(
     execution_id: str,
     rejection_decision: ExecutionCollectionDecision,
 ) -> None:
-    """Persist an immutable fresh rejection in the pending result list."""
+    """Record current rejection diagnostics without making future scans skip validation."""
     if discovery_results is None or rejection_decision.reason not in {
         "incomplete",
         "invalid",
@@ -656,6 +657,7 @@ def _record_rejected_discovery_result(
                 if rejection_decision.reason == "incomplete"
                 else "rejected_invalid"
             ),
+            errors=rejection_decision.errors or [],
         )
     )
 
@@ -741,7 +743,7 @@ def _validate_execution_dir(
             reason="invalid",
             exc=exc,
         )
-    except OSError as exc:
+    except (OSError, EOFError, UnicodeDecodeError, zlib.error) as exc:
         if stats is not None:
             stats["skipped_transient"] += 1
             stats["transient_execution_ids"] += 1
@@ -822,9 +824,13 @@ def _calculate_case_collection_outcome(
     existing_ids = sorted(
         existing_rejected_ids | (valid_execution_id_set & processed_ids)
     )
-    deferred_ids = sorted(new_ids - selected_new_ids)
+    deferred_ids = sorted(
+        (new_ids - selected_new_ids)
+        | {decision.execution_id for decision in log_data.deferred_decisions}
+    )
     decisions_by_execution_id = {
-        decision.execution_id: decision for decision in log_data.rejected_decisions
+        decision.execution_id: decision
+        for decision in (*log_data.rejected_decisions, *log_data.deferred_decisions)
     }
 
     for execution_id in valid_execution_ids:
@@ -882,8 +888,8 @@ def _update_collection_decision_stats(
             discovery_stats["rejected_existing_execution_ids"] += 1
         elif decision.decision == "accepted":
             discovery_stats["accepted_execution_ids"] += 1
-        elif decision.decision == "deferred":
-            discovery_stats["deferred_execution_ids"] += 1
+
+    discovery_stats["deferred_execution_ids"] += len(outcome.deferred_ids)
 
 
 def _case_collection_summary_fields(
@@ -966,7 +972,7 @@ def _compact_structured_parser_errors(
         }
     )
 
-    metadata: dict[str, Any] = {"error_count": len(errors)}
+    metadata: dict[str, Any] = {"error_count": len(errors), "errors": errors}
     if error_codes:
         metadata["error_codes"] = error_codes
     if missing_file_specs:
@@ -1022,13 +1028,12 @@ def _settled_archive_snapshot_keys(
         return set()
 
     processed_ids = _build_processed_ids_by_key(state, scan_mode="archive")
-    outcomes = _build_discovery_results_by_key(state)
-    outcomes.update(
-        {
-            (result.case_identity, result.execution_id): result.outcome
-            for result in _deduplicate_discovery_results(new_discovery_results)
-        }
-    )
+    # Cached rejections cannot settle executions whose fresh validation failed
+    # transiently. Only this scan's rejection results establish resolution.
+    outcomes = {
+        (result.case_identity, result.execution_id): result.outcome
+        for result in _deduplicate_discovery_results(new_discovery_results)
+    }
     selected_keys = snapshot_scan.eligible_keys - snapshot_scan.completed_keys
 
     return {

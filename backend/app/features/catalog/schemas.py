@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -11,6 +11,7 @@ from pydantic import (
     field_validator,
 )
 
+from app.common.model_dates import ModelDate
 from app.common.schemas.base import CamelInBaseModel, CamelOutBaseModel
 from app.features.catalog.enums import (
     ArtifactKind,
@@ -288,15 +289,30 @@ class ExecutionCreate(CamelInBaseModel):
     description: Annotated[
         str | None, Field(None, description="Optional description of the execution")
     ]
-    compset: Annotated[
-        str, Field(..., description="Component set used in the simulation")
+    compset_long_name: Annotated[
+        str,
+        Field(
+            ...,
+            min_length=1,
+            pattern=r"\S",
+            description="Component-set long name from XML COMPSET",
+        ),
     ]
-    compset_alias: Annotated[str, Field(..., description="Alias for the component set")]
-    grid_name: Annotated[
-        str, Field(..., description="Grid name used in the simulation")
+    compset_alias: Annotated[
+        str | None, Field(None, description="Alias for the component set")
     ]
-    grid_resolution: Annotated[
-        str, Field(..., description="Grid resolution used in the simulation")
+    grid_alias: Annotated[
+        str | None,
+        Field(None, description="Selected grid alias from README --res or -res"),
+    ]
+    grid_long_name: Annotated[
+        str,
+        Field(
+            ...,
+            min_length=1,
+            pattern=r"\S",
+            description="Resolved grid specification from XML GRID",
+        ),
     ]
 
     status: Annotated[
@@ -324,10 +340,10 @@ class ExecutionCreate(CamelInBaseModel):
     # Model timeline
     # --------------
     simulation_start_date: Annotated[
-        date, Field(..., description="Start date of the simulation")
+        ModelDate, Field(..., description="Start date of the simulation")
     ]
     simulation_end_date: Annotated[
-        date | None, Field(None, description="Optional end date of the simulation")
+        ModelDate | None, Field(None, description="Optional end date of the simulation")
     ]
     run_start_date: Annotated[
         datetime | None,
@@ -363,8 +379,8 @@ class ExecutionCreate(CamelInBaseModel):
 
     # Version control
     # ---------------
-    git_repository_url: Annotated[
-        HttpUrl | None, Field(None, description="Optional Git repository URL")
+    git_repository_source: Annotated[
+        str | None, Field(None, description="Original repository value from GIT_CONFIG")
     ]
     git_branch: Annotated[
         str | None,
@@ -380,6 +396,10 @@ class ExecutionCreate(CamelInBaseModel):
         Field(
             None, description="Optional Git commit hash associated with the execution"
         ),
+    ]
+    source_code_path: Annotated[
+        str | None,
+        Field(None, description="Model source root directory from SRCROOT"),
     ]
 
     # Provenance & submission
@@ -571,10 +591,10 @@ class ExecutionSummaryOut(CamelOutBaseModel):
         ExecutionStatus, Field(..., description="Current status of the execution")
     ]
     simulation_start_date: Annotated[
-        date, Field(..., description="Start date of the simulation")
+        ModelDate, Field(..., description="Start date of the simulation")
     ]
     simulation_end_date: Annotated[
-        date | None, Field(None, description="Optional end date of the simulation")
+        ModelDate | None, Field(None, description="Optional end date of the simulation")
     ]
 
 
@@ -617,6 +637,7 @@ class CaseListItemOut(CamelOutBaseModel):
     machine_name: str
     hpc_username: str
     execution_count: int
+    has_diagnostics: bool = False
     created_at: datetime
     updated_at: datetime
     latest_execution: LatestExecutionSummaryOut | None = None
@@ -667,13 +688,13 @@ class ExecutionListItemOut(CamelOutBaseModel):
     status: ExecutionStatus
     campaign: str | None = None
     experiment_type: str | None = None
-    compset: str
-    compset_alias: str
-    grid_name: str
-    grid_resolution: str
+    compset_long_name: str
+    compset_alias: str | None = None
+    grid_alias: str | None
+    grid_long_name: str
     initialization_type: str
-    simulation_start_date: date
-    simulation_end_date: date | None = None
+    simulation_start_date: ModelDate
+    simulation_end_date: ModelDate | None = None
     run_start_date: datetime | None = None
     run_end_date: datetime | None = None
     compiler: str | None = None
@@ -681,6 +702,7 @@ class ExecutionListItemOut(CamelOutBaseModel):
     git_branch: str | None = None
     git_tag: str | None = None
     git_commit_hash: str | None = None
+    source_code_path: str | None = None
     machine_id: UUID
     machine_name: str
     hpc_username: str
@@ -710,8 +732,8 @@ class ExecutionFilterOptionsOut(CamelOutBaseModel):
     campaigns: list[str]
     experiment_types: list[str]
     compsets: list[str]
-    grid_names: list[str]
-    grid_resolutions: list[str]
+    grid_aliases: list[str]
+    grid_long_names: list[str]
     initialization_types: list[str]
     compilers: list[str]
     statuses: list[ExecutionStatus]
@@ -783,11 +805,86 @@ class CaseSummaryOut(CamelOutBaseModel):
     ]
 
 
+class SimulationCoverageOut(CamelOutBaseModel):
+    """Union of half-open simulation intervals, measured in Gregorian years."""
+
+    years: float | None = None
+    partial: bool = False
+    excluded_execution_count: int = 0
+
+
+class SimulationDurationOut(CamelOutBaseModel):
+    """Cumulative execution time, not the union of simulated date ranges.
+
+    Months use each date's zero-based day divided by its model month length.
+    Mixed calendars expose days only. Absent calendars use the stored Gregorian
+    date convention and explicitly flag that assumption.
+    """
+
+    days: int | None = None
+    months: float | None = None
+    years: float | None = None
+    calendars: list[str] = Field(default_factory=list)
+    calendar_assumed: bool = False
+    partial: bool = False
+    excluded_execution_count: int = 0
+
+
+class ConfigurationObservationOut(CamelOutBaseModel):
+    """An execution's configuration value and ordering timestamp."""
+
+    value: str
+    execution_uuid: UUID
+    execution_id: str
+    run_date: datetime | None = None
+
+
+class ConfigurationFieldOut(CamelOutBaseModel):
+    """Earliest available value, conflicting observations, and missing sources."""
+
+    source: ConfigurationObservationOut | None = None
+    differences: list[ConfigurationObservationOut] = Field(default_factory=list)
+    missing_execution_ids: list[str] = Field(default_factory=list)
+
+
+class SharedConfigurationFieldOut(CamelOutBaseModel):
+    """Agreement across group baselines; missing groups never imply agreement."""
+
+    value: str | None = None
+    varies: bool = False
+    incomplete: bool = False
+    has_differences: bool = False
+
+
+class CaseHashConfigurationOut(CamelOutBaseModel):
+    """One hash's baseline; hashless executions each retain their own identity."""
+
+    key: str
+    case_hash: str | None = None
+    execution_ids: list[str]
+    configuration: dict[str, ConfigurationFieldOut]
+    coverage: SimulationCoverageOut
+    simulated_duration: SimulationDurationOut = Field(
+        default_factory=SimulationDurationOut
+    )
+
+
 class CaseDetailOut(CaseSummaryOut):
     """Schema for representing full case details used by Case Details."""
 
     source_directories: list[SourceDirectoryOut] = Field(default_factory=list)
     performance_source_directory: SourceDirectoryOut | None = None
+    configuration_groups: list[CaseHashConfigurationOut] = Field(default_factory=list)
+    shared_configuration: dict[str, SharedConfigurationFieldOut] = Field(
+        default_factory=dict
+    )
+    simulation_coverage: SimulationCoverageOut = Field(
+        default_factory=SimulationCoverageOut
+    )
+    simulated_duration: SimulationDurationOut = Field(
+        default_factory=SimulationDurationOut
+    )
+    latest_execution: LatestExecutionSummaryOut | None = None
 
     artifacts: Annotated[
         list[CaseExecutionArtifactOut],
@@ -976,15 +1073,25 @@ class ExecutionOut(CamelOutBaseModel):
     description: Annotated[
         str | None, Field(None, description="Optional description of the execution")
     ]
-    compset: Annotated[
-        str, Field(..., description="Component set used in the simulation")
+    compset_long_name: Annotated[
+        str,
+        Field(..., description="Component-set long name from XML COMPSET"),
     ]
-    compset_alias: Annotated[str, Field(..., description="Alias for the component set")]
-    grid_name: Annotated[
-        str, Field(..., description="Grid name used in the simulation")
+    compset_alias: Annotated[
+        str | None, Field(None, description="Alias for the component set")
     ]
-    grid_resolution: Annotated[
-        str, Field(..., description="Grid resolution used in the simulation")
+    grid_alias: Annotated[
+        str | None,
+        Field(None, description="Selected grid alias from README --res or -res"),
+    ]
+    grid_long_name: Annotated[
+        str,
+        Field(
+            ...,
+            min_length=1,
+            pattern=r"\S",
+            description="Resolved grid specification from XML GRID",
+        ),
     ]
 
     # Model setup/context
@@ -1021,10 +1128,10 @@ class ExecutionOut(CamelOutBaseModel):
         ),
     ]
     simulation_start_date: Annotated[
-        date, Field(..., description="Start date of the simulation")
+        ModelDate, Field(..., description="Start date of the simulation")
     ]
     simulation_end_date: Annotated[
-        date | None, Field(None, description="Optional end date of the simulation")
+        ModelDate | None, Field(None, description="Optional end date of the simulation")
     ]
     run_start_date: Annotated[
         datetime | None,
@@ -1060,8 +1167,8 @@ class ExecutionOut(CamelOutBaseModel):
 
     # Version control
     # ---------------
-    git_repository_url: Annotated[
-        HttpUrl | None, Field(None, description="Optional Git repository URL")
+    git_repository_source: Annotated[
+        str | None, Field(None, description="Original repository value from GIT_CONFIG")
     ]
     git_branch: Annotated[
         str | None,
@@ -1077,6 +1184,10 @@ class ExecutionOut(CamelOutBaseModel):
         Field(
             None, description="Optional Git commit hash associated with the execution"
         ),
+    ]
+    source_code_path: Annotated[
+        str | None,
+        Field(None, description="Model source root directory from SRCROOT"),
     ]
 
     # Provenance & submission

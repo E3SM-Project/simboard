@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -103,10 +103,10 @@ class TestSeedExecution:
                 "machineId": str(machine.id),
                 "hpcUsername": "override-me",
                 "executionId": "1081156.251218-200923",
-                "compset": "AQUAPLANET",
+                "compsetLongName": "AQUAPLANET",
                 "compsetAlias": "QPC4",
-                "gridName": "f19_f19",
-                "gridResolution": "1.9x2.5",
+                "gridAlias": "f19_f19",
+                "gridLongName": "1.9x2.5",
                 "initializationType": "startup",
                 "status": "created",
                 "simulationStartDate": "2023-01-01T00:00:00Z",
@@ -120,7 +120,7 @@ class TestSeedExecution:
         assert execution.case_id == case.id
         assert execution.ingestion_id is not None
         assert execution.compute_type == "gpu"
-        assert execution.simulation_start_date == date(2023, 1, 1)
+        assert execution.simulation_start_date == "2023-01-01"
 
 
 class TestSeedSourceDirectories:
@@ -230,10 +230,10 @@ class TestRollbackSeed:
             execution_entry={
                 "machine": {"name": machine.name},
                 "executionId": "rollback-seeded-execution",
-                "compset": "AQUAPLANET",
+                "compsetLongName": "AQUAPLANET",
                 "compsetAlias": "QPC4",
-                "gridName": "f19_f19",
-                "gridResolution": "1.9x2.5",
+                "gridAlias": "f19_f19",
+                "gridLongName": "1.9x2.5",
                 "initializationType": "startup",
                 "status": "created",
                 "simulationStartDate": "2023-01-01T00:00:00Z",

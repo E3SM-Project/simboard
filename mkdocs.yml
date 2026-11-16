@@ -18,15 +18,18 @@ nav:
   - User Guide:
       - Overview: user/index.md
       - Publish Diagnostics Links: user/diagnostics.md
+      - Compare Diagnostics: user/compare-diagnostics.md
       - Ingestion Coverage: user/ingestion-coverage.md
   - Developer:
       - Developer Guide: developer/index.md
       - Assistant LLM Setup: developer/assistant-llm-setup.md
       - Backend Guide: backend/README.md
       - Frontend Guide: frontend/README.md
+      - Frontend Design System: design-system.md
   - Architecture:
       - Metadata Ingestion: architecture/metadata-ingestion.md
       - Diagnostics Linkage: architecture/diagnostics-linkage.md
+      - Diagnostics Comparison: architecture/diagnostics-comparison.md
   - Operations:
       - CI/CD: cicd/README.md
       - Operations Overview: operations/index.md

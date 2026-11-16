@@ -47,6 +47,15 @@ def test_initial_driver_dates(tmp_path, compressed):
             {"simulation_start_date": "2019-01-01"},
         ),
         (DRIVER_CLOCK.replace("20200101", "20180101"), {}),
+        (
+            DRIVER_CLOCK.replace("20190101", "00000102").replace(
+                "20200101", "00010102"
+            ),
+            {
+                "simulation_start_date": "0000-01-02",
+                "simulation_end_date": "0001-01-02",
+            },
+        ),
         (DRIVER_CLOCK.split("   Curr Time")[0], {}),
         (
             DRIVER_CLOCK.replace("20190101", "02010101"),

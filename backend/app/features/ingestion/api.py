@@ -1,7 +1,7 @@
 import hashlib
 import tempfile
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, NoReturn
 from uuid import UUID
@@ -13,6 +13,7 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Response,
     UploadFile,
     status,
 )
@@ -62,7 +63,9 @@ from app.features.ingestion.v3_classification import (
     CHRYSALIS_MACHINE_NAME,
     V3_CASE_NAMES,
 )
+from app.features.machine.models import Machine
 from app.features.machine.utils import resolve_machine_by_name
+from app.features.site.models import Site
 from app.features.user.manager import current_active_user
 from app.features.user.models import User, UserRole
 
@@ -70,17 +73,21 @@ router = APIRouter(prefix="/ingestions", tags=["Ingestions"])
 
 # Keep this below the NGINX Ingress body-size limit to allow multipart overhead.
 MAX_UPLOAD_SIZE_BYTES = 320 * 1024 * 1024
+# Report endpoints span at most 90 UTC days; job runs are retained that long.
+MAX_REPORT_RANGE_DAYS = 90
 STATEFUL_INGESTION_SOURCE_TYPES = (
     IngestionSourceType.HPC_PATH,
     IngestionSourceType.HPC_UPLOAD,
 )
 
 
-def _require_ingestion_state_access(user: User) -> None:
+def _require_ingestion_state_access(
+    user: User, *, action: str = "manage ingestion state"
+) -> None:
     if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators and service accounts may manage ingestion state.",
+            detail=f"Only administrators and service accounts may {action}.",
         )
 
 
@@ -180,7 +187,7 @@ def persist_execution_discovery_results(
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ) -> ExecutionDiscoveryResultsResponse:
-    """Persist immutable discovery results with concurrency-safe idempotency."""
+    """Refresh discovery outcomes and errors after current metadata validation."""
     if user.role not in (UserRole.ADMIN, UserRole.SERVICE_ACCOUNT):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -203,8 +210,9 @@ def persist_execution_discovery_results(
                         "case_identity": result.case_identity,
                         "execution_id": result.execution_id,
                         "outcome": result.outcome,
+                        "errors": result.errors,
                     }
-                    for result in unique_results.values()
+                    for _, result in sorted(unique_results.items())
                 ]
             )
             .on_conflict_do_nothing(constraint="uq_execution_discovery_result_identity")
@@ -221,6 +229,12 @@ def persist_execution_discovery_results(
                     ExecutionDiscoveryResult.execution_id,
                 ).in_(unique_results),
             )
+            .order_by(
+                ExecutionDiscoveryResult.case_identity,
+                ExecutionDiscoveryResult.execution_id,
+            )
+            .populate_existing()
+            .with_for_update()
             .all()
         )
         stored_by_identity = {
@@ -229,14 +243,16 @@ def persist_execution_discovery_results(
 
         for identity, requested in unique_results.items():
             stored = stored_by_identity.get(identity)
-            if stored is None or stored.outcome != requested.outcome:
+            if stored is None:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=(
-                        "Discovery result conflicts with immutable stored outcome "
+                        "Discovery result conflicts with accepted stored outcome "
                         f"for case_identity={identity[0]!r}, execution_id={identity[1]!r}."
                     ),
                 )
+            stored.outcome = requested.outcome
+            stored.errors = requested.errors
 
     return ExecutionDiscoveryResultsResponse(
         inserted_count=inserted_count,
@@ -249,6 +265,7 @@ def persist_execution_discovery_results(
     response_model=IngestionResponse,
     status_code=status.HTTP_201_CREATED,
     responses={
+        200: {"description": "No executions created; duplicate-only or empty no-op."},
         201: {"description": "Ingestion successful, executions created."},
         400: {"description": "Invalid input or archive file."},
         403: {"description": "Forbidden: only administrators can ingest from paths."},
@@ -259,6 +276,7 @@ def persist_execution_discovery_results(
 )
 def ingest_from_path(
     payload: IngestFromPathRequest,
+    response: Response,
     db: Session = Depends(get_database_session),
     user: User = Depends(current_active_user),
 ) -> IngestionResponse:
@@ -308,9 +326,10 @@ def ingest_from_path(
             output_dir=tmpdir,
             db=db,
             hpc_username=payload.hpc_username,
+            selected_execution_ids=payload.selected_execution_ids,
         )
 
-    response = _process_ingestion(
+    result = _process_ingestion(
         ingest_result=ingest_result,
         source_type=IngestionSourceType.HPC_PATH,
         source_reference=str(archive_path),
@@ -318,12 +337,23 @@ def ingest_from_path(
         user=user,
         archive_sha256=None,
         hpc_username=payload.hpc_username,
-        processed_execution_ids=payload.processed_execution_ids,
+        processed_execution_ids=(
+            payload.selected_execution_ids
+            if payload.selected_execution_ids is not None
+            else payload.processed_execution_ids
+        ),
         source_directories=payload.source_directories,
         db=db,
     )
 
-    return response
+    if result.created_count:
+        response.status_code = status.HTTP_201_CREATED
+    elif result.errors:
+        response.status_code = status.HTTP_400_BAD_REQUEST
+    else:
+        response.status_code = status.HTTP_200_OK
+
+    return result
 
 
 @router.post(
@@ -594,6 +624,38 @@ def _resolve_request_machine(db: Session, machine_name: str):
     return machine
 
 
+def _validate_report_date_range(start_date: date, end_date: date) -> None:
+    """Reject report ranges that are empty, reversed, or over 90 days."""
+    if not 0 < (end_date - start_date).days <= MAX_REPORT_RANGE_DAYS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Date range must span between 1 and {MAX_REPORT_RANGE_DAYS} days.",
+        )
+
+
+def _resolve_machine_ids(
+    db: Session, machine_name: str | None, site_name: str | None
+) -> list[UUID] | None:
+    """Return IDs of machines matching both optional filters; None means all."""
+    if machine_name is None and site_name is None:
+        return None
+
+    query = db.query(Machine.id)
+    if machine_name is not None:
+        query = query.filter(
+            Machine.id == _resolve_request_machine(db, machine_name).id
+        )
+    if site_name is not None:
+        site = db.query(Site).filter(func.lower(Site.name) == site_name.lower()).first()
+        if site is None:
+            raise HTTPException(
+                status_code=404, detail=f"Site '{site_name}' not found."
+            )
+        query = query.filter(Machine.site_id == site.id)
+
+    return [machine_id for (machine_id,) in query.all()]
+
+
 def _build_hpc_upload_payload(
     *,
     machine_name: str,
@@ -715,6 +777,7 @@ def _build_ingestion_state_response(
                 case_identity=result.case_identity,
                 execution_id=result.execution_id,
                 outcome=result.outcome,
+                errors=result.errors or [],
             )
         )
 
@@ -723,6 +786,25 @@ def _build_ingestion_state_response(
         cases=cases,
         discovery_results=dict(discovery_results),
     )
+
+
+def _successful_processed_execution_ids(
+    execution_ids: list[str] | None, errors: list[dict[str, str]]
+) -> list[str] | None:
+    """Keep failure audits from marking rejected executions successfully processed."""
+    if execution_ids is None:
+        return None
+    rejected_ids = {
+        Path(error["execution_dir"]).name
+        for error in errors
+        if "execution_dir" in error
+    }
+
+    return [
+        execution_id
+        for execution_id in execution_ids
+        if execution_id not in rejected_ids
+    ]
 
 
 def _compute_execution_fingerprint(execution_ids: list[str]) -> str:
@@ -792,6 +874,7 @@ def _run_ingest_archive(
     strict_validation: bool = False,
     hpc_username: str | None = None,
     production_case_identity: CaseIdentity | None = None,
+    selected_execution_ids: list[str] | None = None,
 ) -> IngestArchiveResult:
     try:
         return ingest_archive(
@@ -801,6 +884,7 @@ def _run_ingest_archive(
             strict_validation=strict_validation,
             hpc_username=hpc_username,
             production_case_identity=production_case_identity,
+            selected_execution_ids=selected_execution_ids,
         )
     except ArchiveValidationError as exc:
         _raise_archive_validation_error(exc.errors)
@@ -917,7 +1001,9 @@ def _process_ingestion(
             duplicate_count=ingest_result.duplicate_count,
             error_count=error_count,
             archive_sha256=archive_sha256,
-            processed_execution_ids=processed_execution_ids,
+            processed_execution_ids=_successful_processed_execution_ids(
+                processed_execution_ids, ingest_result.errors
+            ),
         )
         ingestion = Ingestion(
             **ingestion_create.model_dump(),
@@ -1012,7 +1098,7 @@ def _validate_v3_production_classification(
 
 
 def _resolve_ingestion_status(created_count: int, error_count: int) -> str:
-    if error_count == 0 and created_count > 0:
+    if error_count == 0:
         return IngestionStatus.SUCCESS.value
 
     if error_count > 0 and created_count > 0:
@@ -1055,9 +1141,6 @@ def _persist_executions(
             exclude={"artifacts", "links", "created_by", "last_updated_by"},
             exclude_unset=True,
         )
-
-        if data.get("git_repository_url") is not None:
-            data["git_repository_url"] = str(data["git_repository_url"])
 
         execution = Execution(
             **data,

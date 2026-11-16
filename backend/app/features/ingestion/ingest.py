@@ -2,30 +2,32 @@
 
 import shlex
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, time, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
 from dateutil import parser as dateutil_parser
-from pydantic import HttpUrl, TypeAdapter, ValidationError
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.common.model_dates import normalize_model_date
 from app.common.utils import _normalize_hpc_username
 from app.core.logger import _setup_custom_logger
 from app.features.catalog.enums import ArtifactKind, CaseSimulationType, ExecutionStatus
 from app.features.catalog.models import Case, Execution
 from app.features.catalog.schemas import ArtifactCreate, ExecutionCreate
-from app.features.ingestion.parsers.parser import main_parser
+from app.features.ingestion.parsers.parser import (
+    ArchiveValidationError,
+    _locate_metadata_files,
+    _parse_all_files,
+    main_parser,
+)
 from app.features.ingestion.parsers.types import ParsedExecution
 from app.features.machine.utils import parse_machine_name, resolve_machine_by_name
 
 logger = _setup_custom_logger(__name__)
 
-_STRING_ADAPTER = TypeAdapter(str)
-_DATE_ADAPTER = TypeAdapter(date)
-_DATETIME_ADAPTER = TypeAdapter(datetime)
-_HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 CaseIdentity = tuple[str, UUID, str]
 
 
@@ -64,20 +66,20 @@ class ExecutionCreateDraft:
 
     case_id: UUID | None
     execution_id: str
-    compset: str | None
+    compset_long_name: str | None
     compset_alias: str | None
-    grid_name: str | None
-    grid_resolution: str | None
+    grid_alias: str | None
+    grid_long_name: str | None
     status: ExecutionStatus
     campaign: str | None
     experiment_type: str | None
     initialization_type: str | None
-    simulation_start_date: date | None
-    simulation_end_date: date | None
+    simulation_start_date: str | None
+    simulation_end_date: str | None
     run_start_date: datetime | None
     run_end_date: datetime | None
     compiler: str | None
-    git_repository_url: str | None
+    git_repository_source: str | None
     git_branch: str | None
     git_tag: str | None
     git_commit_hash: str | None
@@ -85,6 +87,7 @@ class ExecutionCreateDraft:
     last_updated_by: UUID | None
     case_hash: str | None = None
     compute_type: Literal["cpu", "gpu"] | None = None
+    source_code_path: str | None = None
 
 
 def ingest_archive(
@@ -95,6 +98,7 @@ def ingest_archive(
     strict_validation: bool = False,
     hpc_username: str | None = None,
     production_case_identity: CaseIdentity | None = None,
+    selected_execution_ids: list[str] | None = None,
 ) -> IngestArchiveResult:
     """Ingest a simulation archive and return summary counts.
 
@@ -114,6 +118,9 @@ def ingest_archive(
         Trusted production classification target (name, machine ID, HPC username).
         Only matching new cases use production; other new cases use development.
         Existing classifications are not changed here.
+    selected_execution_ids : list[str] | None
+        Only parse matching execution directory names; None parses all executions.
+
     Returns
     -------
     IngestArchiveResult
@@ -127,10 +134,13 @@ def ingest_archive(
         Path(output_dir) if isinstance(output_dir, str) else output_dir
     )
 
+    errors: list[dict[str, str]] = []
     parsed_executions, skipped_count = main_parser(
         archive_path_resolved,
         output_dir_resolved,
         strict_validation=strict_validation,
+        selected_execution_ids=selected_execution_ids,
+        validation_errors=errors,
     )
 
     if not parsed_executions:
@@ -141,11 +151,11 @@ def ingest_archive(
             created_count=0,
             duplicate_count=0,
             skipped_count=skipped_count,
+            errors=errors,
         )
 
     executions: list[ExecutionCreate] = []
     duplicate_count = 0
-    errors: list[dict[str, str]] = []
     case_hash_cache: dict[CaseIdentity, str] = {}
     persisted_case_hash_cache: dict[UUID, str | None] = {}
     case_identities: set[CaseIdentity] = set()
@@ -170,19 +180,26 @@ def ingest_archive(
                 executions.append(execution)
 
         except (ValueError, LookupError, ValidationError) as e:
+            error = {
+                "execution_dir": parsed_execution.execution_dir,
+                "error_type": type(e).__name__,
+                "error": str(e),
+            }
+            if isinstance(e, ValidationError) and e.error_count():
+                first_error = e.errors()[0]
+                error["code"] = first_error["type"]
+                if first_error["loc"]:
+                    error["field"] = ".".join(map(str, first_error["loc"]))
+
             logger.error(
-                "Failed to process execution from %s: %s",
+                "Failed to process execution from %s (field=%s, code=%s): %s",
                 parsed_execution.execution_dir,
+                error.get("field", "unknown"),
+                error.get("code", "unknown"),
                 e,
             )
 
-            errors.append(
-                {
-                    "execution_dir": parsed_execution.execution_dir,
-                    "error_type": type(e).__name__,
-                    "error": str(e),
-                }
-            )
+            errors.append(error)
             continue
 
     result = IngestArchiveResult(
@@ -195,6 +212,39 @@ def ingest_archive(
     )
 
     return result
+
+
+def validate_execution_directory(execution_dir: str) -> None:
+    """Parse and validate ingestion metadata without database access or writes."""
+    parsed = _parse_all_files(execution_dir, _locate_metadata_files(execution_dir))
+    errors = [
+        {
+            "execution_dir": execution_dir,
+            "field": field_name,
+            "code": "missing_required_value",
+            "message": f"{field_name} is required for ingestion.",
+        }
+        # HPC username may come from the submission request instead of metadata.
+        for field_name in ("case_name", "machine")
+        if not (getattr(parsed, field_name) or "").strip()
+    ]
+    if errors:
+        raise ArchiveValidationError(errors)
+    try:
+        _prevalidate_execution_create(parsed)
+        _build_path_artifacts(parsed)
+    except ValidationError as exc:
+        raise ArchiveValidationError(
+            [
+                {
+                    "execution_dir": execution_dir,
+                    "field": ".".join(map(str, error["loc"])),
+                    "code": error["type"],
+                    "message": error["msg"],
+                }
+                for error in exc.errors()
+            ]
+        ) from exc
 
 
 def _process_execution_for_ingest(
@@ -527,20 +577,9 @@ def _prevalidate_execution_create(
 
 def _validate_pre_case_draft(draft: ExecutionCreateDraft) -> None:
     """Validate the draft fields that must succeed before case creation."""
-    for field_name in (
-        "execution_id",
-        "compset",
-        "compset_alias",
-        "grid_name",
-        "grid_resolution",
-        "initialization_type",
-    ):
-        _STRING_ADAPTER.validate_python(getattr(draft, field_name))
-
-    _DATE_ADAPTER.validate_python(draft.simulation_start_date)
-
-    if draft.git_repository_url is not None:
-        _HTTP_URL_ADAPTER.validate_python(draft.git_repository_url)
+    # This validation-only case ID is never persisted. Validate again with the
+    # resolved case ID on the server before creating the execution.
+    _validate_execution_create(replace(draft, case_id=UUID(int=0)))
 
 
 def _get_or_create_case(
@@ -693,53 +732,6 @@ def _find_existing_execution(
     return result
 
 
-def _normalize_git_url(url: str | None) -> str | None:
-    """Convert SSH git URL to HTTPS format.
-
-    Parameters
-    ----------
-    url : str | None
-        Git URL (SSH or HTTPS format).
-
-    Returns
-    -------
-    str | None
-        Normalized HTTPS URL or None if input is None/empty.
-
-    Examples
-    --------
-    >>> _normalize_git_url("git@github.com:E3SM-Project/E3SM.git")
-    'https://github.com/E3SM-Project/E3SM.git'
-
-    >>> _normalize_git_url("https://github.com/E3SM-Project/E3SM.git")
-    'https://github.com/E3SM-Project/E3SM.git'
-
-    >>> _normalize_git_url(None)
-    None
-    """
-    if not url:
-        return None
-
-    # If already HTTPS, return as-is
-    if url.startswith("https://") or url.startswith("http://"):
-        return url
-
-    # Convert SSH format: git@github.com:owner/repo.git → https://github.com/owner/repo.git
-    if url.startswith("git@"):
-        try:
-            # Extract host and path from git@host:path format
-            # Remove 'git@'.
-            host_and_path = url[4:]
-            host, path = host_and_path.split(":", 1)
-            return f"https://{host}/{path}"
-        except ValueError:
-            logger.warning(f"Could not normalize git URL: {url}")
-            return url
-
-    # For any other format, return as-is
-    return url
-
-
 def _build_execution_create_draft(
     parsed_execution: ParsedExecution,
     case_id: UUID | None,
@@ -765,17 +757,16 @@ def _build_execution_create_draft(
     run_start_date = _parse_datetime_field(parsed_execution.run_start_date)
     run_end_date = _parse_datetime_field(parsed_execution.run_end_date)
 
-    git_repository_url = _normalize_git_url(parsed_execution.git_repository_url)
     status = _normalize_execution_status(parsed_execution.status)
     _, compute_type = parse_machine_name(parsed_execution.machine or "")
 
     execution_draft = ExecutionCreateDraft(
         case_id=case_id,
         execution_id=parsed_execution.execution_id,
-        compset=parsed_execution.compset,
+        compset_long_name=parsed_execution.compset_long_name,
         compset_alias=parsed_execution.compset_alias,
-        grid_name=parsed_execution.grid_name,
-        grid_resolution=parsed_execution.grid_resolution,
+        grid_alias=parsed_execution.grid_alias,
+        grid_long_name=parsed_execution.grid_long_name,
         status=status,
         campaign=parsed_execution.campaign,
         experiment_type=parsed_execution.experiment_type,
@@ -786,10 +777,11 @@ def _build_execution_create_draft(
         run_end_date=run_end_date,
         compiler=parsed_execution.compiler,
         compute_type=compute_type,
-        git_repository_url=git_repository_url,
+        git_repository_source=parsed_execution.git_repository_source,
         git_branch=parsed_execution.git_branch,
         git_tag=parsed_execution.git_tag,
         git_commit_hash=parsed_execution.git_commit_hash,
+        source_code_path=parsed_execution.source_code_path,
         created_by=None,
         last_updated_by=None,
         case_hash=parsed_execution.case_hash,
@@ -859,20 +851,17 @@ def _parse_datetime_field(value: str | None) -> datetime | None:
         return None
 
 
-def _parse_date_field(value: str | None) -> date | None:
-    """Parse a calendar date, rejecting values not at midnight UTC."""
+def _parse_date_field(value: str | None) -> str | None:
+    """Normalize model dates, retaining invalid input for field-aware validation."""
     if not value:
         return None
     try:
-        parsed = dateutil_parser.parse(value)
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        parsed = parsed.astimezone(timezone.utc)
-        if parsed.time() != time.min:
-            raise ValueError("Model date datetime must represent midnight UTC")
-
-        return parsed.date()
+        try:
+            return normalize_model_date(value)
+        except ValueError:
+            # Preserve the archive parser's existing flexible ordinary-date inputs.
+            return normalize_model_date(dateutil_parser.parse(value))
     except (ValueError, TypeError) as e:
         logger.warning(f"Could not parse date '{value}': {e}")
 
-        return None
+        return value
