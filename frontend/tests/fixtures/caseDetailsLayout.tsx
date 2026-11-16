@@ -2031,20 +2031,23 @@ async function checkHomepage() {
       runStartDate: '2026-10-01T12:00:00Z',
     },
   }));
-  const productionParams = {
-    page: 1,
-    pageSize: 6,
-    simulationType: 'production',
-    recentExecution: true,
-    sortBy: 'latest_run_activity',
-    sortOrder: 'desc',
-  };
-  client.setQueryData(['cases', 'page', productionParams], {
-    items: cases,
-    total: 10,
-    page: 1,
-    pageSize: 6,
-  });
+  const productionQueryKeys = [{ recentExecution: true }, { pastExecution: true }].map(
+    (recency) => [
+      'cases',
+      'page',
+      {
+        page: 1,
+        pageSize: 6,
+        simulationType: 'production',
+        ...recency,
+        sortBy: 'latest_run_activity',
+        sortOrder: 'desc',
+      },
+    ],
+  );
+  for (const queryKey of productionQueryKeys) {
+    client.setQueryData(queryKey, { items: cases, total: 10, page: 1, pageSize: 6 });
+  }
   client.setQueryData(['catalog', 'overview'], {
     totalCases: 10,
     totalExecutions: 70,
@@ -2062,7 +2065,7 @@ async function checkHomepage() {
     </QueryClientProvider>,
   );
   await waitFor(() => document.querySelector('h1')?.textContent === 'Explore E3SM Simulations');
-  for (const table of [...document.querySelectorAll('table')].slice(0, 2)) {
+  for (const table of [...document.querySelectorAll('table')].slice(0, 3)) {
     check(table.tBodies[0].rows.length === 6, 'Homepage case tables show six cases');
     check(
       table.tHead?.rows[0].cells[1].textContent === 'Last Execution',
@@ -2086,7 +2089,9 @@ async function checkHomepage() {
   await waitFor(
     () => document.querySelector('#filter-url')?.textContent === '?simulationType=production',
   );
-  client.removeQueries({ queryKey: ['cases', 'page', productionParams], exact: true });
+  for (const queryKey of productionQueryKeys) {
+    client.removeQueries({ queryKey, exact: true });
+  }
 }
 
 async function checkCasesFilters() {
