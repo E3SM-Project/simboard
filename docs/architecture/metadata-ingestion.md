@@ -74,10 +74,6 @@ case and summary logs without a terminal progress bar.
 - **Migration:** Existing dates and nulls are preserved. Year-zero records block downgrade to PostgreSQL `DATE`.
 - **Corrections:** Duplicates remain skipped; update stored dates through [metadata backfill](../operations/metadata-backfill.md).
 
-## Ingested Initialization Type
-
-`env_run.xml` `CONTINUE_RUN=TRUE` stores `restart`; otherwise `RUN_TYPE` (for example `startup`, `hybrid`, or `branch`) is stored. Correct existing records through [metadata backfill](../operations/metadata-backfill.md#initialization-repair-438).
-
 ## Performance Directories
 
 There are two PACE performance directories on HPC sites: staging (`PERF_ARCHIVE_DIR`) and archive (`OLD_PERF_ARCHIVE_DIR`).
