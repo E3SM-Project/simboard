@@ -104,7 +104,8 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
         Dictionary with runtime initialization, simulation date metadata,
         and path-based artifact metadata, including:
 
-        - ``initialization_type``: Run type (``RUN_TYPE``)
+        - ``initialization_type``: ``restart`` when ``CONTINUE_RUN`` is TRUE;
+          otherwise run type (``RUN_TYPE``)
         - ``simulation_start_date``: Initialization date for non-continuation runs
         - ``simulation_end_date``: Derived end date for non-continuation runs
         - ``output_path``: Run directory path (``RUNDIR``)
@@ -112,7 +113,7 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
         - ``postprocessing_script``: Post-run script command (``POSTRUN_SCRIPT``)
     """
     env_run_path = Path(env_run_path)
-    initialization_type = _extract_value_from_file(env_run_path, "RUN_TYPE")
+    run_type = _extract_value_from_file(env_run_path, "RUN_TYPE")
     run_start_date = _extract_value_from_file(env_run_path, "RUN_STARTDATE")
     run_ref_date = _extract_value_from_file(env_run_path, "RUN_REFDATE")
     continue_run = _extract_value_from_file(env_run_path, "CONTINUE_RUN")
@@ -123,9 +124,9 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
     archive_path = _extract_value_from_file(env_run_path, "DOUT_S_ROOT")
     postprocessing_script = _extract_value_from_file(env_run_path, "POSTRUN_SCRIPT")
 
-    simulation_start_date = (
-        run_ref_date if initialization_type == "branch" else run_start_date
-    )
+    is_continuation = bool(continue_run) and continue_run.strip().upper() == "TRUE"
+
+    simulation_start_date = run_ref_date if run_type == "branch" else run_start_date
     simulation_end_date = _calculate_simulation_end_date(
         simulation_start_date,
         stop_option,
@@ -134,12 +135,13 @@ def parse_env_run(env_run_path: str | Path) -> dict[str, str | None]:
     )
     # Continuations retain the original initialization date in XML. Their
     # execution interval must come from the coupler clock, not this fallback.
-    if continue_run and continue_run.strip().upper() == "TRUE":
+    if is_continuation:
         simulation_start_date = None
         simulation_end_date = None
 
     return {
-        "initialization_type": initialization_type,
+        # RUN_TYPE describes only the first execution in a case.
+        "initialization_type": "restart" if is_continuation else run_type,
         "simulation_start_date": simulation_start_date,
         "simulation_end_date": simulation_end_date,
         "output_path": output_path,
