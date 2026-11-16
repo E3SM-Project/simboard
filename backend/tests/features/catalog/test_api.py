@@ -1032,6 +1032,17 @@ class TestListCases:
             execution_id="boundary-undated",
             execution_status=ExecutionStatus.COMPLETED,
         )
+        # An older completed run must not move a recently active case into past.
+        older_run = _create_execution_record(
+            db,
+            case=cases["newer"],
+            ingestion_id=ingestion.id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+            execution_id="newer-older-run",
+            execution_status=ExecutionStatus.COMPLETED,
+        )
+        older_run.run_end_date = cutoff - timedelta(days=30)
         db.commit()
 
         params = {
@@ -1071,6 +1082,7 @@ class TestListCases:
                 f"{API_BASE}/cases",
                 params={"simulation_type": "production", "past_execution": True},
             ).json()
+            assert past["total"] == 1
             assert [item["name"] for item in past["items"]] == ["old"]
             unfiltered = client.get(
                 f"{API_BASE}/cases", params={"simulation_type": "production"}
