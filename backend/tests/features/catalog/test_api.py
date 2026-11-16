@@ -1141,13 +1141,28 @@ class TestListCases:
         )
 
     def test_has_diagnostics_lists_only_cases_with_diagnostic_links(
-        self, client, db: Session
+        self, client, db: Session, normal_user_sync, admin_user_sync
     ):
         with_diagnostic = _create_case(db, "with_diagnostic")
         with_other_link = _create_case(db, "with_other_link")
         _create_case(db, "without_links")
+        # Execution-owned diagnostic links do not count; only case-level ones do.
+        execution = _create_execution_record(
+            db,
+            case=with_other_link,
+            ingestion_id=_create_ingestion(
+                db, with_other_link.machine_id, normal_user_sync["id"]
+            ).id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+        )
         db.add_all(
             [
+                ExternalLink(
+                    execution_id=execution.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/execution-diagnostic",
+                ),
                 ExternalLink(
                     case_id=with_diagnostic.id,
                     kind=ExternalLinkKind.DIAGNOSTIC,
