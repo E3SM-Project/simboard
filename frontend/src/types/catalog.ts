@@ -294,6 +294,7 @@ export interface ExecutionCreate {
   gitBranch?: string | null;
   gitTag?: string | null;
   gitCommitHash?: string | null;
+  sourceCodePath?: string | null;
 
   // Provenance & submission
   // ~~~~~~~~~~~~~~~~~~~~~~~
@@ -399,6 +400,7 @@ export interface ExecutionListItemOut {
   gitBranch: string | null;
   gitTag: string | null;
   gitCommitHash: string | null;
+  sourceCodePath: string | null;
   machineId: string;
   machineName: string;
   hpcUsername: string;

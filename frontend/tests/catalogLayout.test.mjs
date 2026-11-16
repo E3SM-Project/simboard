@@ -462,6 +462,34 @@ test('configuration table labels its reference and marks only changed values', a
   assert.match(cells[3], /<mark\b[^>]*>Unavailable<\/mark>/);
 });
 
+test('source path and model hash show copy actions and flag abbreviated hashes', async () => {
+  const { isAbbreviatedCommitHash } = await server.ssrLoadModule(
+    '/src/features/catalog/caseUtils.ts',
+  );
+  const { CopyableMetadataValue } = await server.ssrLoadModule(
+    '/src/features/catalog/components/ExecutionMetadataDetails.tsx',
+  );
+  const fullHash = 'f82d08e57d8428fc1d24d348d28a91d7a3bbef00';
+
+  assert.equal(isAbbreviatedCommitHash(fullHash), false);
+  assert.equal(isAbbreviatedCommitHash('a'.repeat(64)), false);
+  assert.equal(isAbbreviatedCommitHash('f82d08e57d'), true);
+  assert.equal(isAbbreviatedCommitHash(`${fullHash}0`), true);
+
+  const render = (props) => renderToStaticMarkup(createElement(CopyableMetadataValue, props));
+  const short = render({ label: 'Model Hash', value: 'f82d08e57d', abbreviated: true });
+  assert.match(short, /f82d08e57d<span[^>]*>\(abbreviated\)<\/span>/);
+  assert.match(short, /aria-label="Copy full Model Hash"/);
+
+  const full = render({ label: 'Model Hash', value: fullHash, abbreviated: false });
+  assert.match(full, new RegExp(fullHash));
+  assert.doesNotMatch(full, /abbreviated/);
+
+  const missing = render({ label: 'Source Code Path', value: null });
+  assert.match(missing, /—/);
+  assert.doesNotMatch(missing, /<button/);
+});
+
 test('case metadata keeps compset alias and long name aligned with execution fields', async () => {
   const { CaseConfigurationSummary } = await server.ssrLoadModule(
     '/src/features/catalog/components/CaseConfiguration.tsx',

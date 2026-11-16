@@ -3693,6 +3693,11 @@ class TestGetExecution:
         assert data["gitCommitHash"] == "abc123"
         assert data["sourceCodePath"] == "/model/source"
 
+        items = client.get(
+            f"{API_BASE}/executions", params={"case_id": str(case.id)}
+        ).json()["items"]
+        assert items[0]["sourceCodePath"] == "/model/source"
+
     def test_endpoint_reports_deterministic_only_capabilities_when_llm_misconfigured(
         self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch
     ):

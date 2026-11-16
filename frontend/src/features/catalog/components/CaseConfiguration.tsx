@@ -28,7 +28,7 @@ import type {
   SimulationDurationOut,
 } from '@/types';
 
-// Compare stored technical metadata only; extraction belongs to #443.
+// Compare stored technical metadata only.
 
 export const CaseConfigurationSummary = ({
   record,

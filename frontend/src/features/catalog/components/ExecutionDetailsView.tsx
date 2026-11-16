@@ -31,6 +31,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { isAbbreviatedCommitHash } from '@/features/catalog/caseUtils';
 import { EditableExternalLinkList } from '@/features/catalog/components/EditableExternalLinkList';
 import { ExecutionPathCard } from '@/features/catalog/components/ExecutionPathCard';
 import {
@@ -1269,7 +1270,46 @@ export const ExecutionDetailsView = ({
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
                         Git Commit Hash:
                       </Label>
-                      <ReadonlyText value={execution.gitCommitHash} />
+                      <ReadonlyInput value={execution.gitCommitHash} />
+                      {execution.gitCommitHash && (
+                        <>
+                          {isAbbreviatedCommitHash(execution.gitCommitHash) && (
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              (abbreviated)
+                            </span>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={() =>
+                              navigator.clipboard.writeText(execution.gitCommitHash ?? '')
+                            }
+                            title="Copy full Git Commit Hash"
+                          >
+                            Copy
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="min-w-[100px] text-xs text-muted-foreground">
+                        Source Code Path:
+                      </Label>
+                      <ReadonlyInput value={execution.sourceCodePath} />
+                      {execution.sourceCodePath && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() =>
+                            navigator.clipboard.writeText(execution.sourceCodePath ?? '')
+                          }
+                          title="Copy full Source Code Path"
+                        >
+                          Copy
+                        </Button>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
