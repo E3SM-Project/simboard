@@ -191,6 +191,40 @@ def test_repository_repair_is_audited_and_idempotent(db, source):
     assert backfill_record(request, db, user)["outcome"] == "unchanged"
 
 
+def test_initialization_repair_dry_run_apply_and_repeat(db):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    execution.initialization_type = "hybrid"
+    db.commit()
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["initialization"],
+        values={"initialization_type": "restart"},
+        expected={"initialization_type": "hybrid"},
+    )
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+    request.overwrite = True
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.initialization_type == "hybrid"
+    assert db.query(MetadataChange).count() == 0
+    request.dry_run = False
+    assert backfill_record(request, db, user)["outcome"] == "changed"
+    db.refresh(execution)
+    assert execution.initialization_type == "restart"
+    change = db.query(MetadataChange).one()
+    assert (change.field_name, change.old_value, change.new_value) == (
+        "initialization_type",
+        "hybrid",
+        "restart",
+    )
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+
+
 def test_backfill_preserves_year_zero_dates_and_history(db):
     user, machine, case, execution = _owners(db)
     user.role = UserRole.ADMIN

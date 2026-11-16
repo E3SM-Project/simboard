@@ -24,6 +24,7 @@ class MetadataValues(BaseModel):
     git_repository_source: str | None = None
     grid_long_name: str | None = None
     grid_alias: str | None = None
+    initialization_type: str | None = Field(default=None, max_length=50, min_length=1)
 
     @model_validator(mode="after")
     def ordered_dates(self):
@@ -44,9 +45,14 @@ class MetadataUpdate(BaseModel):
     execution_id: str = Field(min_length=1)
     fields: list[
         Literal[
-            "simulation-dates", "run-script", "component-set", "git-repository", "grid"
+            "simulation-dates",
+            "run-script",
+            "component-set",
+            "git-repository",
+            "grid",
+            "initialization",
         ]
-    ] = Field(min_length=1, max_length=5)
+    ] = Field(min_length=1, max_length=6)
     values: MetadataValues
     expected: MetadataValues
     overwrite: bool = False
@@ -102,6 +108,7 @@ def stored_values(execution: Execution) -> MetadataValues:
         git_repository_source=execution.git_repository_source,
         grid_long_name=execution.grid_long_name,
         grid_alias=execution.grid_alias,
+        initialization_type=execution.initialization_type,
     )
 
 
@@ -191,6 +198,8 @@ def update_metadata(
     if "git-repository" in payload.fields:
         names.append("git_repository_source")
     names.extend(_grid_fields(old, payload))
+    if "initialization" in payload.fields:
+        names.append("initialization_type")
 
     for name in names:
         before = getattr(old, name)

@@ -58,6 +58,15 @@ FIELD_NAMES = {
     "component-set": ("compset_long_name", "compset_alias"),
     "git-repository": ("git_repository_source",),
     "grid": ("grid_long_name", "grid_alias"),
+    "initialization": ("initialization_type",),
+}
+FIELD_FILES = {
+    "simulation-dates": ("case_docs_env_run", "cpl_log"),
+    "run-script": (),
+    "component-set": ("readme_case",),
+    "git-repository": ("git_config",),
+    "grid": ("readme_case", "case_docs_env_build"),
+    "initialization": ("case_docs_env_run",),
 }
 
 
@@ -83,6 +92,7 @@ def main() -> int:
             "component-set",
             "git-repository",
             "grid",
+            "initialization",
         ],
         required=True,
     )
@@ -144,15 +154,7 @@ def _read_execution(path: Path, machine: str | None, fields: list[str]):
     Enforce the expected machine when provided; bootstrap accepts any source machine.
     """
     keys = ["case_docs_env_case", "e3sm_timing"]
-
-    if "simulation-dates" in fields:
-        keys.extend(["case_docs_env_run", "cpl_log"])
-    if "component-set" in fields or "grid" in fields:
-        keys.append("readme_case")
-    if "grid" in fields:
-        keys.append("case_docs_env_build")
-    if "git-repository" in fields:
-        keys.append("git_config")
+    keys.extend(dict.fromkeys(key for field in fields for key in FIELD_FILES[field]))
 
     directories = _find_casedocs_dirs(str(path))
     watched = [path, *(Path(directory) for directory in directories)]
@@ -546,6 +548,10 @@ def _observed_values(record: dict, args: argparse.Namespace) -> dict:
                 observations[-1].update(
                     grid_long_name=parsed.grid_long_name,
                     grid_alias=parsed.grid_alias,
+                )
+            if "initialization" in args.fields:
+                observations[-1].update(
+                    initialization_type=parsed.initialization_type,
                 )
         except (ValueError, OSError) as exc:
             raise ValueError(f"Cannot safely backfill from {path}: {exc}") from exc
