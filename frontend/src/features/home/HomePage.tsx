@@ -2,6 +2,7 @@ import { ArrowRight, FolderOpen, Upload } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
+import { DiagnosticsAvailableIcon } from '@/components/shared/DiagnosticsAvailableIcon';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -303,7 +304,10 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
                 {recentCases.map((caseRecord) => (
                   <TableRow key={caseRecord.id}>
                     <TableCell className="align-top">
-                      <TableCellText value={caseRecord.name} lines={1} />
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <TableCellText value={caseRecord.name} lines={1} />
+                        {caseRecord.hasDiagnostics ? <DiagnosticsAvailableIcon /> : null}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {caseRecord.lastExecution

@@ -1089,6 +1089,7 @@ class TestListCases:
             case.name for case in sorted(cases, key=lambda case: case.id)[:6]
         ]
         assert all(item["latestExecution"] is None for item in data["recentCases"])
+        assert all(item["hasDiagnostics"] is False for item in data["recentCases"])
 
     def test_overview_orders_by_latest_execution_activity(
         self, client, db: Session, normal_user_sync, admin_user_sync
@@ -1140,13 +1141,28 @@ class TestListCases:
         )
 
     def test_has_diagnostics_lists_only_cases_with_diagnostic_links(
-        self, client, db: Session
+        self, client, db: Session, normal_user_sync, admin_user_sync
     ):
         with_diagnostic = _create_case(db, "with_diagnostic")
         with_other_link = _create_case(db, "with_other_link")
         _create_case(db, "without_links")
+        # Execution-owned diagnostic links do not count; only case-level ones do.
+        execution = _create_execution_record(
+            db,
+            case=with_other_link,
+            ingestion_id=_create_ingestion(
+                db, with_other_link.machine_id, normal_user_sync["id"]
+            ).id,
+            created_by=normal_user_sync["id"],
+            last_updated_by=admin_user_sync["id"],
+        )
         db.add_all(
             [
+                ExternalLink(
+                    execution_id=execution.id,
+                    kind=ExternalLinkKind.DIAGNOSTIC,
+                    url="https://example.com/execution-diagnostic",
+                ),
                 ExternalLink(
                     case_id=with_diagnostic.id,
                     kind=ExternalLinkKind.DIAGNOSTIC,
@@ -1174,6 +1190,13 @@ class TestListCases:
 
         assert {"with_other_link", "without_links"} <= {
             item["name"] for item in everything["items"]
+        }
+        assert {
+            item["name"]: item["hasDiagnostics"] for item in everything["items"]
+        } == {
+            "with_diagnostic": True,
+            "with_other_link": False,
+            "without_links": False,
         }
         assert filtered["total"] == 1
         assert [item["name"] for item in filtered["items"]] == ["with_diagnostic"]

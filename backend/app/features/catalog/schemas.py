@@ -633,6 +633,7 @@ class CaseListItemOut(CamelOutBaseModel):
     machine_name: str
     hpc_username: str
     execution_count: int
+    has_diagnostics: bool = False
     created_at: datetime
     updated_at: datetime
     latest_execution: LatestExecutionSummaryOut | None = None

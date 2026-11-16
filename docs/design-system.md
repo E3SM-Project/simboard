@@ -54,6 +54,7 @@ Use `Button size="sm"` in toolbars and tables. Override primitive classes with `
 
 - Use `Table` primitives inside an `overflow-x-auto` container. Wide tables scroll horizontally instead of hiding columns; optional columns are user-controlled through column menus.
 - Use `TableCellText` for variable-length values, and `table-fixed` with column widths when columns need stable widths.
+- Mark sparse per-row availability with an icon and tooltip beside the identifier, not a dedicated column. See `DiagnosticsAvailableIcon` (`components/shared/`).
 - Use `@tanstack/react-table` for sorted or paginated tables (`features/catalog/CasesPage.tsx`). Simple read-only tables map rows directly.
 - Use `SortableTableHead` for header-sorted tables. With TanStack, pass `column.getIsSorted()` and `column.toggleSorting()` (`features/catalog/CasesPage.tsx`).
 - Expandable rows: an icon `Button` with `aria-expanded` toggles a full-width detail row. See `features/catalog/CasesPage.tsx`.

@@ -162,6 +162,8 @@ export interface CaseListItemOut {
   machineName: string;
   hpcUsername: string;
   executionCount: number;
+  /** True when the case links case-level (zppy-based) diagnostics. */
+  hasDiagnostics: boolean;
   createdAt: string;
   updatedAt: string;
   /**
