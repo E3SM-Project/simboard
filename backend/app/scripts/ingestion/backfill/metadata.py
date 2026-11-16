@@ -195,6 +195,7 @@ def _validate_required_metadata(parsed, path: Path, fields: list[str]) -> None:
     for group, field, entry in (
         ("component-set", "compset_long_name", "COMPSET"),
         ("grid", "grid_long_name", "GRID"),
+        ("initialization", "initialization_type", "RUN_TYPE"),
     ):
         if group in fields and not getattr(parsed, field):
             raise ValueError(f"Missing XML {entry}: {path}")

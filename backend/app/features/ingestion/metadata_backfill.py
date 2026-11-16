@@ -24,7 +24,7 @@ class MetadataValues(BaseModel):
     git_repository_source: str | None = None
     grid_long_name: str | None = None
     grid_alias: str | None = None
-    initialization_type: str | None = Field(default=None, max_length=50, min_length=1)
+    initialization_type: str | None = Field(default=None, max_length=50)
 
     @model_validator(mode="after")
     def ordered_dates(self):
@@ -90,6 +90,15 @@ class MetadataUpdate(BaseModel):
                     raise ValueError(f"Explicit grid pair required in {label}")
             if not self.values.grid_long_name or not self.values.grid_long_name.strip():
                 raise ValueError("Required grid long name missing in values")
+
+        return self
+
+    @model_validator(mode="after")
+    def complete_initialization(self):
+        if "initialization" in self.fields:
+            value = self.values.initialization_type
+            if not value or not value.strip():
+                raise ValueError("Required initialization type missing in values")
 
         return self
 

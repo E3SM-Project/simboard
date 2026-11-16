@@ -144,9 +144,11 @@ def test_initialization_repair_reads_continue_run_not_execution_order(tmp_path):
 
     assert metadata._observed_values(record, args) == {"initialization_type": "restart"}
 
+    # A missing source value fails even when another selected group is readable.
     for path in execution.glob("CaseDocs.*/env_run.xml.*"):
         path.unlink()
-    with pytest.raises(ValueError, match="No requested metadata"):
+    args.fields = ["run-script", "initialization"]
+    with pytest.raises(ValueError, match="Missing XML RUN_TYPE"):
         metadata._observed_values(record, args)
 
 

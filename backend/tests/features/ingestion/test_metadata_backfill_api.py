@@ -225,6 +225,23 @@ def test_initialization_repair_dry_run_apply_and_repeat(db):
     assert backfill_record(request, db, user)["outcome"] == "unchanged"
 
 
+def test_initialization_repair_rejects_empty_value_and_tolerates_stored_empty(db):
+    user, machine, case, execution = _owners(db)
+    execution.initialization_type = ""
+    assert stored_values(execution).initialization_type == ""
+    with pytest.raises(ValueError, match="initialization type"):
+        MetadataUpdate(
+            machine_name=machine.name,
+            record_id=execution.id,
+            case_name=case.name,
+            hpc_username=case.hpc_username,
+            execution_id=execution.execution_id,
+            fields=["initialization"],
+            values={"initialization_type": " "},
+            expected={"initialization_type": ""},
+        )
+
+
 def test_backfill_preserves_year_zero_dates_and_history(db):
     user, machine, case, execution = _owners(db)
     user.role = UserRole.ADMIN
