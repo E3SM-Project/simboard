@@ -4,6 +4,7 @@ import argparse
 import gzip
 import json
 import logging
+import shutil
 import urllib.error
 from argparse import Namespace
 from functools import partial
@@ -54,6 +55,10 @@ def _read_execution_stub(record, path, machine, fields):
 
 def _unreadable_execution(*args):
     raise OSError("unreadable")
+
+
+def _missing_git_log(*args):
+    raise metadata._MissingSourceError("Missing GIT_LOG commit hash")
 
 
 @pytest.mark.parametrize(
@@ -150,6 +155,77 @@ def test_initialization_repair_reads_continue_run_not_execution_order(tmp_path):
     args.fields = ["run-script", "initialization"]
     with pytest.raises(ValueError, match="Missing XML RUN_TYPE"):
         metadata._observed_values(record, args)
+
+
+def test_source_code_repair_reads_srcroot_and_full_git_log_hash(tmp_path):
+    # The real case has SRCROOT and GIT_DESCRIBE but no GIT_LOG.
+    execution = sorted(stage_continuation_case(tmp_path).iterdir())[0]
+    parsed = _read_execution(execution, "chrysalis", [])
+    record = {
+        "case_name": parsed.case_name,
+        "hpc_username": parsed.hpc_username,
+        "execution_id": parsed.execution_id,
+        "error": None,
+        "values": {},
+        "directories": [{"kind": "archive", "path": str(execution)}],
+    }
+    args = Namespace(machine="chrysalis", sources="archive", fields=[])
+
+    args.fields = ["source-code-path"]
+    assert metadata._observed_values(record, args) == {
+        "source_code_path": (
+            "/lcrc/group/e3sm2/ac.kai.zhang/E3SMv3/v3.LR.piClim-histGHG/code/20241217/E3SM"
+        )
+    }
+
+    # The abbreviated GIT_DESCRIBE hash is never a backfill source.
+    args.fields = ["git-commit-hash"]
+    with pytest.raises(metadata._MissingSourceError, match="Missing GIT_LOG"):
+        metadata._observed_values(record, args)
+
+    # Identity checks fail before a missing source can be skipped.
+    record["case_name"] = "other-case"
+    with pytest.raises(ValueError, match="Source identity does not match"):
+        metadata._observed_values(record, args)
+    record["case_name"] = parsed.case_name
+
+    # Another mapped copy supplies the value; the copy without GIT_LOG is not a skip.
+    copy = tmp_path / "copy" / execution.name
+    shutil.copytree(execution, copy)
+    full_hash = "7c4ec379a6" + "0" * 30
+    (copy / f"GIT_LOG.{copy.name}").write_text(f"{full_hash} Subject\n")
+    record["directories"].append({"kind": "archive", "path": str(copy)})
+    assert metadata._observed_values(record, args) == {"git_commit_hash": full_hash}
+
+
+def test_missing_source_is_reported_as_skip_not_failure(monkeypatch, capsys, caplog):
+    record = {"record_id": str(uuid4()), "case_name": "case"}
+    calls = []
+    monkeypatch.setattr(metadata, "_request", partial(_request_stub, record, calls))
+    monkeypatch.setattr(metadata, "_observed_values", _missing_git_log)
+    args = Namespace(
+        v3=False,
+        machine="chrysalis",
+        case_name=None,
+        hpc_username=None,
+        sources="archive",
+        fields=["git-commit-hash"],
+        overwrite=False,
+        apply=False,
+    )
+
+    with caplog.at_level(logging.INFO):
+        assert metadata._backfill_metadata(args, "https://example.test", "token") == 0
+
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert lines[0] == {
+        "record_id": record["record_id"],
+        "outcome": "skipped_missing_source",
+        "reason": "Missing GIT_LOG commit hash",
+    }
+    assert lines[-1] == {"skipped_missing_source": 1, "failed": 0}
+    assert all(payload is None for _, payload in calls)
+    assert "RUN_SUMMARY Skipped missing source: 1" in caplog.text
 
 
 @pytest.mark.parametrize("source", ["readme", "xml-file", "xml-value"])

@@ -255,6 +255,35 @@ make metadata-backfill machine=chrysalis env=dev \
 Review before/after values against `env_run.xml`. Obtain separate authorization
 before replacing `--dry-run` with `--apply` or widening scope.
 
+### Source-code path and model commit hash (#443)
+
+Apply revision `20261116_000000` before starting the new backend. It adds a
+nullable `sourceCodePath` execution field; existing API fields are unchanged.
+
+New ingestion reads `SRCROOT` from `env_case.xml` and the full hash from the first
+`GIT_LOG` line. Without `GIT_LOG`, it stores the abbreviated `GIT_DESCRIBE` hash.
+
+The `source-code-path` group reads `SRCROOT`. The `git-commit-hash` group reads
+only `GIT_LOG`, so backfill never writes an abbreviated hash; the API also rejects
+abbreviated values. When no mapped directory has the source value, the execution
+is reported as `skipped_missing_source`, not a failure, and keeps its stored
+values. Run the groups separately: one missing source skips the whole record.
+Identity mismatches, conflicting directories, and stale expected values still
+fail.
+
+```bash
+make metadata-backfill machine=chrysalis env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--fields source-code-path --sources archive --case-name EXACT_CASE --hpc-username USER --dry-run'
+```
+
+Fill-only mode populates missing paths and hashes. Existing executions already
+store abbreviated hashes, so replacing them with full hashes requires
+`--fields git-commit-hash --overwrite`. Until then, Case Details can show one
+commit as differing values when a case mixes abbreviated and full hashes. Review
+the dry run and obtain separate authorization before replacing `--dry-run` with
+`--apply`.
+
 ### Review and apply
 
 Dry runs resolve owners through the API without writing mappings. **`matched` means the existing owner resolved**, not that a new mapping was inserted.
@@ -356,7 +385,8 @@ not proof that the simulation failed. Missing machine metadata, ambiguous or
 malformed metadata, and permission errors remain failures.
 
 For database-first updates, the summary shows records with **planned changes**
-in dry-run mode, **records changed** in apply mode, unchanged records, and
+in dry-run mode, **records changed** in apply mode, unchanged records, records
+skipped for a missing optional source (`skipped_missing_source`), and
 record/request failures. Matched owners and planned changes do not mean writes
 occurred during a dry run.
 

@@ -171,6 +171,7 @@ def _parsed_executions_from_mapping(
                 output_path=metadata.get("output_path"),
                 archive_path=metadata.get("archive_path"),
                 case_root=metadata.get("case_root"),
+                source_code_path=metadata.get("source_code_path"),
                 run_script_path=metadata.get("run_script_path"),
                 postprocessing_script=metadata.get("postprocessing_script"),
                 case_hash=metadata.get("case_hash"),
@@ -854,6 +855,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
                 "git_branch": "main",
                 "git_tag": "v1.0.0",
                 "git_commit_hash": "abc123",
+                "source_code_path": "/model/source",
                 "created_by": "user1",
                 "last_updated_by": "user2",
             }
@@ -878,6 +880,7 @@ class TestIngestArchiveContinued(TestIngestArchive):
             assert ingest_result.executions[0].git_branch == "main"
             assert ingest_result.executions[0].git_tag == "v1.0.0"
             assert ingest_result.executions[0].git_commit_hash == "abc123"
+            assert ingest_result.executions[0].source_code_path == "/model/source"
 
             # Verify case_group is stored on the Case, not the Execution
             case = db.query(Case).filter(Case.name == "case1").first()

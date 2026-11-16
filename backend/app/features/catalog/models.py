@@ -165,6 +165,7 @@ class Execution(Base, IDMixin, TimestampMixin):
     git_branch: Mapped[str | None] = mapped_column(String(200))
     git_tag: Mapped[str | None] = mapped_column(String(100))
     git_commit_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    source_code_path: Mapped[str | None] = mapped_column(Text)
 
     # Provenance & submission
     # ~~~~~~~~~~~~~~~~~~~~~~~

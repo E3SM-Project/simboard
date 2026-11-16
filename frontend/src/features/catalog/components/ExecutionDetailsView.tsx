@@ -31,6 +31,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { CommitHashHelp } from '@/features/catalog/components/CommitHashHelp';
 import { EditableExternalLinkList } from '@/features/catalog/components/EditableExternalLinkList';
 import { ExecutionPathCard } from '@/features/catalog/components/ExecutionPathCard';
 import {
@@ -1200,40 +1201,6 @@ export const ExecutionDetailsView = ({
                         </Button>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Label className="min-w-[100px] text-xs text-muted-foreground">
-                        Case ID:
-                      </Label>
-                      <ReadonlyInput value={execution.caseId} />
-                      {execution.caseId && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          type="button"
-                          onClick={() => navigator.clipboard.writeText(execution.caseId)}
-                          title="Copy full Case ID"
-                        >
-                          Copy
-                        </Button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Label className="min-w-[100px] text-xs text-muted-foreground">
-                        Machine ID:
-                      </Label>
-                      <ReadonlyInput value={execution.machineId} />
-                      {execution.machineId && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          type="button"
-                          onClick={() => navigator.clipboard.writeText(execution.machineId)}
-                          title="Copy full Machine ID"
-                        >
-                          Copy
-                        </Button>
-                      )}
-                    </div>
 
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
@@ -1266,10 +1233,45 @@ export const ExecutionDetailsView = ({
                       <ReadonlyText value={execution.gitTag} />
                     </div>
                     <div className="flex items-center gap-2">
+                      <div className="flex min-w-[100px] items-center text-xs text-muted-foreground">
+                        <Label className="text-xs text-muted-foreground">Git Commit Hash</Label>
+                        <CommitHashHelp hash={execution.gitCommitHash} />:
+                      </div>
+                      <ReadonlyInput value={execution.gitCommitHash} />
+                      {execution.gitCommitHash && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            type="button"
+                            onClick={() =>
+                              navigator.clipboard.writeText(execution.gitCommitHash ?? '')
+                            }
+                            title="Copy full Git Commit Hash"
+                          >
+                            Copy
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
-                        Git Commit Hash:
+                        Source Code Path:
                       </Label>
-                      <ReadonlyText value={execution.gitCommitHash} />
+                      <ReadonlyInput value={execution.sourceCodePath} />
+                      {execution.sourceCodePath && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() =>
+                            navigator.clipboard.writeText(execution.sourceCodePath ?? '')
+                          }
+                          title="Copy full Source Code Path"
+                        >
+                          Copy
+                        </Button>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">

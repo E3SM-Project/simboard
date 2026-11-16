@@ -1,5 +1,6 @@
 """Narrow updates to existing execution metadata, never ingestion state."""
 
+import re
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
@@ -11,6 +12,14 @@ from app.common.model_dates import ModelDate
 from app.features.catalog.enums import ArtifactKind
 from app.features.catalog.history import changed_metadata, snapshot_metadata
 from app.features.catalog.models import Artifact, Execution, MetadataChange
+
+# Groups that update one stored scalar from one source value.
+SCALAR_FIELDS = {
+    "git-repository": "git_repository_source",
+    "initialization": "initialization_type",
+    "source-code-path": "source_code_path",
+    "git-commit-hash": "git_commit_hash",
+}
 
 
 class MetadataValues(BaseModel):
@@ -25,6 +34,8 @@ class MetadataValues(BaseModel):
     grid_long_name: str | None = None
     grid_alias: str | None = None
     initialization_type: str | None = Field(default=None, max_length=50)
+    source_code_path: str | None = None
+    git_commit_hash: str | None = Field(default=None, max_length=64)
 
     @model_validator(mode="after")
     def ordered_dates(self):
@@ -51,8 +62,10 @@ class MetadataUpdate(BaseModel):
             "git-repository",
             "grid",
             "initialization",
+            "source-code-path",
+            "git-commit-hash",
         ]
-    ] = Field(min_length=1, max_length=6)
+    ] = Field(min_length=1, max_length=8)
     values: MetadataValues
     expected: MetadataValues
     overwrite: bool = False
@@ -102,6 +115,23 @@ class MetadataUpdate(BaseModel):
 
         return self
 
+    @model_validator(mode="after")
+    def complete_source_code(self):
+        for group, name in (
+            ("source-code-path", "source_code_path"),
+            ("git-commit-hash", "git_commit_hash"),
+        ):
+            value = getattr(self.values, name)
+            if group in self.fields and (not value or not value.strip()):
+                raise ValueError(f"Required {name} missing in values")
+        # Stored values may be abbreviated; repairs must write full hashes.
+        if "git-commit-hash" in self.fields and not re.fullmatch(
+            r"[0-9a-f]{40}|[0-9a-f]{64}", self.values.git_commit_hash or ""
+        ):
+            raise ValueError("Full git_commit_hash required in values")
+
+        return self
+
 
 def stored_values(execution: Execution) -> MetadataValues:
     scripts = [a for a in execution.artifacts if a.kind == ArtifactKind.RUN_SCRIPT]
@@ -118,6 +148,8 @@ def stored_values(execution: Execution) -> MetadataValues:
         grid_long_name=execution.grid_long_name,
         grid_alias=execution.grid_alias,
         initialization_type=execution.initialization_type,
+        source_code_path=execution.source_code_path,
+        git_commit_hash=execution.git_commit_hash,
     )
 
 
@@ -204,11 +236,10 @@ def update_metadata(
     if "run-script" in payload.fields:
         names.append("run_script")
     names.extend(_component_set_fields(old, payload))
-    if "git-repository" in payload.fields:
-        names.append("git_repository_source")
     names.extend(_grid_fields(old, payload))
-    if "initialization" in payload.fields:
-        names.append("initialization_type")
+    names.extend(
+        name for group, name in SCALAR_FIELDS.items() if group in payload.fields
+    )
 
     for name in names:
         before = getattr(old, name)

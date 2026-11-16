@@ -6,7 +6,11 @@ from fastapi import HTTPException
 from app.api.metadata_backfill import backfill_record, list_records
 from app.features.catalog.enums import ArtifactKind
 from app.features.catalog.models import Artifact, MetadataChange
-from app.features.ingestion.metadata_backfill import MetadataUpdate, stored_values
+from app.features.ingestion.metadata_backfill import (
+    MetadataUpdate,
+    MetadataValues,
+    stored_values,
+)
 from app.features.user.models import UserRole
 from tests.features.ingestion.test_source_directory_api import _owners
 
@@ -239,6 +243,79 @@ def test_initialization_repair_rejects_empty_value_and_tolerates_stored_empty(db
             fields=["initialization"],
             values={"initialization_type": " "},
             expected={"initialization_type": ""},
+        )
+
+
+def test_source_code_repair_fills_and_requires_overwrite_for_full_hash(db):
+    user, machine, case, execution = _owners(db)
+    user.role = UserRole.ADMIN
+    execution.git_commit_hash = "7c4ec379a6"
+    execution.source_code_path = None
+    db.commit()
+    full_hash = "7c4ec379a6" + "0" * 30
+    request = MetadataUpdate(
+        machine_name=machine.name,
+        record_id=execution.id,
+        case_name=case.name,
+        hpc_username=case.hpc_username,
+        execution_id=execution.execution_id,
+        fields=["source-code-path", "git-commit-hash"],
+        values={"source_code_path": "/model/source", "git_commit_hash": full_hash},
+        expected={"source_code_path": None, "git_commit_hash": "7c4ec379a6"},
+        dry_run=False,
+    )
+
+    # Fill-only mode populates the path but keeps the stored abbreviated hash.
+    assert backfill_record(request, db, user)["changes"] == {
+        "source_code_path": {"before": None, "after": "/model/source"}
+    }
+    db.refresh(execution)
+    assert execution.git_commit_hash == "7c4ec379a6"
+
+    request.overwrite = True
+    request.expected = MetadataValues(
+        source_code_path="/model/source", git_commit_hash="7c4ec379a6"
+    )
+    assert backfill_record(request, db, user)["changes"] == {
+        "git_commit_hash": {"before": "7c4ec379a6", "after": full_hash}
+    }
+    db.refresh(execution)
+    assert execution.git_commit_hash == full_hash
+    assert {
+        (change.field_name, change.new_value)
+        for change in db.query(MetadataChange).all()
+    } == {("source_code_path", "/model/source"), ("git_commit_hash", full_hash)}
+    assert backfill_record(request, db, user)["outcome"] == "unchanged"
+
+
+def test_commit_hash_repair_rejects_abbreviated_values(db):
+    user, machine, case, execution = _owners(db)
+    with pytest.raises(ValueError, match="Full git_commit_hash"):
+        MetadataUpdate(
+            machine_name=machine.name,
+            record_id=execution.id,
+            case_name=case.name,
+            hpc_username=case.hpc_username,
+            execution_id=execution.execution_id,
+            fields=["git-commit-hash"],
+            values={"git_commit_hash": "7c4ec379a6"},
+            expected={"git_commit_hash": None},
+        )
+
+
+@pytest.mark.parametrize("field", ["source-code-path", "git-commit-hash"])
+def test_source_code_repair_rejects_missing_values(db, field):
+    user, machine, case, execution = _owners(db)
+    with pytest.raises(ValueError, match="missing in values"):
+        MetadataUpdate(
+            machine_name=machine.name,
+            record_id=execution.id,
+            case_name=case.name,
+            hpc_username=case.hpc_username,
+            execution_id=execution.execution_id,
+            fields=[field],
+            values={},
+            expected={},
         )
 
 

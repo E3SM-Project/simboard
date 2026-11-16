@@ -19,6 +19,8 @@ import {
   getConfigurationBaseline,
   getConfigurationDiffParts,
 } from '@/features/catalog/caseUtils';
+import { CommitHashHelp } from '@/features/catalog/components/CommitHashHelp';
+import { CopyValueButton } from '@/features/catalog/components/CopyValueButton';
 import { executionDetailsPath, type ReadableCaseIdentity } from '@/lib/catalog/urls';
 import type {
   CaseDetailOut,
@@ -28,7 +30,8 @@ import type {
   SimulationDurationOut,
 } from '@/types';
 
-// Compare stored technical metadata only; extraction belongs to #443.
+// Compare stored technical metadata only.
+const COPYABLE_FIELDS = new Set(['source_code_path', 'git_commit_hash']);
 
 export const CaseConfigurationSummary = ({
   record,
@@ -76,9 +79,21 @@ export const CaseConfigurationSummary = ({
     <SummaryField label="HPC Username">
       {record.hpcUsernames.join(', ') || 'Unavailable'}
     </SummaryField>
-    {CONFIGURATION_FIELDS.slice(0, 4).map(([field, label]) => (
-      <SummaryField key={field} label={label}>
-        <SharedConfigurationValue record={record} field={field} identity={identity} />
+    {CONFIGURATION_FIELDS.map(([field, label]) => (
+      <SummaryField
+        key={field}
+        label={label}
+        help={
+          field === 'git_commit_hash' ? (
+            <CommitHashHelp
+              hash={
+                configurationFieldDiffers(record, field) ? null : sharedSource(record, field)?.value
+              }
+            />
+          ) : null
+        }
+      >
+        <SharedConfigurationValue record={record} field={field} label={label} identity={identity} />
       </SummaryField>
     ))}
   </dl>
@@ -239,9 +254,20 @@ export const CaseHashConfigurationDifferences = ({
   );
 };
 
-const SummaryField = ({ label, children }: { label: string; children: React.ReactNode }) => (
+const SummaryField = ({
+  label,
+  help,
+  children,
+}: {
+  label: string;
+  help?: React.ReactNode;
+  children: React.ReactNode;
+}) => (
   <div className="min-w-0 space-y-1">
-    <dt className="text-[13px] font-semibold leading-4 text-muted-foreground">{label}</dt>
+    <dt className="text-[13px] font-semibold leading-4 text-muted-foreground">
+      {label}
+      {help}
+    </dt>
     <dd className="text-sm font-normal leading-5 text-foreground [overflow-wrap:anywhere]">
       {children}
     </dd>
@@ -251,17 +277,18 @@ const SummaryField = ({ label, children }: { label: string; children: React.Reac
 const SharedConfigurationValue = ({
   record,
   field,
+  label,
   identity,
 }: {
   record: CaseDetailOut;
   field: string;
+  label: string;
   identity?: ReadableCaseIdentity;
 }) => {
   const summary = record.sharedConfiguration?.[field];
   const differs = configurationFieldDiffers(record, field);
   const groups = record.configurationGroups ?? [];
-  const source = groups.find((group) => group.configuration[field]?.source)?.configuration[field]
-    ?.source;
+  const source = sharedSource(record, field);
   const value = summary?.value ?? source?.value ?? 'Unavailable';
   const changingGroups = groups.filter((group) => group.configuration[field]?.differences.length);
 
@@ -304,6 +331,9 @@ const SharedConfigurationValue = ({
       ) : (
         value
       )}
+      {!differs && source && COPYABLE_FIELDS.has(field) ? (
+        <CopyValueButton label={label} value={source.value} />
+      ) : null}
       {summary?.incomplete && (summary.value != null || differs) ? (
         <span className="block text-xs font-normal text-muted-foreground">
           Some executions unavailable
@@ -379,6 +409,11 @@ const SimulatedDurationValue = ({
     </TooltipProvider>
   );
 };
+
+const sharedSource = (record: CaseDetailOut, field: string) =>
+  record.configurationGroups?.find((group) => group.configuration[field]?.source)?.configuration[
+    field
+  ]?.source;
 
 const groupLabel = (group: CaseHashConfigurationOut) =>
   group.caseHash ?? `Missing Case Hash: ${group.executionIds[0]}`;

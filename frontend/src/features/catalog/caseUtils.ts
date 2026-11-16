@@ -25,10 +25,14 @@ export const CASE_CONFIGURATION_FIELDS = [
   ['compset_long_name', 'Compset Long Name'],
   ['grid_alias', 'Grid Alias'],
   ['grid_long_name', 'Grid Long Name'],
-  ['source_code_path', 'Source code path'],
-  ['git_commit_hash', 'Model hash'],
-  ['git_tag', 'Model tag'],
+  ['source_code_path', 'Source Code Path'],
+  ['git_commit_hash', 'Git Commit Hash'],
+  ['git_tag', 'Git Tag'],
 ] as const;
+
+// Anything other than a full 40/64-hex Git hash is treated as abbreviated.
+export const isAbbreviatedCommitHash = (value: string) =>
+  !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value);
 
 export interface CaseHashConfigurationDifference {
   field: string;

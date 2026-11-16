@@ -397,6 +397,10 @@ class ExecutionCreate(CamelInBaseModel):
             None, description="Optional Git commit hash associated with the execution"
         ),
     ]
+    source_code_path: Annotated[
+        str | None,
+        Field(None, description="Model source root directory from SRCROOT"),
+    ]
 
     # Provenance & submission
     # -----------------------
@@ -698,6 +702,7 @@ class ExecutionListItemOut(CamelOutBaseModel):
     git_branch: str | None = None
     git_tag: str | None = None
     git_commit_hash: str | None = None
+    source_code_path: str | None = None
     machine_id: UUID
     machine_name: str
     hpc_username: str
@@ -1179,6 +1184,10 @@ class ExecutionOut(CamelOutBaseModel):
         Field(
             None, description="Optional Git commit hash associated with the execution"
         ),
+    ]
+    source_code_path: Annotated[
+        str | None,
+        Field(None, description="Model source root directory from SRCROOT"),
     ]
 
     # Provenance & submission

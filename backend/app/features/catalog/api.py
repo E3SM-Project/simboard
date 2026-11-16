@@ -1154,6 +1154,7 @@ def _list_executions(  # noqa: C901
         Execution.git_branch,
         Execution.git_tag,
         Execution.git_commit_hash,
+        Execution.source_code_path,
         Case.machine_id,
         Machine.name.label("machine_name"),
         Case.hpc_username,

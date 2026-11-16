@@ -462,6 +462,99 @@ test('configuration table labels its reference and marks only changed values', a
   assert.match(cells[3], /<mark\b[^>]*>Unavailable<\/mark>/);
 });
 
+test('source path and model hash show copy actions and explain abbreviated hashes', async () => {
+  const { isAbbreviatedCommitHash } = await server.ssrLoadModule(
+    '/src/features/catalog/caseUtils.ts',
+  );
+  const { CopyableMetadataValue } = await server.ssrLoadModule(
+    '/src/features/catalog/components/ExecutionMetadataDetails.tsx',
+  );
+  const { CommitHashHelp } = await server.ssrLoadModule(
+    '/src/features/catalog/components/CommitHashHelp.tsx',
+  );
+  const { CaseConfigurationSummary } = await server.ssrLoadModule(
+    '/src/features/catalog/components/CaseConfiguration.tsx',
+  );
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const fullHash = 'f82d08e57d8428fc1d24d348d28a91d7a3bbef00';
+
+  assert.equal(isAbbreviatedCommitHash(fullHash), false);
+  assert.equal(isAbbreviatedCommitHash('a'.repeat(64)), false);
+  assert.equal(isAbbreviatedCommitHash('f82d08e57d'), true);
+  assert.equal(isAbbreviatedCommitHash(`${fullHash}0`), true);
+  assert.equal(isAbbreviatedCommitHash(fullHash.toUpperCase()), true);
+
+  const render = (props) => renderToStaticMarkup(createElement(CopyableMetadataValue, props));
+  const short = render({
+    label: 'Git Commit Hash',
+    value: 'f82d08e57d',
+    help: createElement(CommitHashHelp, { hash: 'f82d08e57d' }),
+  });
+  assert.match(short, /aria-label="About this abbreviated commit hash"/);
+  assert.match(short, /aria-label="Copy Git Commit Hash"/);
+  assert.doesNotMatch(short, /\(abbreviated\)/);
+  assert.match(
+    renderToStaticMarkup(createElement(CommitHashHelp, { hash: fullHash })),
+    /aria-label="About this commit hash"/,
+  );
+
+  const missing = render({ label: 'Source Code Path', value: null });
+  assert.match(missing, /—/);
+  assert.doesNotMatch(missing, /<button/);
+
+  const observation = (value) => ({
+    source: { value, executionUuid: 'run-1', executionId: 'run-1', runDate: null },
+    differences: [],
+    missingExecutionIds: [],
+  });
+  const configuration = {
+    source_code_path: observation('/model/source'),
+    git_commit_hash: observation(fullHash),
+    git_tag: observation('v3.0.2'),
+  };
+  const group = (key, values) => ({
+    key,
+    caseHash: key,
+    executionIds: ['run-1'],
+    configuration: values,
+  });
+  const summary = (groups) =>
+    renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        null,
+        createElement(CaseConfigurationSummary, {
+          record: {
+            machineNames: ['m'],
+            hpcUsernames: ['u'],
+            latestExecution: null,
+            configurationGroups: groups,
+          },
+          identity: { machineName: 'm', hpcUsername: 'u', caseName: 'case' },
+        }),
+      ),
+    );
+
+  const shared = summary([group('aaa', configuration)]);
+  for (const label of ['Source Code Path', 'Git Commit Hash', 'Git Tag']) {
+    assert.match(shared, new RegExp(`<dt[^>]*>${label}<`));
+  }
+  assert.match(shared, /\/model\/source/);
+  assert.match(shared, /v3\.0\.2/);
+  assert.match(shared, /aria-label="Copy Source Code Path"/);
+  assert.match(shared, /aria-label="Copy Git Commit Hash"/);
+  assert.match(shared, /aria-label="About this commit hash"/);
+  assert.doesNotMatch(shared, /aria-label="Copy Git Tag"/);
+
+  const differing = summary([
+    group('aaa', configuration),
+    group('bbb', { ...configuration, git_commit_hash: observation('a'.repeat(40)) }),
+  ]);
+  assert.match(differing, /Differs by case hash/);
+  assert.doesNotMatch(differing, /aria-label="Copy Git Commit Hash"/);
+  assert.match(differing, /aria-label="Copy Source Code Path"/);
+});
+
 test('case metadata keeps compset alias and long name aligned with execution fields', async () => {
   const { CaseConfigurationSummary } = await server.ssrLoadModule(
     '/src/features/catalog/components/CaseConfiguration.tsx',

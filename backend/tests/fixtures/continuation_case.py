@@ -49,6 +49,7 @@ ENV_CASE = """<config>
   <entry id="REALUSER" value="ac.kai.zhang" />
   <entry id="CASE_HASH" value="f5f0d5b7eeb4c9527af168a441a914ca67dc03c62c56ace5a176151e52cc9409" />
   <entry id="COMPSET" value="20TRSOI_EAM%CMIP6-GHG_ELM%CNPRDCTCBCTOP_MPASSI%PRES_DOCN%DOM_MOSART_SGLC_SWAV_SIAC_SESP" />
+  <entry id="SRCROOT" value="/lcrc/group/e3sm2/ac.kai.zhang/E3SMv3/v3.LR.piClim-histGHG/code/20241217/E3SM" />
 </config>
 """
 ENV_BUILD = """<config>

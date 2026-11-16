@@ -45,6 +45,26 @@ def parse_git_describe(describe_path: str | Path) -> dict[str, str | None]:
     return result
 
 
+def parse_git_log(log_path: str | Path) -> dict[str, str | None]:
+    """Parse the full model commit hash from the first GIT_LOG line.
+
+    Parameters
+    ----------
+    log_path : str or Path
+        Path to the GIT_LOG file.
+
+    Returns
+    -------
+    dict[str, str | None]
+        Dictionary with the full commit hash, or None if the first line is
+        missing or malformed.
+    """
+    lines = _open_text(Path(log_path)).splitlines()
+    match = re.match(r"([0-9a-f]{64}|[0-9a-f]{40})\b", lines[0]) if lines else None
+
+    return {"git_log_commit_hash": match.group(1) if match else None}
+
+
 def parse_git_status(status_path: str | Path) -> dict[str, str | None]:
     """Parse GIT_STATUS file for current branch.
 

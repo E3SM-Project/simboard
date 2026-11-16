@@ -31,6 +31,7 @@ class ParsedExecution:
     output_path: str | None = None
     archive_path: str | None = None
     case_root: str | None = None
+    source_code_path: str | None = None
     postprocessing_script: str | None = None
     case_hash: str | None = None
     run_script_path: str | None = None

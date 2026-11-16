@@ -1,7 +1,10 @@
 import { Info } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CommitHashHelp } from '@/features/catalog/components/CommitHashHelp';
+import { CopyValueButton } from '@/features/catalog/components/CopyValueButton';
 import {
   EXECUTION_METADATA_FIELDS,
   type ExecutionCandidate,
@@ -19,6 +22,7 @@ export const ExecutionMetadataDetails = ({
   discovery: ReturnType<typeof getExecutionDiscoveryContext>;
 }) => {
   const summary = getExecutionSummary(candidate, discovery);
+  const modelHash = knownExecutionValue(candidate.details?.gitCommitHash);
 
   return (
     <Popover>
@@ -69,8 +73,38 @@ export const ExecutionMetadataDetails = ({
               {knownExecutionValue(candidate.details?.gridLongName) ?? '—'}
             </dd>
           </div>
+          <CopyableMetadataValue
+            label="Source Code Path"
+            value={knownExecutionValue(candidate.details?.sourceCodePath)}
+          />
+          <CopyableMetadataValue
+            label="Git Commit Hash"
+            value={modelHash}
+            help={modelHash ? <CommitHashHelp hash={modelHash} /> : null}
+          />
         </dl>
       </PopoverContent>
     </Popover>
   );
 };
+
+export const CopyableMetadataValue = ({
+  label,
+  value,
+  help,
+}: {
+  label: string;
+  value: string | null;
+  help?: ReactNode;
+}) => (
+  <div>
+    <dt className="inline font-medium">
+      {label}
+      {help}:{' '}
+    </dt>
+    <dd className="inline break-all">
+      {value ?? '—'}
+      {value ? <CopyValueButton label={label} value={value} /> : null}
+    </dd>
+  </div>
+);
