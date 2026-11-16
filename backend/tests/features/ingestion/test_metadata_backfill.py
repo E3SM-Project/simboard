@@ -4,6 +4,7 @@ import argparse
 import gzip
 import json
 import logging
+import shutil
 import urllib.error
 from argparse import Namespace
 from functools import partial
@@ -182,9 +183,18 @@ def test_source_code_repair_reads_srcroot_and_full_git_log_hash(tmp_path):
     with pytest.raises(metadata._MissingSourceError, match="Missing GIT_LOG"):
         metadata._observed_values(record, args)
 
+    # Another mapped copy supplies the value; the copy without GIT_LOG is not a skip.
+    copy = tmp_path / "copy" / execution.name
+    shutil.copytree(execution, copy)
     full_hash = "7c4ec379a6" + "0" * 30
-    (execution / f"GIT_LOG.{execution.name}").write_text(f"{full_hash} Subject\n")
+    (copy / f"GIT_LOG.{copy.name}").write_text(f"{full_hash} Subject\n")
+    record["directories"].append({"kind": "archive", "path": str(copy)})
     assert metadata._observed_values(record, args) == {"git_commit_hash": full_hash}
+
+    # Identity checks still fail before a missing source can be skipped.
+    record["case_name"] = "other-case"
+    with pytest.raises(ValueError, match="Source identity does not match"):
+        metadata._observed_values(record, args)
 
 
 def test_missing_source_is_reported_as_skip_not_failure(monkeypatch, capsys, caplog):

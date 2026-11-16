@@ -264,10 +264,11 @@ New ingestion reads `SRCROOT` from `env_case.xml` and the full hash from the fir
 `GIT_LOG` line. Without `GIT_LOG`, it stores the abbreviated `GIT_DESCRIBE` hash.
 
 The `source-code-path` group reads `SRCROOT`. The `git-commit-hash` group reads
-only `GIT_LOG`, so backfill never writes an abbreviated hash. Executions without
-the source value are reported as `skipped_missing_source`, not failures, and keep
-their stored values. Run the groups separately: one missing source skips the
-whole record. Conflicting directories and stale expected values still fail.
+only `GIT_LOG`, so backfill never writes an abbreviated hash; the API also rejects
+abbreviated values. When no mapped directory has the source value, the execution
+is reported as `skipped_missing_source`, not a failure, and keeps its stored
+values. Run the groups separately: one missing source skips the whole record.
+Identity mismatches, conflicting directories, and stale expected values still fail.
 
 ```bash
 make metadata-backfill machine=chrysalis env=dev \

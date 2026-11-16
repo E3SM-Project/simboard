@@ -130,8 +130,8 @@ FILE_SPECS: dict[str, FileSpec] = {
         "required": True,
     },
     "git_log": {
-        "pattern": r"GIT_LOG\..*",
-        "display_pattern": "GIT_LOG..*",
+        "pattern": r"GIT_LOG\.\d+\.\d+-\d+(?:\.gz)?$",
+        "display_pattern": "GIT_LOG.<execution_id>[.gz]",
         "location": "root",
         "parser": parse_git_log,
         "required": False,

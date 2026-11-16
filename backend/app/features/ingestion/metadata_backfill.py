@@ -1,5 +1,6 @@
 """Narrow updates to existing execution metadata, never ingestion state."""
 
+import re
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
@@ -123,6 +124,11 @@ class MetadataUpdate(BaseModel):
             value = getattr(self.values, name)
             if group in self.fields and (not value or not value.strip()):
                 raise ValueError(f"Required {name} missing in values")
+        # Stored values may be abbreviated; repairs must write full hashes.
+        if "git-commit-hash" in self.fields and not re.fullmatch(
+            r"[0-9a-f]{40}|[0-9a-f]{64}", self.values.git_commit_hash or ""
+        ):
+            raise ValueError("Full git_commit_hash required in values")
 
         return self
 

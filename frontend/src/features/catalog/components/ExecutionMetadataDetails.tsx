@@ -107,7 +107,7 @@ export const CopyableMetadataValue = ({
           className="ml-1 h-5 w-5 align-middle text-muted-foreground"
           aria-label={`Copy full ${label}`}
           title={`Copy full ${label}`}
-          onClick={() => void navigator.clipboard.writeText(value).catch(() => undefined)}
+          onClick={() => void navigator.clipboard?.writeText(value).catch(() => undefined)}
         >
           <Copy className="h-3 w-3" />
         </Button>

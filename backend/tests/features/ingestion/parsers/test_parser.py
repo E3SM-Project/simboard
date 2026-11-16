@@ -365,7 +365,7 @@ class TestMainParser:
             f.write("https://github.com/test/repo")
         with gzip.open(execution_dir / f"GIT_STATUS.{version_base}.gz", "wt") as f:
             f.write("main")
-        with gzip.open(execution_dir / f"GIT_LOG.{version_base}.gz", "wt") as f:
+        with gzip.open(execution_dir / f"GIT_LOG.{execution_dir.name}.gz", "wt") as f:
             f.write(f"{'a' * 40} Subject")
 
     @staticmethod
@@ -1052,6 +1052,7 @@ class TestMainParser:
         assert re.match(spec["pattern"], "GIT_LOG.1.0-0.gz")
         assert re.match(spec["pattern"], "GIT_LOG.1.0-0")
         assert not re.match(spec["pattern"], "GIT_LOGS_HEAD.1.0-0.gz")
+        assert not re.match(spec["pattern"], "GIT_LOG.1.0-0.gz.bak")
 
     def test_case_status_run_dates_override_timing_dates(self, tmp_path: Path) -> None:
         execution_dir = tmp_path / "1.0-0"

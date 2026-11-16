@@ -288,6 +288,21 @@ def test_source_code_repair_fills_and_requires_overwrite_for_full_hash(db):
     assert backfill_record(request, db, user)["outcome"] == "unchanged"
 
 
+def test_commit_hash_repair_rejects_abbreviated_values(db):
+    user, machine, case, execution = _owners(db)
+    with pytest.raises(ValueError, match="Full git_commit_hash"):
+        MetadataUpdate(
+            machine_name=machine.name,
+            record_id=execution.id,
+            case_name=case.name,
+            hpc_username=case.hpc_username,
+            execution_id=execution.execution_id,
+            fields=["git-commit-hash"],
+            values={"git_commit_hash": "7c4ec379a6"},
+            expected={"git_commit_hash": None},
+        )
+
+
 @pytest.mark.parametrize("field", ["source-code-path", "git-commit-hash"])
 def test_source_code_repair_rejects_missing_values(db, field):
     user, machine, case, execution = _owners(db)

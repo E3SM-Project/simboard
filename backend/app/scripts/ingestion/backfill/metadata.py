@@ -211,13 +211,6 @@ def _validate_required_metadata(parsed, path: Path, fields: list[str]) -> None:
         if group in fields and not getattr(parsed, field):
             raise ValueError(f"Missing XML {entry}: {path}")
 
-    for group, field, source in (
-        ("source-code-path", "source_code_path", "XML SRCROOT"),
-        ("git-commit-hash", "git_commit_hash", "GIT_LOG commit hash"),
-    ):
-        if group in fields and not getattr(parsed, field):
-            raise _MissingSourceError(f"Missing {source}: {path}")
-
 
 def _locate_backfill_files(path: Path, directories: list[str], keys: list[str]) -> dict:
     files = {}
@@ -549,9 +542,20 @@ def _observed_values(record: dict, args: argparse.Namespace) -> dict:
         except (ValueError, OSError) as exc:
             raise ValueError(f"Cannot safely backfill from {path}: {exc}") from exc
 
+    _require_optional_sources(observations, args.fields)
     names = [name for group in args.fields for name in FIELD_NAMES[group]]
 
     return _consistent_values(observations, names)
+
+
+def _require_optional_sources(observations: list[dict], fields: list[str]) -> None:
+    """Skip, after identity checks, when no mapped directory has the value."""
+    for group, name, source in (
+        ("source-code-path", "source_code_path", "XML SRCROOT"),
+        ("git-commit-hash", "git_commit_hash", "GIT_LOG commit hash"),
+    ):
+        if group in fields and observations and not any(o[name] for o in observations):
+            raise _MissingSourceError(f"Missing {source}")
 
 
 def _observation(parsed, fields: list[str]) -> dict:
