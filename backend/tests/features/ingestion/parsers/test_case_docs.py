@@ -217,7 +217,30 @@ class TestParseEnvRun:
         result = parse_env_run(path)
         assert result["simulation_start_date"] is None
         assert result["simulation_end_date"] is None
+        assert result["initialization_type"] == "restart"
+
+    @pytest.mark.parametrize("run_type", ["startup", "branch", "hybrid"])
+    @pytest.mark.parametrize(
+        "continue_run", ['<entry id="CONTINUE_RUN" value="FALSE" />', ""]
+    )
+    def test_first_execution_keeps_run_type_and_dates(
+        self, tmp_path, run_type, continue_run
+    ):
+        path = tmp_path / "env_run.xml"
+        path.write_text(f"""<config>
+            <entry id="RUN_TYPE" value="{run_type}" />
+            {continue_run}
+            <entry id="RUN_STARTDATE" value="1850-01-01" />
+            <entry id="RUN_REFDATE" value="0201-01-01" />
+            <entry id="STOP_OPTION" value="nyears" />
+            <entry id="STOP_N" value="1" />
+        </config>""")
+        result = parse_env_run(path)
+        start = "0201-01-01" if run_type == "branch" else "1850-01-01"
+        end = "0202-01-01" if run_type == "branch" else "1851-01-01"
         assert result["initialization_type"] == run_type
+        assert result["simulation_start_date"] == start
+        assert result["simulation_end_date"] == end
 
     def test_extracts_path_artifact_values(self, tmp_path):
         xml_run = """

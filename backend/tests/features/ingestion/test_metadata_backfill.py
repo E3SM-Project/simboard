@@ -127,6 +127,31 @@ def test_grid_repair_reads_sources_not_stored_values(tmp_path, argument, alias):
     assert set(values) == {"grid_long_name", "grid_alias"}
 
 
+def test_initialization_repair_reads_continue_run_not_execution_order(tmp_path):
+    case = stage_continuation_case(tmp_path)
+    # The earliest archived execution is still a continuation in its source XML.
+    execution = sorted(case.iterdir())[0]
+    parsed = _read_execution(execution, "chrysalis", ["initialization"])
+    record = {
+        "case_name": parsed.case_name,
+        "hpc_username": parsed.hpc_username,
+        "execution_id": parsed.execution_id,
+        "error": None,
+        "values": {"initialization_type": "hybrid"},
+        "directories": [{"kind": "archive", "path": str(execution)}],
+    }
+    args = Namespace(machine="chrysalis", sources="archive", fields=["initialization"])
+
+    assert metadata._observed_values(record, args) == {"initialization_type": "restart"}
+
+    # A missing source value fails even when another selected group is readable.
+    for path in execution.glob("CaseDocs.*/env_run.xml.*"):
+        path.unlink()
+    args.fields = ["run-script", "initialization"]
+    with pytest.raises(ValueError, match="Missing XML RUN_TYPE"):
+        metadata._observed_values(record, args)
+
+
 @pytest.mark.parametrize("source", ["readme", "xml-file", "xml-value"])
 def test_grid_repair_requires_readable_sources(tmp_path, source):
     execution = sorted(stage_continuation_case(tmp_path).iterdir())[0]
