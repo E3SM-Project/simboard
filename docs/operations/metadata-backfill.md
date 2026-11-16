@@ -268,7 +268,8 @@ only `GIT_LOG`, so backfill never writes an abbreviated hash; the API also rejec
 abbreviated values. When no mapped directory has the source value, the execution
 is reported as `skipped_missing_source`, not a failure, and keeps its stored
 values. Run the groups separately: one missing source skips the whole record.
-Identity mismatches, conflicting directories, and stale expected values still fail.
+Identity mismatches, conflicting directories, and stale expected values still
+fail.
 
 ```bash
 make metadata-backfill machine=chrysalis env=dev \
@@ -278,9 +279,10 @@ make metadata-backfill machine=chrysalis env=dev \
 
 Fill-only mode populates missing paths and hashes. Existing executions already
 store abbreviated hashes, so replacing them with full hashes requires
-`--fields git-commit-hash --overwrite`. Until then, Case Details can show one commit as differing values
-when a case mixes abbreviated and full hashes. Review the dry run and obtain
-separate authorization before replacing `--dry-run` with `--apply`.
+`--fields git-commit-hash --overwrite`. Until then, Case Details can show one
+commit as differing values when a case mixes abbreviated and full hashes. Review
+the dry run and obtain separate authorization before replacing `--dry-run` with
+`--apply`.
 
 ### Review and apply
 
@@ -383,7 +385,8 @@ not proof that the simulation failed. Missing machine metadata, ambiguous or
 malformed metadata, and permission errors remain failures.
 
 For database-first updates, the summary shows records with **planned changes**
-in dry-run mode, **records changed** in apply mode, unchanged records, and
+in dry-run mode, **records changed** in apply mode, unchanged records, records
+skipped for a missing optional source (`skipped_missing_source`), and
 record/request failures. Matched owners and planned changes do not mean writes
 occurred during a dry run.
 

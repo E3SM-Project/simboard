@@ -30,9 +30,9 @@ export const CASE_CONFIGURATION_FIELDS = [
   ['git_tag', 'Model tag'],
 ] as const;
 
-// Full Git hashes are SHA-1 (40) or SHA-256 (64); shorter values come from GIT_DESCRIBE.
+// Anything other than a full 40/64-hex Git hash is treated as abbreviated.
 export const isAbbreviatedCommitHash = (value: string) =>
-  !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(value);
+  !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(value);
 
 export interface CaseHashConfigurationDifference {
   field: string;

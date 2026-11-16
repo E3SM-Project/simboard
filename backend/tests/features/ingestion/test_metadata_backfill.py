@@ -58,7 +58,7 @@ def _unreadable_execution(*args):
 
 
 def _missing_git_log(*args):
-    raise metadata._MissingSourceError("Missing GIT_LOG commit hash: /x")
+    raise metadata._MissingSourceError("Missing GIT_LOG commit hash")
 
 
 @pytest.mark.parametrize(
@@ -183,6 +183,12 @@ def test_source_code_repair_reads_srcroot_and_full_git_log_hash(tmp_path):
     with pytest.raises(metadata._MissingSourceError, match="Missing GIT_LOG"):
         metadata._observed_values(record, args)
 
+    # Identity checks fail before a missing source can be skipped.
+    record["case_name"] = "other-case"
+    with pytest.raises(ValueError, match="Source identity does not match"):
+        metadata._observed_values(record, args)
+    record["case_name"] = parsed.case_name
+
     # Another mapped copy supplies the value; the copy without GIT_LOG is not a skip.
     copy = tmp_path / "copy" / execution.name
     shutil.copytree(execution, copy)
@@ -190,11 +196,6 @@ def test_source_code_repair_reads_srcroot_and_full_git_log_hash(tmp_path):
     (copy / f"GIT_LOG.{copy.name}").write_text(f"{full_hash} Subject\n")
     record["directories"].append({"kind": "archive", "path": str(copy)})
     assert metadata._observed_values(record, args) == {"git_commit_hash": full_hash}
-
-    # Identity checks still fail before a missing source can be skipped.
-    record["case_name"] = "other-case"
-    with pytest.raises(ValueError, match="Source identity does not match"):
-        metadata._observed_values(record, args)
 
 
 def test_missing_source_is_reported_as_skip_not_failure(monkeypatch, capsys, caplog):
@@ -220,7 +221,7 @@ def test_missing_source_is_reported_as_skip_not_failure(monkeypatch, capsys, cap
     assert lines[0] == {
         "record_id": record["record_id"],
         "outcome": "skipped_missing_source",
-        "reason": "Missing GIT_LOG commit hash: /x",
+        "reason": "Missing GIT_LOG commit hash",
     }
     assert lines[-1] == {"skipped_missing_source": 1, "failed": 0}
     assert all(payload is None for _, payload in calls)
