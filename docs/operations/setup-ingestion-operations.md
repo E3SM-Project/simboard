@@ -313,9 +313,9 @@ Administrators can open **Operations** in the SimBoard navigation
   are attributed by each machine's site. Click a site to filter the page.
 - **Job health:** each job's status, last report, and **Stale after**
   (`last_reported_at` + `max_silence_minutes`), when a silent job turns
-  `stale`. This is not the next scheduled run. Hover a status for details and
-  thresholds. Jobs that never reported appear separately from `stale` and
-  `failed` jobs.
+  `stale`. This is not the next scheduled run. Problem details appear under each
+  non-healthy status, and a legend below the table defines every status. Jobs
+  that never reported appear separately from `stale` and `failed` jobs.
 - **Failed uploads:** cases still failing in each job's latest upload run, and
   daily failure counts.
 - **Rejected executions:** current rejections grouped by first validation error.

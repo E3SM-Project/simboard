@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/select';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
-import { JobStatusBadge } from '@/features/operations/components/JobStatusBadge';
+import { JobStatusBadge, JobStatusLegend } from '@/features/operations/components/JobStatusBadge';
 import {
   EmptyRow,
   OperationsSection,
@@ -23,7 +23,6 @@ import {
   getJobDetails,
   getJobDueBy,
   getJobStatus,
-  getJobStatusTitle,
   type JobStatus,
 } from '@/features/operations/operationsUtils';
 import {
@@ -65,7 +64,7 @@ export const JobHealthSection = ({
 }: JobHealthSectionProps) => (
   <OperationsSection
     title="Job Health"
-    description="Latest status of each scheduled ingestion job. Hover a status for its thresholds."
+    description="Latest status of each scheduled ingestion job."
     icon={Activity}
     query={query}
     actions={
@@ -95,41 +94,42 @@ export const JobHealthSection = ({
         );
 
       return (
-        <OperationsTable columns={COLUMNS} className="min-w-[720px] table-fixed">
-          {jobs.map(({ job, status }) => (
-            <TableRow key={job.id} title={`Job ${job.id}`}>
-              <TableCell>{job.machine_name}</TableCell>
-              <TableCell className="capitalize">{job.scan_mode}</TableCell>
-              <TableCell>
-                <span title={getJobStatusTitle(job)}>
+        <div className="space-y-3">
+          <OperationsTable columns={COLUMNS} className="min-w-[720px] table-fixed">
+            {jobs.map(({ job, status }) => (
+              <TableRow key={job.id} title={`Job ${job.id}`}>
+                <TableCell>{job.machine_name}</TableCell>
+                <TableCell className="capitalize">{job.scan_mode}</TableCell>
+                <TableCell>
                   <JobStatusBadge status={status} />
-                </span>
-                {status === 'healthy' ? null : (
-                  <TableCellText
-                    value={getJobDetails(job)}
-                    placeholder=""
-                    lines={2}
-                    className="mt-1 text-xs text-muted-foreground"
-                  />
-                )}
-              </TableCell>
-              <TableCell>
-                <TimeWithAge value={job.last_reported_at} />
-              </TableCell>
-              <TableCell>
-                <TimeWithAge value={getJobDueBy(job)} />
-              </TableCell>
-            </TableRow>
-          ))}
-          {jobs.length === 0 ? (
-            <EmptyRow
-              colSpan={COLUMNS.length}
-              message={
-                filtered ? 'No jobs match these filters.' : 'No scheduled jobs have reported yet.'
-              }
-            />
-          ) : null}
-        </OperationsTable>
+                  {status === 'healthy' ? null : (
+                    <TableCellText
+                      value={getJobDetails(job)}
+                      placeholder=""
+                      lines={2}
+                      className="mt-1 text-xs text-muted-foreground"
+                    />
+                  )}
+                </TableCell>
+                <TableCell>
+                  <TimeWithAge value={job.last_reported_at} />
+                </TableCell>
+                <TableCell>
+                  <TimeWithAge value={getJobDueBy(job)} />
+                </TableCell>
+              </TableRow>
+            ))}
+            {jobs.length === 0 ? (
+              <EmptyRow
+                colSpan={COLUMNS.length}
+                message={
+                  filtered ? 'No jobs match these filters.' : 'No scheduled jobs have reported yet.'
+                }
+              />
+            ) : null}
+          </OperationsTable>
+          <JobStatusLegend />
+        </div>
       );
     }}
   </OperationsSection>

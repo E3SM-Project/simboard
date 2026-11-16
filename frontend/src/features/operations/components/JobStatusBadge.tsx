@@ -1,7 +1,8 @@
 import { CircleCheck, CirclePlay, CircleSlash, CircleX, Clock } from 'lucide-react';
+import { Fragment } from 'react';
 
 import { Badge } from '@/components/ui/badge';
-import type { JobStatus } from '@/features/operations/operationsUtils';
+import { JOB_STATUSES, type JobStatus } from '@/features/operations/operationsUtils';
 import { cn } from '@/lib/utils';
 
 const NEUTRAL_CLASS = 'border-border bg-muted text-muted-foreground';
@@ -40,3 +41,27 @@ export const JobStatusBadge = ({ status }: { status: JobStatus }) => {
     </Badge>
   );
 };
+
+// Mirrors how the API derives health; Failed outranks Running.
+const JOB_STATUS_DESCRIPTIONS: Record<JobStatus, string> = {
+  healthy: 'Last run succeeded and the job reported on time.',
+  running: 'A run is in progress.',
+  failed: 'The latest finished run failed, even if a new run is in progress.',
+  stale: 'No report by Stale after, or a run took longer than allowed.',
+  never_reported: 'No report received yet.',
+};
+
+/** Defines every status once, instead of repeating it on each row. */
+export const JobStatusLegend = () => (
+  // One status per row, badges aligned in the first column.
+  <dl className="grid grid-cols-[max-content_1fr] items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+    {JOB_STATUSES.map((status) => (
+      <Fragment key={status}>
+        <dt>
+          <JobStatusBadge status={status} />
+        </dt>
+        <dd>{JOB_STATUS_DESCRIPTIONS[status]}</dd>
+      </Fragment>
+    ))}
+  </dl>
+);

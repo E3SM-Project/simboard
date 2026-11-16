@@ -201,26 +201,6 @@ test('relative times read as past or future', () => {
 test('jobs are due one silence limit after their last report', () => {
   assert.equal(utils.getJobDueBy(JOBS[0]), '2026-11-13T00:50:00.000Z');
   assert.equal(utils.getJobDueBy(JOBS[3]), null);
-  assert.equal(
-    utils.getJobStatusTitle(JOBS[1]),
-    'API request failed (HTTP 503): State request failed.\n' +
-      'Stale after 45 min without a report or a run over 1 h.',
-  );
-  assert.equal(
-    utils.getJobStatusTitle(JOBS[0]),
-    'Stale after 45 min without a report or a run over 1 h.',
-  );
-  // Running hides a failed previous run unless the details name it.
-  assert.equal(
-    utils.getJobDetails(
-      job('x-staging', 'staging', 'running', {
-        active_run: run({ status: 'running', started_at: '2026-11-13T01:02:00Z' }),
-        latest_completed_run: JOBS[1].latest_completed_run,
-      }),
-    ),
-    'Started 2026-11-13 01:02 UTC; previous run: API request failed (HTTP 503): ' +
-      'State request failed.',
-  );
 });
 
 const MACHINES = [
@@ -435,7 +415,8 @@ test('admins see the site summary first, then each section', async () => {
     'Failed Uploads',
     'Rejected Executions',
   ]);
-  assert.doesNotMatch(html, /Recent Ingestions|<dt/);
+  // No Recent Ingestions section and no status count tiles.
+  assert.doesNotMatch(html, /Recent Ingestions|<dd[^>]*>\d+<\/dd>/);
 
   // Site summary: LCRC has one failed job; NERSC has stale and never-reported jobs.
   assert.match(html, /title="Show only LCRC"[^>]*>LCRC</);
@@ -445,14 +426,17 @@ test('admins see the site summary first, then each section', async () => {
   assert.match(html, /None in range/);
   assert.match(html, /href="\/cases"[^>]*>View cases/);
 
-  // Job health: one job type select, visible problem details, thresholds on hover.
+  // Job health: one job type select, visible problem details, one status legend.
   assert.match(html, /aria-label="Job type"/);
   assert.match(html, />No report received</);
+  assert.match(html, />API request failed \(HTTP 503\): State request failed\.</);
   assert.match(html, /title="Job chrysalis-archive"/);
-  assert.match(
-    html,
-    /title="API request failed \(HTTP 503\): State request failed\.\nStale after 45 min/,
+  const legend = html.match(/<dl[^>]*>(.*?)<\/dl>/)[1];
+  assert.deepEqual(
+    [...legend.matchAll(/<\/svg>([^<]+)<\/div><\/dt>/g)].map((match) => match[1]),
+    ['Healthy', 'Running', 'Failed', 'Stale', 'Never reported'],
   );
+  assert.match(legend, /<dd>No report by Stale after, or a run took longer than allowed\.<\/dd>/);
   assert.match(html, /2026-11-13 00:50 <span[^>]*>\(/);
 
   assert.match(html, /Updated \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC/);

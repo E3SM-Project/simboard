@@ -101,24 +101,11 @@ export const getJobDetails = (job: ScheduledJobHealthOut, now = new Date()): str
   if (status === 'running' && job.active_run) {
     const extra = job.active_run_count > 1 ? ` (${job.active_run_count} active runs)` : '';
 
-    const started = `Started ${formatUtc(job.active_run.started_at)} UTC${extra}`;
-
-    // Running hides a failed previous run, so name it.
-    return failure ? `${started}; previous run: ${failure}` : started;
+    return `Started ${formatUtc(job.active_run.started_at)} UTC${extra}`;
   }
 
   return status === 'failed' ? failure : null;
 };
-
-/** Combine a job's details with the thresholds that make it stale. */
-export const getJobStatusTitle = (job: ScheduledJobHealthOut, now = new Date()) =>
-  [
-    getJobDetails(job, now),
-    `Stale after ${formatMinutes(job.max_silence_minutes)} without a report ` +
-      `or a run over ${formatMinutes(job.max_duration_minutes)}.`,
-  ]
-    .filter(Boolean)
-    .join('\n');
 
 /** Latest report time before the job turns stale; null if it never reported. */
 export const getJobDueBy = (job: ScheduledJobHealthOut) =>
