@@ -486,12 +486,12 @@ test('source path and model hash show copy actions and explain abbreviated hashe
 
   const render = (props) => renderToStaticMarkup(createElement(CopyableMetadataValue, props));
   const short = render({
-    label: 'Model Hash',
+    label: 'Git Commit Hash',
     value: 'f82d08e57d',
     help: createElement(CommitHashHelp, { hash: 'f82d08e57d' }),
   });
   assert.match(short, /aria-label="About this abbreviated commit hash"/);
-  assert.match(short, /aria-label="Copy Model Hash"/);
+  assert.match(short, /aria-label="Copy Git Commit Hash"/);
   assert.doesNotMatch(short, /\(abbreviated\)/);
   assert.match(
     renderToStaticMarkup(createElement(CommitHashHelp, { hash: fullHash })),
@@ -536,22 +536,22 @@ test('source path and model hash show copy actions and explain abbreviated hashe
     );
 
   const shared = summary([group('aaa', configuration)]);
-  for (const label of ['Source Code Path', 'Model Hash', 'Model Tag']) {
+  for (const label of ['Source Code Path', 'Git Commit Hash', 'Git Tag']) {
     assert.match(shared, new RegExp(`<dt[^>]*>${label}<`));
   }
   assert.match(shared, /\/model\/source/);
   assert.match(shared, /v3\.0\.2/);
   assert.match(shared, /aria-label="Copy Source Code Path"/);
-  assert.match(shared, /aria-label="Copy Model Hash"/);
+  assert.match(shared, /aria-label="Copy Git Commit Hash"/);
   assert.match(shared, /aria-label="About this commit hash"/);
-  assert.doesNotMatch(shared, /aria-label="Copy Model Tag"/);
+  assert.doesNotMatch(shared, /aria-label="Copy Git Tag"/);
 
   const differing = summary([
     group('aaa', configuration),
     group('bbb', { ...configuration, git_commit_hash: observation('a'.repeat(40)) }),
   ]);
   assert.match(differing, /Differs by case hash/);
-  assert.doesNotMatch(differing, /aria-label="Copy Model Hash"/);
+  assert.doesNotMatch(differing, /aria-label="Copy Git Commit Hash"/);
   assert.match(differing, /aria-label="Copy Source Code Path"/);
 });
 

@@ -78,7 +78,7 @@ export const ExecutionMetadataDetails = ({
             value={knownExecutionValue(candidate.details?.sourceCodePath)}
           />
           <CopyableMetadataValue
-            label="Model Hash"
+            label="Git Commit Hash"
             value={modelHash}
             help={modelHash ? <CommitHashHelp hash={modelHash} /> : null}
           />

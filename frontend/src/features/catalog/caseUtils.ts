@@ -26,8 +26,8 @@ export const CASE_CONFIGURATION_FIELDS = [
   ['grid_alias', 'Grid Alias'],
   ['grid_long_name', 'Grid Long Name'],
   ['source_code_path', 'Source Code Path'],
-  ['git_commit_hash', 'Model Hash'],
-  ['git_tag', 'Model Tag'],
+  ['git_commit_hash', 'Git Commit Hash'],
+  ['git_tag', 'Git Tag'],
 ] as const;
 
 // Anything other than a full 40/64-hex Git hash is treated as abbreviated.
