@@ -1067,6 +1067,11 @@ class TestListCases:
                 refreshed["items"][0]["latestExecution"]
                 == pages[0]["items"][0]["latestExecution"]
             )
+            past = client.get(
+                f"{API_BASE}/cases",
+                params={"simulation_type": "production", "past_execution": True},
+            ).json()
+            assert [item["name"] for item in past["items"]] == ["old"]
             unfiltered = client.get(
                 f"{API_BASE}/cases", params={"simulation_type": "production"}
             ).json()
