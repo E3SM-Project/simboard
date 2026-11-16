@@ -1089,6 +1089,7 @@ class TestListCases:
             case.name for case in sorted(cases, key=lambda case: case.id)[:6]
         ]
         assert all(item["latestExecution"] is None for item in data["recentCases"])
+        assert all(item["hasDiagnostics"] is False for item in data["recentCases"])
 
     def test_overview_orders_by_latest_execution_activity(
         self, client, db: Session, normal_user_sync, admin_user_sync
@@ -1174,6 +1175,13 @@ class TestListCases:
 
         assert {"with_other_link", "without_links"} <= {
             item["name"] for item in everything["items"]
+        }
+        assert {
+            item["name"]: item["hasDiagnostics"] for item in everything["items"]
+        } == {
+            "with_diagnostic": True,
+            "with_other_link": False,
+            "without_links": False,
         }
         assert filtered["total"] == 1
         assert [item["name"] for item in filtered["items"]] == ["with_diagnostic"]

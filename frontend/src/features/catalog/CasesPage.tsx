@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Copy, Info, Search, SlidersHorizontal, X } f
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 
+import { DiagnosticsAvailableIcon } from '@/components/shared/DiagnosticsAvailableIcon';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -637,19 +638,22 @@ export const CasesPage = () => {
         header: 'Case Name',
         cell: ({ row }) => (
           <div className="min-w-[14rem] max-w-[28rem]">
-            <Link
-              to={caseDetailsPath({
-                machineName: row.original.machineName,
-                hpcUsername: row.original.hpcUsername,
-                caseName: row.original.name,
-              })}
-              state={{ from: currentPath }}
-              className="block truncate font-medium text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              title={row.original.name}
-              onClick={(event) => event.stopPropagation()}
-            >
-              {row.original.name}
-            </Link>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Link
+                to={caseDetailsPath({
+                  machineName: row.original.machineName,
+                  hpcUsername: row.original.hpcUsername,
+                  caseName: row.original.name,
+                })}
+                state={{ from: currentPath }}
+                className="block min-w-0 truncate font-medium text-blue-600 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                title={row.original.name}
+                onClick={(event) => event.stopPropagation()}
+              >
+                {row.original.name}
+              </Link>
+              {row.original.hasDiagnostics ? <DiagnosticsAvailableIcon /> : null}
+            </div>
             {row.original.caseGroup && (
               <button
                 type="button"

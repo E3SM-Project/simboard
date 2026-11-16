@@ -266,6 +266,9 @@ def _case_list_projection(query, execution_count, latest_execution):
             Machine.name.label("machine_name"),
             Case.hpc_username,
             execution_count.label("execution_count"),
+            Case.links.any(ExternalLink.kind == ExternalLinkKind.DIAGNOSTIC).label(
+                "has_diagnostics"
+            ),
             Case.created_at,
             Case.updated_at,
             latest_execution.c.latest_execution_id,

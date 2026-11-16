@@ -1,6 +1,7 @@
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+import { DiagnosticsAvailableIcon } from '@/components/shared/DiagnosticsAvailableIcon';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -99,7 +100,10 @@ export const ProductionCasesTable = () => {
                 return (
                   <TableRow key={caseRecord.id}>
                     <TableCell className="align-top">
-                      <TableCellText value={caseRecord.name} lines={1} />
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <TableCellText value={caseRecord.name} lines={1} />
+                        {caseRecord.hasDiagnostics ? <DiagnosticsAvailableIcon /> : null}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {lastExecution ? new Date(lastExecution).toLocaleDateString() : '—'}

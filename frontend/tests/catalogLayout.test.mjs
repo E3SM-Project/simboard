@@ -687,8 +687,11 @@ test('cases table exposes sort state and labels its filters', async () => {
   const client = new QueryClient();
   client.setQueryDefaults(['cases', 'page'], {
     initialData: {
-      items: [{ id: 'case-1', name: 'case-a', executionCount: 1 }],
-      total: 1,
+      items: [
+        { id: 'case-1', name: 'case-a', executionCount: 1, hasDiagnostics: false },
+        { id: 'case-2', name: 'case-b', executionCount: 1, hasDiagnostics: true },
+      ],
+      total: 2,
       page: 1,
       pageSize: 25,
     },
@@ -715,6 +718,8 @@ test('cases table exposes sort state and labels its filters', async () => {
     assert.match(html, /<input[^>]*id="cases-search"/);
     assert.match(html, /<label for="cases-filter-case-group"/);
     assert.match(html, /<button[^>]*id="cases-filter-case-group"/);
+    assert.equal(html.match(/aria-label="Diagnostics available"/g)?.length, 1);
+    assert.match(html, />case-b<\/a><span[^>]*aria-label="Diagnostics available"/);
   } finally {
     client.clear();
   }
@@ -760,6 +765,7 @@ for (const latestExecution of [
       machineName: 'chrysalis',
       hpcUsername: 'test.user',
       executionCount: 7,
+      hasDiagnostics: true,
       updatedAt: '2026-10-01T12:00:00Z',
       latestExecution,
     };
@@ -798,6 +804,8 @@ for (const latestExecution of [
       );
       assert.match(html, />42<\/dd>/);
       assert.match(html, />84<\/dd>/);
+      // One icon per case table: Recent Production Cases and Recent Cases.
+      assert.equal(html.match(/aria-label="Diagnostics available"/g)?.length, 2);
       assert.match(html, /href="\/cases\?simulationType=production"/);
       assert.doesNotMatch(html, />Production Cases<|Last Updated/);
       const productionQuery = client
