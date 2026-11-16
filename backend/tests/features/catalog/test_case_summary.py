@@ -269,12 +269,14 @@ def test_source_code_path_and_model_hash_have_configuration_provenance():
                 "a",
                 "hash",
                 git_commit_hash="model-hash",
-                extra={"source_code_path": "/model/source"},
-            )
+                source_code_path="/model/source",
+            ),
+            _run("b", "hash", extra={"source_code_path": "/legacy/extra"}),
         ]
     )
     configuration = result["configuration_groups"][0].configuration
     assert configuration["source_code_path"].source.value == "/model/source"
+    assert configuration["source_code_path"].missing_execution_ids == ["b"]
     assert configuration["git_commit_hash"].source.value == "model-hash"
 
 

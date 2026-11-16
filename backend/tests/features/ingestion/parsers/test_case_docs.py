@@ -22,6 +22,20 @@ class TestParseEnvCase:
         assert result["compset_long_name"] == (value.strip() or None)
         assert "compset_alias" not in result
 
+    @pytest.mark.parametrize(
+        ("entry", "expected"),
+        [
+            ('<entry id="SRCROOT" value=" /model/source " />', "/model/source"),
+            ('<entry id="SRCROOT" value="  " />', None),
+            ("", None),
+        ],
+    )
+    def test_source_code_path_comes_from_srcroot(self, tmp_path, entry, expected):
+        path = tmp_path / "env_case.xml"
+        path.write_text(f"<config>{entry}</config>")
+
+        assert parse_env_case(path)["source_code_path"] == expected
+
     def test_extracts_case_root(self, tmp_path):
         xml_case = """
         <config>

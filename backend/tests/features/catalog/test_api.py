@@ -3670,6 +3670,7 @@ class TestGetExecution:
             compute_type="cpu",
             git_tag="v1.0",
             git_commit_hash="abc123",
+            source_code_path="/model/source",
             created_by=normal_user_sync["id"],
             last_updated_by=admin_user_sync["id"],
             ingestion_id=ingestion.id,
@@ -3689,6 +3690,8 @@ class TestGetExecution:
         }
         assert data["caseHash"] == "abc123casehash"
         assert data["computeType"] == "cpu"
+        assert data["gitCommitHash"] == "abc123"
+        assert data["sourceCodePath"] == "/model/source"
 
     def test_endpoint_reports_deterministic_only_capabilities_when_llm_misconfigured(
         self, client, db: Session, normal_user_sync, admin_user_sync, monkeypatch

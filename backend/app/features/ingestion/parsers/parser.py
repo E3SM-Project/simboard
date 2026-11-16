@@ -42,6 +42,7 @@ from app.features.ingestion.parsers.e3sm_timing import parse_e3sm_timing
 from app.features.ingestion.parsers.git_info import (
     parse_git_config,
     parse_git_describe,
+    parse_git_log,
     parse_git_status,
 )
 from app.features.ingestion.parsers.readme_case import parse_readme_case
@@ -127,6 +128,13 @@ FILE_SPECS: dict[str, FileSpec] = {
         "location": "root",
         "parser": parse_git_describe,
         "required": True,
+    },
+    "git_log": {
+        "pattern": r"GIT_LOG\..*",
+        "display_pattern": "GIT_LOG..*",
+        "location": "root",
+        "parser": parse_git_log,
+        "required": False,
     },
     "git_config": {
         "pattern": r"GIT_CONFIG\..*\.gz",
@@ -618,11 +626,14 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedExecu
         git_repository_source=metadata.get("git_repository_source"),
         git_branch=metadata.get("git_branch"),
         git_tag=metadata.get("git_tag"),
-        git_commit_hash=metadata.get("git_commit_hash"),
+        # GIT_LOG has the full hash; GIT_DESCRIBE only has an abbreviated one.
+        git_commit_hash=metadata.get("git_log_commit_hash")
+        or metadata.get("git_commit_hash"),
         status=metadata.get("status") or ExecutionStatus.UNKNOWN.value,
         output_path=metadata.get("output_path"),
         archive_path=metadata.get("archive_path"),
         case_root=metadata.get("case_root"),
+        source_code_path=metadata.get("source_code_path"),
         postprocessing_script=metadata.get("postprocessing_script"),
         case_hash=metadata.get("case_hash"),
         run_script_path=_resolve_run_script_path(

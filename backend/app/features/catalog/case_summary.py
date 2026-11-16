@@ -212,11 +212,7 @@ def _timestamp(value: datetime | None) -> float:
 def _summarize_field(executions: list[Execution], field: str) -> ConfigurationFieldOut:
     result = ConfigurationFieldOut()
     for execution in executions:
-        value = (
-            (execution.extra or {}).get(field)
-            if field == "source_code_path"
-            else getattr(execution, field)
-        )
+        value = getattr(execution, field)
         if not isinstance(value, str):
             value = None
         if not value or not value.strip():

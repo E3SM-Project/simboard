@@ -87,6 +87,7 @@ class ExecutionCreateDraft:
     last_updated_by: UUID | None
     case_hash: str | None = None
     compute_type: Literal["cpu", "gpu"] | None = None
+    source_code_path: str | None = None
 
 
 def ingest_archive(
@@ -780,6 +781,7 @@ def _build_execution_create_draft(
         git_branch=parsed_execution.git_branch,
         git_tag=parsed_execution.git_tag,
         git_commit_hash=parsed_execution.git_commit_hash,
+        source_code_path=parsed_execution.source_code_path,
         created_by=None,
         last_updated_by=None,
         case_hash=parsed_execution.case_hash,

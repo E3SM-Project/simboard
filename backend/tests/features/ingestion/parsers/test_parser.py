@@ -3,6 +3,7 @@
 import gzip
 import io
 import os
+import re
 import tarfile
 import zipfile
 from contextlib import contextmanager
@@ -364,6 +365,8 @@ class TestMainParser:
             f.write("https://github.com/test/repo")
         with gzip.open(execution_dir / f"GIT_STATUS.{version_base}.gz", "wt") as f:
             f.write("main")
+        with gzip.open(execution_dir / f"GIT_LOG.{version_base}.gz", "wt") as f:
+            f.write(f"{'a' * 40} Subject")
 
     @staticmethod
     def _create_zip_archive(base_dir: Path, archive_path: Path) -> None:
@@ -407,6 +410,7 @@ class TestMainParser:
                 "run_end_date": "2025-12-18T20:54:58",
             },
             "parse_git_describe": {},
+            "parse_git_log": {},
             "parse_git_config": None,
             "parse_git_status": None,
         }
@@ -435,6 +439,9 @@ class TestMainParser:
             ]
             parser.FILE_SPECS["git_describe"]["parser"] = lambda _path: defaults[
                 "parse_git_describe"
+            ]
+            parser.FILE_SPECS["git_log"]["parser"] = lambda _path: defaults[
+                "parse_git_log"
             ]
             parser.FILE_SPECS["git_config"]["parser"] = lambda _path: (
                 defaults["parse_git_config"]
@@ -1006,6 +1013,45 @@ class TestMainParser:
             parsed.archive_path
             == "/global/cfs/cdirs/e3sm/archive/v3.LR.historical_0121"
         )
+
+    @pytest.mark.parametrize(
+        ("git_log", "expected"),
+        [
+            ({"git_log_commit_hash": "a" * 40}, "a" * 40),
+            ({"git_log_commit_hash": None}, "abc1234"),
+            (None, "abc1234"),
+        ],
+    )
+    def test_git_log_hash_takes_precedence_over_describe(
+        self, git_log, expected
+    ) -> None:
+        files: dict[str, str | None] = {key: f"/tmp/{key}" for key in parser.FILE_SPECS}
+        if git_log is None:
+            files["git_log"] = None
+
+        with self._mock_all_parsers(
+            parse_env_case={
+                "case_name": "test_case",
+                "machine": "test",
+                "source_code_path": "/model/source",
+            },
+            parse_e3sm_timing={"execution_id": "1.0-0"},
+            parse_git_describe={"git_tag": "v3.0.2", "git_commit_hash": "abc1234"},
+            parse_git_log=git_log or {},
+        ):
+            parsed = parser._parse_all_files("/tmp/test_case/1.0-0", files)
+
+        assert parsed.git_commit_hash == expected
+        assert parsed.git_tag == "v3.0.2"
+        assert parsed.source_code_path == "/model/source"
+
+    def test_git_log_spec_is_optional_and_excludes_logs_head(self) -> None:
+        spec = parser.FILE_SPECS["git_log"]
+
+        assert spec["required"] is False
+        assert re.match(spec["pattern"], "GIT_LOG.1.0-0.gz")
+        assert re.match(spec["pattern"], "GIT_LOG.1.0-0")
+        assert not re.match(spec["pattern"], "GIT_LOGS_HEAD.1.0-0.gz")
 
     def test_case_status_run_dates_override_timing_dates(self, tmp_path: Path) -> None:
         execution_dir = tmp_path / "1.0-0"

@@ -30,6 +30,7 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
           KNOWN_EXPERIMENT_TYPES when possible
         - ``compset_long_name``: Required component-set long name (``COMPSET``)
         - ``case_root``: Case root directory (``CASEROOT``)
+        - ``source_code_path``: Model source root directory (``SRCROOT``)
     """
     env_case_path = Path(env_case_path)
 
@@ -42,6 +43,9 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
     if compset_long_name is not None:
         compset_long_name = compset_long_name.strip() or None
     case_root = _extract_value_from_file(env_case_path, "CASEROOT")
+    source_code_path = (
+        _extract_value_from_file(env_case_path, "SRCROOT") or ""
+    ).strip()
 
     # Extract metadata that requires special handling
     campaign, experiment_type = _extract_campaign_and_experiment_type(case_name)
@@ -56,6 +60,7 @@ def parse_env_case(env_case_path: str | Path) -> dict[str, str | None]:
         "experiment_type": experiment_type,
         "compset_long_name": compset_long_name,
         "case_root": case_root,
+        "source_code_path": source_code_path or None,
     }
 
 

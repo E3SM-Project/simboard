@@ -397,6 +397,10 @@ class ExecutionCreate(CamelInBaseModel):
             None, description="Optional Git commit hash associated with the execution"
         ),
     ]
+    source_code_path: Annotated[
+        str | None,
+        Field(None, description="Model source root directory from SRCROOT"),
+    ]
 
     # Provenance & submission
     # -----------------------
@@ -1179,6 +1183,10 @@ class ExecutionOut(CamelOutBaseModel):
         Field(
             None, description="Optional Git commit hash associated with the execution"
         ),
+    ]
+    source_code_path: Annotated[
+        str | None,
+        Field(None, description="Model source root directory from SRCROOT"),
     ]
 
     # Provenance & submission
