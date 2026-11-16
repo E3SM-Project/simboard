@@ -750,6 +750,8 @@ class TestExecutionDiscoveryResultsEndpoint:
         assert client.post(endpoint, json=payload).status_code == 201
         original = db.query(ExecutionDiscoveryResult).one()
         original_id = original.id
+        # Rejection reports count "new" rejections by first detection time.
+        first_detected_at = original.created_at
         payload["results"][0]["outcome"] = current
 
         for _ in range(2):
@@ -759,6 +761,7 @@ class TestExecutionDiscoveryResultsEndpoint:
             db.refresh(original)
             assert original.outcome == current
             assert original.id == original_id
+            assert original.created_at == first_detected_at
         assert db.query(ExecutionDiscoveryResult).count() == 1
 
     def test_current_validation_refreshes_batch(self, client, db: Session) -> None:
