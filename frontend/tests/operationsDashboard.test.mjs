@@ -188,14 +188,148 @@ test('daily failure counts are limited to the window and pivoted by category', (
   ]);
 });
 
-test('rejection errors are joined with their fields', () => {
+test('rejection groups are named by error code and target', () => {
   assert.equal(
-    utils.formatRejectionErrors([
-      { field: 'case_name', code: 'missing', message: 'Required.' },
-      { message: 'Bad timing file.' },
-    ]),
-    'case_name: Required.; Bad timing file.',
+    utils.formatRejectionError({ code: 'missing_required_file', target: 'env_case.xml.*.gz' }),
+    'missing_required_file: env_case.xml.*.gz',
   );
+  assert.equal(utils.formatRejectionError({ code: 'missing', target: null }), 'missing');
+  assert.equal(utils.formatRejectionError({ code: null, target: null }), 'Unknown error');
+});
+
+test('relative times read as past or future', () => {
+  const now = new Date('2026-11-13T12:00:00Z');
+  const at = (iso) => utils.formatRelative(iso, now);
+  assert.equal(at('2026-11-13T12:00:20Z'), 'just now');
+  assert.equal(at('2026-11-13T11:54:00Z'), '6 min ago');
+  assert.equal(at('2026-11-13T14:00:00Z'), 'in 2 h');
+  assert.equal(at('2026-11-10T12:00:00Z'), '3 d ago');
+  assert.equal(at(null), null);
+});
+
+test('jobs are due one silence limit after their last report', () => {
+  assert.equal(utils.getJobDueBy(JOBS[0]), '2026-11-13T00:50:00.000Z');
+  assert.equal(utils.getJobDueBy(JOBS[3]), null);
+  assert.equal(
+    utils.getJobStatusTitle(JOBS[1]),
+    'API request failed (HTTP 503): State request failed.\n' +
+      'Stale after 45 min without a report or a run over 1 h.',
+  );
+  assert.equal(
+    utils.getJobStatusTitle(JOBS[0]),
+    'Stale after 45 min without a report or a run over 1 h.',
+  );
+  // Running hides a failed previous run unless the details name it.
+  assert.equal(
+    utils.getJobDetails(
+      job('x-staging', 'staging', 'running', {
+        active_run: run({ status: 'running', started_at: '2026-11-13T01:02:00Z' }),
+        latest_completed_run: JOBS[1].latest_completed_run,
+      }),
+    ),
+    'Started 2026-11-13 01:02 UTC; previous run: API request failed (HTTP 503): ' +
+      'State request failed.',
+  );
+});
+
+const MACHINES = [
+  { id: 'm1', name: 'chrysalis', site: 'LCRC' },
+  { id: 'm2', name: 'perlmutter', site: 'NERSC' },
+];
+
+const rejectedGroup = (overrides = {}) => ({
+  site_name: 'LCRC',
+  outcome: 'rejected_incomplete',
+  code: 'missing_required_file',
+  target: 'env_case.xml.*.gz',
+  executions: 10,
+  cases: 2,
+  new_in_range: 3,
+  latest_detected_at: '2026-11-12T08:00:00Z',
+  example: {
+    machine_name: 'chrysalis',
+    case_identity: 'ac.user/case-x',
+    execution_id: '1.2',
+    message: 'Missing env_case.',
+  },
+  ...overrides,
+});
+
+test('site summary rolls jobs, ingestions, and rejections up to sites', () => {
+  const ingestion = (day, machine, caseId, count) => ({
+    day,
+    machine,
+    case_id: caseId,
+    case_name: caseId,
+    hpc_username: 'user',
+    new_executions: count,
+  });
+  const rows = utils.getSiteSummaryRows({
+    machines: MACHINES,
+    jobs: JOBS,
+    ingestions: [
+      ingestion('2026-11-10', 'chrysalis', 'c1', 2),
+      ingestion('2026-11-12', 'chrysalis', 'c1', 1),
+      ingestion('2026-11-11', 'chrysalis', 'c2', 4),
+      // Machines missing from the machine list are kept under an unknown site.
+      ingestion('2026-11-12', 'unknown', 'c3', 9),
+    ],
+    rejections: [rejectedGroup(), rejectedGroup({ site_name: 'OLCF', new_in_range: 0 })],
+  });
+  assert.deepEqual(rows, [
+    {
+      siteName: 'LCRC',
+      jobCount: 2,
+      problemCounts: { failed: 1 },
+      newExecutions: 7,
+      distinctCases: 2,
+      lastNewExecutionDay: '2026-11-12',
+      rejectedNew: 3,
+      rejectedTotal: 10,
+      failedUploads: 3,
+    },
+    {
+      siteName: 'NERSC',
+      jobCount: 2,
+      problemCounts: { stale: 1, never_reported: 1 },
+      newExecutions: 0,
+      distinctCases: 0,
+      lastNewExecutionDay: null,
+      rejectedNew: 0,
+      rejectedTotal: 0,
+      failedUploads: 0,
+    },
+    {
+      siteName: 'OLCF',
+      jobCount: 0,
+      problemCounts: {},
+      newExecutions: 0,
+      distinctCases: 0,
+      lastNewExecutionDay: null,
+      rejectedNew: 0,
+      rejectedTotal: 10,
+      failedUploads: 0,
+    },
+    {
+      siteName: 'Unknown site',
+      jobCount: 0,
+      problemCounts: {},
+      newExecutions: 9,
+      distinctCases: 1,
+      lastNewExecutionDay: '2026-11-12',
+      rejectedNew: 0,
+      rejectedTotal: 0,
+      failedUploads: 0,
+    },
+  ]);
+  // Without a machine list, jobs still count instead of disappearing.
+  const [unknown] = utils.getSiteSummaryRows({
+    machines: [],
+    jobs: JOBS,
+    ingestions: [],
+    rejections: [],
+  });
+  assert.deepEqual([unknown.siteName, unknown.jobCount], ['Unknown site', 4]);
 });
 
 const renderPage = async ({ role, query = '', seed }) => {
@@ -228,6 +362,7 @@ const renderPage = async ({ role, query = '', seed }) => {
           MemoryRouter,
           { initialEntries: [`/admin/operations${query}`] },
           createElement(OperationsDashboardPage, {
+            machines: MACHINES,
             sites: [{ id: 's1', name: 'LCRC', createdAt: '', updatedAt: '' }],
           }),
         ),
@@ -238,7 +373,7 @@ const renderPage = async ({ role, query = '', seed }) => {
   return { html, client };
 };
 
-const seedData = (client, keys, siteName, jobs = JOBS) => {
+const seedData = (client, keys, siteName, jobs = JOBS, groups = []) => {
   const { startDate, endDate } = utils.utcDateWindow(7);
   client.setQueryData(keys.jobs(siteName), { jobs, upload_failure_daily_counts: [] });
   client.setQueryData(keys.summary(siteName, startDate, endDate), {
@@ -254,7 +389,11 @@ const seedData = (client, keys, siteName, jobs = JOBS) => {
     ],
     totals: { new_executions: 2, distinct_cases: 1 },
   });
-  client.setQueryData(keys.rejected(siteName), { executions: [], total: 0 });
+  client.setQueryData(keys.rejected(siteName, startDate, endDate), {
+    groups,
+    total: groups.reduce((sum, group) => sum + group.executions, 0),
+    new_in_range: groups.reduce((sum, group) => sum + group.new_in_range, 0),
+  });
 };
 
 test('only admins see the Operations navigation item', async () => {
@@ -293,50 +432,54 @@ test('non-admins see an access notice and the page creates no data queries', asy
   assert.equal(client.getQueryCache().getAll().length, 0);
 });
 
-test('admins see every section with status counts, details, and empty states', async () => {
+test('admins see the site summary first, then each section', async () => {
   const { html } = await renderPage({
     role: 'admin',
-    seed: (client, keys) => seedData(client, keys),
+    seed: (client, keys) => seedData(client, keys, undefined, JOBS, [rejectedGroup()]),
   });
-  for (const heading of [
+  const headings = [...html.matchAll(/<h2[^>]*>([^<]+)<\/h2>/g)].map((match) => match[1]);
+  assert.deepEqual(headings, [
+    'Site Summary',
     'Job Health',
     'Failed Uploads',
-    'Recent Ingestions',
     'Rejected Executions',
-  ])
-    assert.match(html, new RegExp(`<h2[^>]*>${heading}</h2>`));
-
-  const tile = (label) => html.match(new RegExp(`<dt[^>]*>${label}</dt><dd[^>]*>(\\d+)</dd>`))[1];
-  assert.deepEqual(['Healthy', 'Running', 'Failed', 'Stale', 'Never reported'].map(tile), [
-    '1',
-    '0',
-    '1',
-    '1',
-    '1',
   ]);
-  // Tiles are colored only when their count is nonzero.
-  const tileClass = (label) =>
-    html.match(
-      new RegExp(`<div class="([^"]*)"><svg(?:(?!<div class).)*?<dt[^>]*>${label}</dt>`),
-    )[1];
-  assert.match(tileClass('Failed'), /border-red-200/);
-  assert.match(tileClass('Running'), /bg-muted/);
-  assert.doesNotMatch(tileClass('Running'), /blue/);
+  assert.doesNotMatch(html, /Recent Ingestions|<dt/);
+
+  // Site summary: LCRC has one failed job; NERSC has stale and never-reported jobs.
+  assert.match(html, /title="Show only LCRC"[^>]*>LCRC</);
+  assert.match(html, /text-red-700">1 failed</);
+  assert.match(html, /1 stale · 1 never reported/);
+  assert.match(html, /3 \/ 10/);
+  assert.match(html, /None in range/);
+  assert.match(html, /href="\/cases"[^>]*>View cases/);
+
+  // Job health: one job type select, visible problem details, thresholds on hover.
+  assert.match(html, /aria-label="Job type"/);
+  assert.match(html, />No report received</);
+  assert.match(html, /title="Job chrysalis-archive"/);
+  assert.match(
+    html,
+    /title="API request failed \(HTTP 503\): State request failed\.\nStale after 45 min/,
+  );
+  assert.match(html, /2026-11-13 00:50 <span[^>]*>\(/);
+
   assert.match(html, /Updated \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC/);
+  assert.match(html, />Times are UTC\.<\/p>/);
   assert.match(html, />Refresh<\/button>/);
   assert.doesNotMatch(html, /Reset filters/);
-  assert.match(html, /API request failed \(HTTP 503\): State request failed\./);
   assert.match(html, /3 failed uploads/);
   assert.match(html, /Showing 2 of 3 failed cases for/);
   assert.match(html, /No failed uploads in the last 7 days\./);
-  assert.match(html, /href="\/cases\/chrysalis\/ac.user\/v3.LR.piControl"/);
-  assert.match(html, /2 new executions/);
-  assert.match(html, /No executions are currently rejected\./);
-  // Count pills are hidden at zero; the empty state says so.
-  assert.doesNotMatch(html, /0 rejected/);
+
+  // Rejections are grouped with an example.
+  assert.match(html, /10 rejected/);
+  assert.match(html, /missing_required_file: env_case\.xml\.\*\.gz/);
+  assert.match(html, /title="Missing env_case\."/);
+  assert.match(html, /ac\.user\/case-x \/ 1\.2 \(chrysalis\)/);
 });
 
-test('job type and site filters narrow sections and offer a reset', async () => {
+test('site filters every section; job type filters only job health', async () => {
   const { html, client } = await renderPage({
     role: 'admin',
     query: '?job_type=archive&site=LCRC',
@@ -356,14 +499,24 @@ test('job type and site filters narrow sections and offer a reset', async () => 
       .map((query) => query.queryKey[2]),
     ['LCRC', 'LCRC', 'LCRC'],
   );
-  assert.match(html, /chrysalis-archive/);
-  assert.doesNotMatch(html, /chrysalis-staging/);
-  // With no failed cases or daily counts, one empty block replaces both tables.
-  assert.match(html, /border-dashed[^>]*>No failed uploads match these filters\./);
-  assert.doesNotMatch(html, /Daily failure counts/);
+  assert.match(html, /title="Job chrysalis-archive"/);
+  assert.doesNotMatch(html, /title="Job chrysalis-staging"/);
+  // Failed uploads ignore the job type, so the staging job's failures still show.
+  assert.match(html, /3 failed uploads/);
   assert.match(html, /No rejected executions match these filters\./);
-  // Sections share the header's filters, so only the header offers a reset.
   assert.equal(html.match(/Reset filters/g).length, 1);
+});
+
+test('failed uploads collapse to one line when there are none', async () => {
+  const { html } = await renderPage({
+    role: 'admin',
+    seed: (client, keys) => seedData(client, keys, undefined, [JOBS[1]]),
+  });
+  assert.match(
+    html,
+    /<p class="text-sm text-muted-foreground">No failed uploads in the latest runs or the last 7 days\.<\/p>/,
+  );
+  assert.doesNotMatch(html, /border-dashed/);
 });
 
 test('sections show the API error detail when loading fails', async () => {

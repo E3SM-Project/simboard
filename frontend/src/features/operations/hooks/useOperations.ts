@@ -10,7 +10,8 @@ export const operationsQueryKeys = {
   jobs: (siteName?: string) => ['operations', 'jobs', siteName ?? null] as const,
   summary: (siteName: string | undefined, startDate: string, endDate: string) =>
     ['operations', 'summary', siteName ?? null, startDate, endDate] as const,
-  rejected: (siteName?: string) => ['operations', 'rejected', siteName ?? null] as const,
+  rejected: (siteName: string | undefined, startDate: string, endDate: string) =>
+    ['operations', 'rejected', siteName ?? null, startDate, endDate] as const,
 };
 
 export const useJobHealth = (siteName?: string) =>
@@ -31,9 +32,13 @@ export const useIngestionSummary = (
     placeholderData: keepPreviousData,
   });
 
-export const useRejectedExecutions = (siteName?: string) =>
+export const useRejectedExecutions = (
+  siteName: string | undefined,
+  startDate: string,
+  endDate: string,
+) =>
   useQuery({
-    queryKey: operationsQueryKeys.rejected(siteName),
-    queryFn: () => getRejectedExecutions(siteName),
+    queryKey: operationsQueryKeys.rejected(siteName, startDate, endDate),
+    queryFn: () => getRejectedExecutions({ siteName, startDate, endDate }),
     placeholderData: keepPreviousData,
   });

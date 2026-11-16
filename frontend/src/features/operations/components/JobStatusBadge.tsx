@@ -40,23 +40,3 @@ export const JobStatusBadge = ({ status }: { status: JobStatus }) => {
     </Badge>
   );
 };
-
-/** Count of jobs in one status; colored only when nonzero so empty states stay quiet. */
-export const JobStatusTile = ({ status, count }: { status: JobStatus; count: number }) => {
-  const { label, Icon, className } = JOB_STATUS_STYLES[status];
-
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-3 rounded-xl border px-3 py-2',
-        count > 0 ? className : NEUTRAL_CLASS,
-      )}
-    >
-      <Icon className="h-5 w-5 shrink-0" />
-      <div>
-        <dt className="text-sm font-medium">{label}</dt>
-        <dd className="text-xl font-semibold leading-tight">{count}</dd>
-      </div>
-    </div>
-  );
-};

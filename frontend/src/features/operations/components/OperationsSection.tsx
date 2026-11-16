@@ -20,8 +20,13 @@ interface OperationsSectionProps<T> {
   title: string;
   description: string;
   icon: LucideIcon;
-  query: Pick<UseQueryResult<T>, 'data' | 'error' | 'isError' | 'isFetching' | 'refetch'>;
+  /** A query, or several combined; refetch results are ignored. */
+  query: Pick<UseQueryResult<T>, 'data' | 'error' | 'isError' | 'isFetching'> & {
+    refetch: () => unknown;
+  };
   badge?: (data: T) => ReactNode;
+  /** Controls that stay visible while data loads or fails, such as filters. */
+  actions?: ReactNode;
   children: (data: T) => ReactNode;
   className?: string;
 }
@@ -33,6 +38,7 @@ export const OperationsSection = <T,>({
   icon: Icon,
   query,
   badge,
+  actions,
   children,
   className,
 }: OperationsSectionProps<T>) => {
@@ -60,12 +66,13 @@ export const OperationsSection = <T,>({
             <p className="text-sm text-muted-foreground">{description}</p>
           </div>
         </div>
-        {data !== undefined ? (
-          <div className="flex items-center gap-3">
-            {isFetching ? <LoadingState kind="inline" label="Refreshing" /> : null}
-            {badge?.(data)}
-          </div>
-        ) : null}
+        <div className="flex items-center gap-3">
+          {data !== undefined && isFetching ? (
+            <LoadingState kind="inline" label="Refreshing" />
+          ) : null}
+          {data !== undefined ? badge?.(data) : null}
+          {actions}
+        </div>
       </div>
 
       {data !== undefined && isError ? (
@@ -137,13 +144,6 @@ export const OperationsTable = ({ columns, children, className }: OperationsTabl
 );
 
 // Empty states explain filtered results; the page header holds the one Reset control.
-
-/** Dashed block for a section with nothing to show. */
-export const EmptyPanel = ({ message }: { message: string }) => (
-  <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-    {message}
-  </div>
-);
 
 export const EmptyRow = ({ colSpan, message }: { colSpan: number; message: string }) => (
   <TableRow className="hover:bg-transparent">

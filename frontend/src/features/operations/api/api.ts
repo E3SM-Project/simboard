@@ -25,11 +25,13 @@ export const getIngestionSummary = async (params: {
   return res.data;
 };
 
-export const getRejectedExecutions = async (
-  siteName?: string,
-): Promise<RejectedExecutionsResponse> => {
+export const getRejectedExecutions = async (params: {
+  siteName?: string;
+  startDate: string;
+  endDate: string;
+}): Promise<RejectedExecutionsResponse> => {
   const res = await api.get<RejectedExecutionsResponse>('/ingestions/rejected-executions', {
-    params: { site_name: siteName },
+    params: { site_name: params.siteName, start_date: params.startDate, end_date: params.endDate },
   });
 
   return res.data;

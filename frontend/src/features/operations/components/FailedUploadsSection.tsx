@@ -5,18 +5,16 @@ import { TableCell, TableRow } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
 import {
   CountPill,
-  EmptyPanel,
   EmptyRow,
   OperationsSection,
   OperationsTable,
 } from '@/features/operations/components/OperationsSection';
 import {
-  filterJobs,
   getDailyFailureRows,
   getFailedUploads,
   UPLOAD_FAILURE_CATEGORY_LABELS,
 } from '@/features/operations/operationsUtils';
-import type { JobType, ScheduledJobHealthResponse } from '@/features/operations/types';
+import type { ScheduledJobHealthResponse } from '@/features/operations/types';
 
 const CASE_COLUMNS = [
   { label: 'Case', className: 'w-[30%]' },
@@ -28,7 +26,6 @@ const CASE_COLUMNS = [
 
 interface FailedUploadsSectionProps {
   query: UseQueryResult<ScheduledJobHealthResponse>;
-  jobType?: JobType;
   dateWindow: { startDate: string; endDate: string };
   rangeDays: number;
   /** Whether filters that apply to this section are active. */
@@ -37,7 +34,6 @@ interface FailedUploadsSectionProps {
 
 export const FailedUploadsSection = ({
   query,
-  jobType,
   dateWindow,
   rangeDays,
   filtered,
@@ -47,15 +43,10 @@ export const FailedUploadsSection = ({
     description="Cases whose uploads still failed after retries in each job's latest upload run."
     icon={CloudAlert}
     query={query}
-    badge={(data) => (
-      <CountPill
-        count={getFailedUploads(filterJobs(data.jobs, jobType)).total}
-        label="failed uploads"
-      />
-    )}
+    badge={(data) => <CountPill count={getFailedUploads(data.jobs).total} label="failed uploads" />}
   >
     {(data) => {
-      const { rows, truncatedJobs } = getFailedUploads(filterJobs(data.jobs, jobType));
+      const { rows, truncatedJobs } = getFailedUploads(data.jobs);
       const daily = getDailyFailureRows(data.upload_failure_daily_counts, dateWindow);
       const dailyColumns = [
         { label: 'Date (UTC)' },
@@ -69,13 +60,11 @@ export const FailedUploadsSection = ({
 
       if (rows.length === 0 && daily.rows.length === 0) {
         return (
-          <EmptyPanel
-            message={
-              filtered
-                ? 'No failed uploads match these filters.'
-                : `No failed uploads in the latest runs or the last ${rangeDays} days.`
-            }
-          />
+          <p className="text-sm text-muted-foreground">
+            {filtered
+              ? 'No failed uploads match these filters.'
+              : `No failed uploads in the latest runs or the last ${rangeDays} days.`}
+          </p>
         );
       }
 
@@ -120,7 +109,7 @@ export const FailedUploadsSection = ({
           <div className="space-y-2">
             <h3 className="text-sm font-semibold">Daily failure counts</h3>
             <p className="text-xs text-muted-foreground">
-              Failed case uploads by report day and category, for all job types.
+              Failed case uploads by report day and category.
             </p>
             <OperationsTable columns={dailyColumns}>
               {daily.rows.map((row) => (
