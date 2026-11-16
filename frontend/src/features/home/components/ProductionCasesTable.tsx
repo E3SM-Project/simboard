@@ -17,7 +17,16 @@ import { TableCellText } from '@/components/ui/table-cell-text';
 import { useCases } from '@/lib/catalog/hooks/useCases';
 import { caseDetailsPath } from '@/lib/catalog/urls';
 
-export const ProductionCasesTable = () => {
+interface ProductionCasesTableProps {
+  recency: 'recent' | 'past';
+}
+
+const EMPTY_MESSAGES = {
+  recent: 'No production cases have a completed execution in the last six calendar months.',
+  past: 'No production cases have a latest completed execution older than six calendar months.',
+};
+
+export const ProductionCasesTable = ({ recency }: ProductionCasesTableProps) => {
   const {
     data: cases,
     error,
@@ -28,7 +37,7 @@ export const ProductionCasesTable = () => {
     page: 1,
     pageSize: 6,
     simulationType: 'production',
-    recentExecution: true,
+    ...(recency === 'recent' ? { recentExecution: true } : { pastExecution: true }),
     sortBy: 'latest_run_activity',
     sortOrder: 'desc',
   });
@@ -88,7 +97,7 @@ export const ProductionCasesTable = () => {
             {cases.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-                  No production cases have a completed execution in the last six calendar months.
+                  {EMPTY_MESSAGES[recency]}
                 </TableCell>
               </TableRow>
             ) : (

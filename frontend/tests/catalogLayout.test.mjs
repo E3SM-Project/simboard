@@ -882,7 +882,9 @@ for (const latestExecution of [
       );
       const headings = [
         'Explore E3SM Simulations',
-        '>Recent Production Cases<',
+        '>Production Cases<',
+        '>Recent<',
+        '>Past<',
         '>Recent Cases<',
         '>Common Workflows<',
         '>Sites and Machines<',
@@ -897,24 +899,27 @@ for (const latestExecution of [
       );
       assert.match(html, />42<\/dd>/);
       assert.match(html, />84<\/dd>/);
-      // One icon per case table: Recent Production Cases and Recent Cases.
-      assert.equal(html.match(/aria-label="Diagnostics available"/g)?.length, 2);
+      // One icon per case table: Recent and Past Production Cases, and Recent Cases.
+      assert.equal(html.match(/aria-label="Diagnostics available"/g)?.length, 3);
       assert.match(html, /href="\/cases\?simulationType=production"/);
-      assert.doesNotMatch(html, />Production Cases<|Last Updated/);
-      const productionQuery = client
+      assert.doesNotMatch(html, /Last Updated/);
+      const productionQueries = client
         .getQueryCache()
-        .find({ queryKey: ['cases', 'page'], exact: false });
-      assert.deepEqual(productionQuery.queryKey[2], {
-        page: 1,
-        pageSize: 6,
-        simulationType: 'production',
-        recentExecution: true,
-        sortBy: 'latest_run_activity',
-        sortOrder: 'desc',
-      });
+        .findAll({ queryKey: ['cases', 'page'], exact: false });
+      assert.deepEqual(
+        productionQueries.map((query) => query.queryKey[2]),
+        [{ recentExecution: true }, { pastExecution: true }].map((recency) => ({
+          page: 1,
+          pageSize: 6,
+          simulationType: 'production',
+          ...recency,
+          sortBy: 'latest_run_activity',
+          sortOrder: 'desc',
+        })),
+      );
 
-      const caseTables = [...html.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/g)].slice(0, 2);
-      assert.equal(caseTables.length, 2);
+      const caseTables = [...html.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/g)].slice(0, 3);
+      assert.equal(caseTables.length, 3);
       for (const [markup, table] of caseTables) {
         assert.match(markup, /<table\b[^>]*class="[^"]*\bmin-w-\[1100px\] table-fixed\b/);
         const tablePosition = html.indexOf(markup);
@@ -953,27 +958,36 @@ for (const latestExecution of [
   });
 }
 
-test('recent production cases explain an empty result', async () => {
-  const { ProductionCasesTable } = await server.ssrLoadModule(
-    '/src/features/home/components/ProductionCasesTable.tsx',
-  );
-  const client = new QueryClient();
-  client.setQueryDefaults(['cases', 'page'], {
-    initialData: { items: [], total: 0, page: 1, pageSize: 6 },
-  });
+for (const [recency, emptyMessage] of [
+  ['recent', /No production cases have a completed execution in the last six calendar months\./],
+  [
+    'past',
+    /No production cases have a latest completed execution older than six calendar months\./,
+  ],
+]) {
+  test(`${recency} production cases explain an empty result`, async () => {
+    const { ProductionCasesTable } = await server.ssrLoadModule(
+      '/src/features/home/components/ProductionCasesTable.tsx',
+    );
+    const client = new QueryClient();
+    client.setQueryDefaults(['cases', 'page'], {
+      initialData: { items: [], total: 0, page: 1, pageSize: 6 },
+    });
 
-  try {
-    const html = renderToStaticMarkup(
-      createElement(QueryClientProvider, { client }, createElement(ProductionCasesTable)),
-    );
-    assert.match(
-      html,
-      /No production cases have a completed execution in the last six calendar months\./,
-    );
-  } finally {
-    client.clear();
-  }
-});
+    try {
+      const html = renderToStaticMarkup(
+        createElement(
+          QueryClientProvider,
+          { client },
+          createElement(ProductionCasesTable, { recency }),
+        ),
+      );
+      assert.match(html, emptyMessage);
+    } finally {
+      client.clear();
+    }
+  });
+}
 
 test('simulation date sorting handles year zero, ties, and does not mutate input', async () => {
   const { sortCaseExecutions } = await server.ssrLoadModule('/src/features/catalog/caseUtils.ts');
