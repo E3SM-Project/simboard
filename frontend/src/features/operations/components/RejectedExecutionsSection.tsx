@@ -19,7 +19,7 @@ const COLUMNS = [
   { label: 'Executions', className: 'w-[9%] text-right' },
   { label: 'Cases', className: 'w-[7%] text-right' },
   { label: 'New in range', className: 'w-[9%] text-right' },
-  { label: 'Latest detected (UTC)', className: 'w-[13%]' },
+  { label: 'Latest (UTC)', className: 'w-[13%]' },
   { label: 'Example' },
 ];
 
