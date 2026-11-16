@@ -77,15 +77,26 @@ export interface IngestionSummaryResponse {
   totals: { new_executions: number; distinct_cases: number };
 }
 
-export interface RejectedExecution {
-  machine_name: string;
-  case_identity: string;
-  execution_id: string;
+/** Rejections sharing a site, outcome, and first error; code and target may be absent. */
+export interface RejectedExecutionGroup {
+  site_name: string;
   outcome: 'rejected_incomplete' | 'rejected_invalid';
-  errors: Record<string, string>[];
+  code: string | null;
+  target: string | null;
+  executions: number;
+  cases: number;
+  new_in_range: number;
+  latest_detected_at: string;
+  example: {
+    machine_name: string;
+    case_identity: string;
+    execution_id: string;
+    message: string | null;
+  };
 }
 
 export interface RejectedExecutionsResponse {
-  executions: RejectedExecution[];
+  groups: RejectedExecutionGroup[];
   total: number;
+  new_in_range: number;
 }

@@ -1,7 +1,7 @@
 import hashlib
 import tempfile
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, NoReturn
 from uuid import UUID
@@ -73,6 +73,8 @@ router = APIRouter(prefix="/ingestions", tags=["Ingestions"])
 
 # Keep this below the NGINX Ingress body-size limit to allow multipart overhead.
 MAX_UPLOAD_SIZE_BYTES = 320 * 1024 * 1024
+# Report endpoints span at most 90 UTC days; job runs are retained that long.
+MAX_REPORT_RANGE_DAYS = 90
 STATEFUL_INGESTION_SOURCE_TYPES = (
     IngestionSourceType.HPC_PATH,
     IngestionSourceType.HPC_UPLOAD,
@@ -620,6 +622,15 @@ def _resolve_request_machine(db: Session, machine_name: str):
         )
 
     return machine
+
+
+def _validate_report_date_range(start_date: date, end_date: date) -> None:
+    """Reject report ranges that are empty, reversed, or over 90 days."""
+    if not 0 < (end_date - start_date).days <= MAX_REPORT_RANGE_DAYS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Date range must span between 1 and {MAX_REPORT_RANGE_DAYS} days.",
+        )
 
 
 def _resolve_machine_ids(

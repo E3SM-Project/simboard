@@ -3,13 +3,14 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.common.dependencies import get_database_session
 from app.features.ingestion.api import (
     _require_ingestion_state_access,
     _resolve_machine_ids,
+    _validate_report_date_range,
 )
 from app.features.ingestion.schemas import IngestionSummaryResponse
 from app.features.ingestion.summary import summarize_ingestions
@@ -17,8 +18,6 @@ from app.features.user.manager import current_active_user
 from app.features.user.models import User
 
 router = APIRouter(prefix="/ingestions", tags=["Ingestions"])
-
-MAX_SUMMARY_RANGE_DAYS = 90
 
 
 @router.get(
@@ -42,12 +41,7 @@ def get_ingestion_summary(
 ) -> IngestionSummaryResponse:
     """Count executions created in [start_date, end_date), using UTC days."""
     _require_ingestion_state_access(user, action="read summaries")
-    if not 0 < (end_date - start_date).days <= MAX_SUMMARY_RANGE_DAYS:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Date range must span between 1 and {MAX_SUMMARY_RANGE_DAYS} days.",
-        )
-
+    _validate_report_date_range(start_date, end_date)
     machine_ids = _resolve_machine_ids(db, machine_name, site_name)
 
     return summarize_ingestions(db, start_date, end_date, machine_ids)

@@ -1,9 +1,16 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Activity } from 'lucide-react';
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { TableCellText } from '@/components/ui/table-cell-text';
-import { JobStatusBadge, JobStatusTile } from '@/features/operations/components/JobStatusBadge';
+import { JobStatusBadge, JobStatusLegend } from '@/features/operations/components/JobStatusBadge';
 import {
   EmptyRow,
   OperationsSection,
@@ -11,74 +18,104 @@ import {
 } from '@/features/operations/components/OperationsSection';
 import {
   filterJobs,
+  formatRelative,
   formatUtc,
   getJobDetails,
+  getJobDueBy,
   getJobStatus,
-  JOB_STATUSES,
   type JobStatus,
 } from '@/features/operations/operationsUtils';
-import type { JobType, ScheduledJobHealthResponse } from '@/features/operations/types';
+import {
+  JOB_TYPES,
+  type JobType,
+  type ScheduledJobHealthResponse,
+} from '@/features/operations/types';
+
+const ALL = 'all';
 
 // Jobs needing attention come first.
 const STATUS_PRIORITY: JobStatus[] = ['failed', 'stale', 'never_reported', 'running', 'healthy'];
 
 const COLUMNS = [
-  { label: 'Job', className: 'w-[22%]' },
-  { label: 'Type', className: 'w-[11%]' },
-  { label: 'Machine', className: 'w-[11%]' },
-  { label: 'Status', className: 'w-[14%]' },
-  { label: 'Last reported (UTC)', className: 'w-[16%]' },
-  { label: 'Details' },
+  { label: 'Machine', className: 'w-[16%]' },
+  { label: 'Type', className: 'w-[14%]' },
+  { label: 'Status', className: 'w-[34%]' },
+  { label: 'Last reported (UTC)', className: 'w-[18%]' },
+  {
+    label: 'Stale after (UTC)',
+    className: 'w-[18%]',
+    title: 'Becomes Stale if no report arrives by this time',
+  },
 ];
 
 interface JobHealthSectionProps {
   query: UseQueryResult<ScheduledJobHealthResponse>;
   jobType?: JobType;
+  onJobTypeChange: (value: string) => void;
   /** Whether filters that apply to this section are active. */
   filtered: boolean;
 }
 
-export const JobHealthSection = ({ query, jobType, filtered }: JobHealthSectionProps) => (
+export const JobHealthSection = ({
+  query,
+  jobType,
+  onJobTypeChange,
+  filtered,
+}: JobHealthSectionProps) => (
   <OperationsSection
     title="Job Health"
     description="Latest status of each scheduled ingestion job."
     icon={Activity}
     query={query}
+    actions={
+      <Select value={jobType ?? ALL} onValueChange={onJobTypeChange}>
+        <SelectTrigger aria-label="Job type" className="w-40">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>All job types</SelectItem>
+          {JOB_TYPES.map((value) => (
+            <SelectItem key={value} value={value} className="capitalize">
+              {value}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    }
   >
     {(data) => {
       const jobs = filterJobs(data.jobs, jobType)
         .map((job) => ({ job, status: getJobStatus(job) }))
         .sort(
           (left, right) =>
-            STATUS_PRIORITY.indexOf(left.status) - STATUS_PRIORITY.indexOf(right.status),
+            STATUS_PRIORITY.indexOf(left.status) - STATUS_PRIORITY.indexOf(right.status) ||
+            left.job.machine_name.localeCompare(right.job.machine_name) ||
+            left.job.scan_mode.localeCompare(right.job.scan_mode),
         );
-      const counts = new Map<JobStatus, number>();
-      jobs.forEach(({ status }) => counts.set(status, (counts.get(status) ?? 0) + 1));
 
       return (
-        <div className="space-y-4">
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            {JOB_STATUSES.map((status) => (
-              <JobStatusTile key={status} status={status} count={counts.get(status) ?? 0} />
-            ))}
-          </dl>
-
-          <OperationsTable columns={COLUMNS} className="min-w-[760px] table-fixed">
+        <div className="space-y-3">
+          <OperationsTable columns={COLUMNS} className="min-w-[720px] table-fixed">
             {jobs.map(({ job, status }) => (
-              <TableRow key={job.id}>
-                <TableCell>
-                  <TableCellText value={job.id} mono />
-                </TableCell>
-                <TableCell>{job.scan_mode}</TableCell>
+              <TableRow key={job.id} title={`Job ${job.id}`}>
                 <TableCell>{job.machine_name}</TableCell>
+                <TableCell className="capitalize">{job.scan_mode}</TableCell>
                 <TableCell>
                   <JobStatusBadge status={status} />
+                  {status === 'healthy' ? null : (
+                    <TableCellText
+                      value={getJobDetails(job)}
+                      placeholder=""
+                      lines={2}
+                      className="mt-1 text-xs text-muted-foreground"
+                    />
+                  )}
                 </TableCell>
                 <TableCell>
-                  <TableCellText value={formatUtc(job.last_reported_at)} />
+                  <TimeWithAge value={job.last_reported_at} />
                 </TableCell>
                 <TableCell>
-                  <TableCellText value={getJobDetails(job)} lines={2} fullValueMode="tooltip" />
+                  <TimeWithAge value={getJobDueBy(job)} />
                 </TableCell>
               </TableRow>
             ))}
@@ -91,8 +128,18 @@ export const JobHealthSection = ({ query, jobType, filtered }: JobHealthSectionP
               />
             ) : null}
           </OperationsTable>
+          <JobStatusLegend />
         </div>
       );
     }}
   </OperationsSection>
 );
+
+const TimeWithAge = ({ value }: { value: string | null }) =>
+  value ? (
+    <span className="whitespace-nowrap">
+      {formatUtc(value)} <span className="text-muted-foreground">({formatRelative(value)})</span>
+    </span>
+  ) : (
+    <span className="text-muted-foreground">—</span>
+  );

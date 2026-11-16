@@ -247,21 +247,39 @@ class ExecutionDiscoveryResultsResponse(BaseModel):
     existing_count: int
 
 
-class RejectedExecutionRead(BaseModel):
-    """One execution whose latest validation rejected it."""
+class RejectedExecutionExample(BaseModel):
+    """The newest rejected execution in a group."""
 
     machine_name: str
     case_identity: str
     execution_id: str
+    message: str | None
+
+
+class RejectedExecutionGroup(BaseModel):
+    """Rejected executions sharing a site, outcome, and first error.
+
+    ``code`` and ``target`` are None when the first error lacks them, including
+    executions rejected without errors.
+    """
+
+    site_name: str
     outcome: ExecutionDiscoveryOutcome
-    errors: list[dict[str, str]]
+    code: str | None
+    target: str | None
+    executions: int
+    cases: int
+    new_in_range: int
+    latest_detected_at: datetime
+    example: RejectedExecutionExample
 
 
 class RejectedExecutionsResponse(BaseModel):
-    """A bounded list of rejected executions with the full count."""
+    """Current rejections grouped by first error, with overall counts."""
 
-    executions: list[RejectedExecutionRead] = Field(default_factory=list)
+    groups: list[RejectedExecutionGroup] = Field(default_factory=list)
     total: int = 0
+    new_in_range: int = 0
 
 
 class ArchiveCheckpointEntry(BaseModel):

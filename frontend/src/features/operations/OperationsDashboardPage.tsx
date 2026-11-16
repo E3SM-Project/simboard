@@ -14,8 +14,8 @@ import {
 } from '@/components/ui/select';
 import { FailedUploadsSection } from '@/features/operations/components/FailedUploadsSection';
 import { JobHealthSection } from '@/features/operations/components/JobHealthSection';
-import { RecentIngestionsSection } from '@/features/operations/components/RecentIngestionsSection';
 import { RejectedExecutionsSection } from '@/features/operations/components/RejectedExecutionsSection';
+import { SiteSummarySection } from '@/features/operations/components/SiteSummarySection';
 import {
   useIngestionSummary,
   useJobHealth,
@@ -27,18 +27,19 @@ import {
   RANGE_DAYS,
   utcDateWindow,
 } from '@/features/operations/operationsUtils';
-import { JOB_TYPES } from '@/features/operations/types';
 import type { Site } from '@/types';
+import type { Machine } from '@/types/machine';
 
 const ALL = 'all';
 const PAGE_CLASS = 'mx-auto w-full max-w-7xl px-4 py-8';
 
 interface OperationsDashboardPageProps {
+  machines: Machine[];
   sites: Site[];
 }
 
 /** Admin-only page; data requests start only after the role check passes. */
-export const OperationsDashboardPage = ({ sites }: OperationsDashboardPageProps) => {
+export const OperationsDashboardPage = ({ machines, sites }: OperationsDashboardPageProps) => {
   const { user } = useAuth();
 
   if (user?.role !== 'admin') {
@@ -52,10 +53,10 @@ export const OperationsDashboardPage = ({ sites }: OperationsDashboardPageProps)
     );
   }
 
-  return <OperationsDashboard sites={sites} />;
+  return <OperationsDashboard machines={machines} sites={sites} />;
 };
 
-const OperationsDashboard = ({ sites }: OperationsDashboardPageProps) => {
+const OperationsDashboard = ({ machines, sites }: OperationsDashboardPageProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const siteNames = useMemo(() => sites.map((site) => site.name).sort(), [sites]);
   const { jobType, siteName, rangeDays } = parseOperationsFilters(searchParams, siteNames);
@@ -65,7 +66,7 @@ const OperationsDashboard = ({ sites }: OperationsDashboardPageProps) => {
 
   const jobsQuery = useJobHealth(siteName);
   const summaryQuery = useIngestionSummary(siteName, dateWindow.startDate, dateWindow.endDate);
-  const rejectedQuery = useRejectedExecutions(siteName);
+  const rejectedQuery = useRejectedExecutions(siteName, dateWindow.startDate, dateWindow.endDate);
 
   const setFilter = (key: string, value: string, defaultValue = ALL) => {
     const next = new URLSearchParams(searchParams);
@@ -91,27 +92,11 @@ const OperationsDashboard = ({ sites }: OperationsDashboardPageProps) => {
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Operations Dashboard</h1>
           <p className="text-sm text-muted-foreground">
-            Job health, failed uploads, ingestions, and rejected executions for this environment.
+            Job health, ingestions, failed uploads, and rejected executions for this environment.
           </p>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3 lg:w-[36rem]">
-          <div className="space-y-1">
-            <Label htmlFor="operations-job-type">Job type</Label>
-            <Select value={jobType ?? ALL} onValueChange={(value) => setFilter('job_type', value)}>
-              <SelectTrigger id="operations-job-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL}>All job types</SelectItem>
-                {JOB_TYPES.map((value) => (
-                  <SelectItem key={value} value={value} className="capitalize">
-                    {value}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:w-[24rem]">
           <div className="space-y-1">
             <Label htmlFor="operations-site">Site</Label>
             <Select value={siteName ?? ALL} onValueChange={(value) => setFilter('site', value)}>
@@ -150,10 +135,7 @@ const OperationsDashboard = ({ sites }: OperationsDashboardPageProps) => {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <p className="text-xs text-muted-foreground">
-          Times are UTC. Job type applies to job health and failed upload cases; date range applies
-          to recent ingestions and daily failure counts.
-        </p>
+        <p className="text-xs text-muted-foreground">Times are UTC.</p>
         <div className="flex items-center gap-3">
           {updatedAt ? (
             <span className="text-xs text-muted-foreground">Updated {updatedAt} UTC</span>
@@ -175,24 +157,30 @@ const OperationsDashboard = ({ sites }: OperationsDashboardPageProps) => {
         </div>
       </div>
 
+      <SiteSummarySection
+        queries={[jobsQuery, summaryQuery, rejectedQuery]}
+        machines={machines}
+        rangeDays={rangeDays}
+        filtered={Boolean(siteName)}
+        onSelectSite={(name) => setFilter('site', name)}
+      />
       <JobHealthSection
         query={jobsQuery}
         jobType={jobType}
+        onJobTypeChange={(value) => setFilter('job_type', value)}
         filtered={Boolean(jobType || siteName)}
       />
       <FailedUploadsSection
         query={jobsQuery}
-        jobType={jobType}
         dateWindow={dateWindow}
-        rangeDays={rangeDays}
-        filtered={Boolean(jobType || siteName)}
-      />
-      <RecentIngestionsSection
-        query={summaryQuery}
         rangeDays={rangeDays}
         filtered={Boolean(siteName)}
       />
-      <RejectedExecutionsSection query={rejectedQuery} filtered={Boolean(siteName)} />
+      <RejectedExecutionsSection
+        query={rejectedQuery}
+        rangeDays={rangeDays}
+        filtered={Boolean(siteName)}
+      />
     </main>
   );
 };
