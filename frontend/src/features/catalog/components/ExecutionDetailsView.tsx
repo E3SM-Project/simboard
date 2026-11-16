@@ -1201,40 +1201,6 @@ export const ExecutionDetailsView = ({
                         </Button>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Label className="min-w-[100px] text-xs text-muted-foreground">
-                        Case ID:
-                      </Label>
-                      <ReadonlyInput value={execution.caseId} />
-                      {execution.caseId && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          type="button"
-                          onClick={() => navigator.clipboard.writeText(execution.caseId)}
-                          title="Copy full Case ID"
-                        >
-                          Copy
-                        </Button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Label className="min-w-[100px] text-xs text-muted-foreground">
-                        Machine ID:
-                      </Label>
-                      <ReadonlyInput value={execution.machineId} />
-                      {execution.machineId && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          type="button"
-                          onClick={() => navigator.clipboard.writeText(execution.machineId)}
-                          title="Copy full Machine ID"
-                        >
-                          Copy
-                        </Button>
-                      )}
-                    </div>
 
                     <div className="flex items-center gap-2">
                       <Label className="min-w-[100px] text-xs text-muted-foreground">
