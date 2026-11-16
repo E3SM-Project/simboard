@@ -239,6 +239,22 @@ dev API ingestion too; scalar checks alone do not establish recovery.
 physical resolution, units, and authoritative sources require a separate issue.
 Downgrade refuses null aliases until an operator explicitly resolves those records.
 
+### Initialization repair (#438)
+
+The `initialization` group reads each execution's `env_run.xml`: `restart` when
+`CONTINUE_RUN` is TRUE, otherwise `RUN_TYPE`. It never infers continuation from
+execution order. Missing `env_run.xml` or `RUN_TYPE` fails without changes. Stored
+values always exist, so corrections require `--overwrite`:
+
+```bash
+make metadata-backfill machine=chrysalis env=dev \
+  SIMBOARD_ROOT=/path/to/simboard_root \
+  args='--fields initialization --sources archive --case-name EXACT_CASE --hpc-username USER --overwrite --dry-run'
+```
+
+Review before/after values against `env_run.xml`. Obtain separate authorization
+before replacing `--dry-run` with `--apply` or widening scope.
+
 ### Review and apply
 
 Dry runs resolve owners through the API without writing mappings. **`matched` means the existing owner resolved**, not that a new mapping was inserted.
