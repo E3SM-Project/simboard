@@ -1233,13 +1233,13 @@ export const ExecutionDetailsView = ({
                       <ReadonlyText value={execution.gitTag} />
                     </div>
                     <div className="flex items-center gap-2">
-                      <Label className="min-w-[100px] text-xs text-muted-foreground">
-                        Git Commit Hash:
-                      </Label>
+                      <div className="flex min-w-[100px] items-center text-xs text-muted-foreground">
+                        <Label className="text-xs text-muted-foreground">Git Commit Hash</Label>
+                        <CommitHashHelp hash={execution.gitCommitHash} />:
+                      </div>
                       <ReadonlyInput value={execution.gitCommitHash} />
                       {execution.gitCommitHash && (
                         <>
-                          <CommitHashHelp hash={execution.gitCommitHash} />
                           <Button
                             variant="outline"
                             size="sm"

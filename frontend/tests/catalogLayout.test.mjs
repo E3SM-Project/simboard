@@ -537,7 +537,7 @@ test('source path and model hash show copy actions and explain abbreviated hashe
 
   const shared = summary([group('aaa', configuration)]);
   for (const label of ['Source Code Path', 'Model Hash', 'Model Tag']) {
-    assert.match(shared, new RegExp(`<dt[^>]*>${label}</dt>`));
+    assert.match(shared, new RegExp(`<dt[^>]*>${label}<`));
   }
   assert.match(shared, /\/model\/source/);
   assert.match(shared, /v3\.0\.2/);

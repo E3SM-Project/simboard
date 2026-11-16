@@ -3,8 +3,8 @@ import { CircleHelp } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { isAbbreviatedCommitHash } from '@/features/catalog/caseUtils';
 
-export const CommitHashHelp = ({ hash }: { hash: string }) => {
-  const abbreviated = isAbbreviatedCommitHash(hash);
+export const CommitHashHelp = ({ hash }: { hash?: string | null }) => {
+  const abbreviated = hash ? isAbbreviatedCommitHash(hash) : false;
 
   return (
     <TooltipProvider delayDuration={150}>

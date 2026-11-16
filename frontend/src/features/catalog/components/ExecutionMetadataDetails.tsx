@@ -98,10 +98,12 @@ export const CopyableMetadataValue = ({
   help?: ReactNode;
 }) => (
   <div>
-    <dt className="inline font-medium">{label}: </dt>
+    <dt className="inline font-medium">
+      {label}
+      {help}:{' '}
+    </dt>
     <dd className="inline break-all">
       {value ?? '—'}
-      {help}
       {value ? <CopyValueButton label={label} value={value} /> : null}
     </dd>
   </div>
