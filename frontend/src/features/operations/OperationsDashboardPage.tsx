@@ -66,11 +66,7 @@ const OperationsDashboard = ({ machines, sites }: OperationsDashboardPageProps) 
 
   const jobsQuery = useJobHealth(siteName);
   const summaryQuery = useIngestionSummary(siteName, dateWindow.startDate, dateWindow.endDate);
-  const rejectedQuery = useRejectedExecutions(
-    siteName,
-    dateWindow.startDate,
-    dateWindow.endDate,
-  );
+  const rejectedQuery = useRejectedExecutions(siteName, dateWindow.startDate, dateWindow.endDate);
 
   const setFilter = (key: string, value: string, defaultValue = ALL) => {
     const next = new URLSearchParams(searchParams);

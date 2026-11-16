@@ -117,7 +117,8 @@ export const CountPill = ({ count, label }: { count: number; label: string }) =>
   ) : null;
 
 interface OperationsTableProps {
-  columns: { label: string; className?: string }[];
+  /** `title` explains a column on hover. */
+  columns: { label: string; className?: string; title?: string }[];
   children: ReactNode;
   className?: string;
 }
@@ -128,9 +129,10 @@ export const OperationsTable = ({ columns, children, className }: OperationsTabl
     <Table className={className}>
       <TableHeader className="bg-muted-subtle">
         <TableRow className="hover:bg-muted-subtle">
-          {columns.map(({ label, className: columnClassName }) => (
+          {columns.map(({ label, className: columnClassName, title }) => (
             <TableHead
               key={label}
+              title={title}
               className={cn('sticky top-0 z-10 bg-muted-subtle', columnClassName)}
             >
               {label}

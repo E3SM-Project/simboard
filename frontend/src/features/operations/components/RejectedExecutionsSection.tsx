@@ -9,7 +9,7 @@ import {
   OperationsSection,
   OperationsTable,
 } from '@/features/operations/components/OperationsSection';
-import { formatRejectionError, formatUtc } from '@/features/operations/operationsUtils';
+import { formatUtc } from '@/features/operations/operationsUtils';
 import type { RejectedExecutionsResponse } from '@/features/operations/types';
 
 const COLUMNS = [
@@ -51,7 +51,6 @@ export const RejectedExecutionsSection = ({
       <OperationsTable columns={COLUMNS} className="min-w-[960px] table-fixed">
         {data.groups.map((group) => {
           const { example } = group;
-          const error = formatRejectionError(group);
 
           return (
             <TableRow
@@ -59,13 +58,12 @@ export const RejectedExecutionsSection = ({
             >
               <TableCell>{group.site_name}</TableCell>
               <TableCell>{OUTCOME_LABELS[group.outcome]}</TableCell>
-              <TableCell>
-                <span
-                  className="line-clamp-2 break-all font-mono text-xs"
-                  title={example.message ?? undefined}
-                >
-                  {error}
-                </span>
+              {/* Code and target on separate lines, so neither breaks mid-token. */}
+              <TableCell className="font-mono text-xs" title={example.message ?? undefined}>
+                <div className="break-words">{group.code ?? 'Unknown error'}</div>
+                {group.target ? (
+                  <div className="break-words text-muted-foreground">{group.target}</div>
+                ) : null}
               </TableCell>
               <TableCell className="text-right">{group.executions}</TableCell>
               <TableCell className="text-right">{group.cases}</TableCell>

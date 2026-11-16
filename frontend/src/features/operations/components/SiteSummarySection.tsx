@@ -104,20 +104,17 @@ export const SiteSummarySection = ({
               <TableRow key={row.siteName}>
                 <TableCell>
                   {row.siteName === UNKNOWN_SITE ? (
-                    <span
-                      className="font-medium"
-                      title="Machines missing from the machine list"
-                    >
+                    <span className="font-medium" title="Machines missing from the machine list">
                       {row.siteName}
                     </span>
                   ) : (
                     <Button
-                    type="button"
-                    variant="link"
-                    className="h-auto p-0 font-medium"
-                    title={`Show only ${row.siteName}`}
-                    onClick={() => onSelectSite(row.siteName)}
-                  >
+                      type="button"
+                      variant="link"
+                      className="h-auto p-0 font-medium"
+                      title={`Show only ${row.siteName}`}
+                      onClick={() => onSelectSite(row.siteName)}
+                    >
                       {row.siteName}
                     </Button>
                   )}

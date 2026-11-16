@@ -216,10 +216,6 @@ export const getDailyFailureRows = (
   return { rows, categories };
 };
 
-/** Name a rejection group by its first error's code and target file or field. */
-export const formatRejectionError = ({ code, target }: Pick<RejectedExecutionGroup, 'code' | 'target'>) =>
-  [code, target].filter(Boolean).join(': ') || 'Unknown error';
-
 const PROBLEM_STATUSES = ['failed', 'stale', 'never_reported'] as const;
 /** Site for machines missing from the machine list, so their data is not dropped. */
 export const UNKNOWN_SITE = 'Unknown site';

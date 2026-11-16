@@ -188,15 +188,6 @@ test('daily failure counts are limited to the window and pivoted by category', (
   ]);
 });
 
-test('rejection groups are named by error code and target', () => {
-  assert.equal(
-    utils.formatRejectionError({ code: 'missing_required_file', target: 'env_case.xml.*.gz' }),
-    'missing_required_file: env_case.xml.*.gz',
-  );
-  assert.equal(utils.formatRejectionError({ code: 'missing', target: null }), 'missing');
-  assert.equal(utils.formatRejectionError({ code: null, target: null }), 'Unknown error');
-});
-
 test('relative times read as past or future', () => {
   const now = new Date('2026-11-13T12:00:00Z');
   const at = (iso) => utils.formatRelative(iso, now);
@@ -474,7 +465,14 @@ test('admins see the site summary first, then each section', async () => {
 
   // Rejections are grouped with an example.
   assert.match(html, /10 rejected/);
-  assert.match(html, /missing_required_file: env_case\.xml\.\*\.gz/);
+  assert.match(
+    html,
+    /<div class="break-words">missing_required_file<\/div><div class="break-words text-muted-foreground">env_case\.xml\.\*\.gz<\/div>/,
+  );
+  assert.match(
+    html,
+    /title="Becomes Stale if no report arrives by this time"[^>]*>Stale after \(UTC\)</,
+  );
   assert.match(html, /title="Missing env_case\."/);
   assert.match(html, /ac\.user\/case-x \/ 1\.2 \(chrysalis\)/);
 });

@@ -42,7 +42,11 @@ const COLUMNS = [
   { label: 'Type', className: 'w-[14%]' },
   { label: 'Status', className: 'w-[34%]' },
   { label: 'Last reported (UTC)', className: 'w-[18%]' },
-  { label: 'Due by (UTC)', className: 'w-[18%]' },
+  {
+    label: 'Stale after (UTC)',
+    className: 'w-[18%]',
+    title: 'Becomes Stale if no report arrives by this time',
+  },
 ];
 
 interface JobHealthSectionProps {
