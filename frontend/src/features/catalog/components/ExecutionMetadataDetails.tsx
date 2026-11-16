@@ -1,8 +1,10 @@
-import { Copy, Info } from 'lucide-react';
+import { Info } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { isAbbreviatedCommitHash } from '@/features/catalog/caseUtils';
+import { CommitHashHelp } from '@/features/catalog/components/CommitHashHelp';
+import { CopyValueButton } from '@/features/catalog/components/CopyValueButton';
 import {
   EXECUTION_METADATA_FIELDS,
   type ExecutionCandidate,
@@ -78,7 +80,7 @@ export const ExecutionMetadataDetails = ({
           <CopyableMetadataValue
             label="Model Hash"
             value={modelHash}
-            abbreviated={modelHash != null && isAbbreviatedCommitHash(modelHash)}
+            help={modelHash ? <CommitHashHelp hash={modelHash} /> : null}
           />
         </dl>
       </PopoverContent>
@@ -89,29 +91,18 @@ export const ExecutionMetadataDetails = ({
 export const CopyableMetadataValue = ({
   label,
   value,
-  abbreviated,
+  help,
 }: {
   label: string;
   value: string | null;
-  abbreviated?: boolean;
+  help?: ReactNode;
 }) => (
   <div>
     <dt className="inline font-medium">{label}: </dt>
     <dd className="inline break-all">
       {value ?? '—'}
-      {abbreviated ? <span className="ml-1 text-muted-foreground">(abbreviated)</span> : null}
-      {value ? (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="ml-1 h-5 w-5 align-middle text-muted-foreground"
-          aria-label={`Copy full ${label}`}
-          title={`Copy full ${label}`}
-          onClick={() => void navigator.clipboard?.writeText(value).catch(() => undefined)}
-        >
-          <Copy className="h-3 w-3" />
-        </Button>
-      ) : null}
+      {help}
+      {value ? <CopyValueButton label={label} value={value} /> : null}
     </dd>
   </div>
 );

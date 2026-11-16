@@ -250,6 +250,9 @@ async function run() {
       'Compset Long Name',
       'Grid Alias',
       'Grid Long Name',
+      'Source Code Path',
+      'Model Hash',
+      'Model Tag',
     ];
     for (const text of summaryLabels) {
       const label = [...document.querySelectorAll('dt')].find(
@@ -364,7 +367,7 @@ async function run() {
       'Shared alias appears beneath metadata',
     );
     check(metadata.textContent?.includes('SHARED-GRID'), 'Shared grid appears beneath metadata');
-    check(!metadata.textContent?.includes('v3'), 'Model tag stays out of primary summary');
+    check(metadata.textContent?.includes('v3'), 'Model tag appears in summary');
     check(
       [...metadata.querySelectorAll('dt')].map((label) => label.textContent).join('|') ===
         summaryLabels.join('|'),
@@ -1575,7 +1578,7 @@ async function checkConfigurationComparison() {
   const summary = document.querySelector('[aria-label="Case summary"]')!;
   check(summary.textContent?.includes('shared-alias'), 'Summary retains shared values');
   check(summary.textContent?.includes('Differs by case hash'), 'Summary flags differing values');
-  check(!summary.textContent?.includes('Model tag'), 'Technical metadata stays out of summary');
+  check(summary.textContent?.includes('Model Tag'), 'Source-code metadata appears in summary');
   check(
     summary.textContent?.includes('Some executions unavailable'),
     'Summary distinguishes missing observations from disagreement',

@@ -31,7 +31,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { isAbbreviatedCommitHash } from '@/features/catalog/caseUtils';
+import { CommitHashHelp } from '@/features/catalog/components/CommitHashHelp';
 import { EditableExternalLinkList } from '@/features/catalog/components/EditableExternalLinkList';
 import { ExecutionPathCard } from '@/features/catalog/components/ExecutionPathCard';
 import {
@@ -1239,11 +1239,7 @@ export const ExecutionDetailsView = ({
                       <ReadonlyInput value={execution.gitCommitHash} />
                       {execution.gitCommitHash && (
                         <>
-                          {isAbbreviatedCommitHash(execution.gitCommitHash) && (
-                            <span className="shrink-0 text-xs text-muted-foreground">
-                              (abbreviated)
-                            </span>
-                          )}
+                          <CommitHashHelp hash={execution.gitCommitHash} />
                           <Button
                             variant="outline"
                             size="sm"

@@ -19,6 +19,8 @@ import {
   getConfigurationBaseline,
   getConfigurationDiffParts,
 } from '@/features/catalog/caseUtils';
+import { CommitHashHelp } from '@/features/catalog/components/CommitHashHelp';
+import { CopyValueButton } from '@/features/catalog/components/CopyValueButton';
 import { executionDetailsPath, type ReadableCaseIdentity } from '@/lib/catalog/urls';
 import type {
   CaseDetailOut,
@@ -29,6 +31,7 @@ import type {
 } from '@/types';
 
 // Compare stored technical metadata only.
+const COPYABLE_FIELDS = new Set(['source_code_path', 'git_commit_hash']);
 
 export const CaseConfigurationSummary = ({
   record,
@@ -76,9 +79,9 @@ export const CaseConfigurationSummary = ({
     <SummaryField label="HPC Username">
       {record.hpcUsernames.join(', ') || 'Unavailable'}
     </SummaryField>
-    {CONFIGURATION_FIELDS.slice(0, 4).map(([field, label]) => (
+    {CONFIGURATION_FIELDS.map(([field, label]) => (
       <SummaryField key={field} label={label}>
-        <SharedConfigurationValue record={record} field={field} identity={identity} />
+        <SharedConfigurationValue record={record} field={field} label={label} identity={identity} />
       </SummaryField>
     ))}
   </dl>
@@ -251,10 +254,12 @@ const SummaryField = ({ label, children }: { label: string; children: React.Reac
 const SharedConfigurationValue = ({
   record,
   field,
+  label,
   identity,
 }: {
   record: CaseDetailOut;
   field: string;
+  label: string;
   identity?: ReadableCaseIdentity;
 }) => {
   const summary = record.sharedConfiguration?.[field];
@@ -304,6 +309,12 @@ const SharedConfigurationValue = ({
       ) : (
         value
       )}
+      {!differs && source && field === 'git_commit_hash' ? (
+        <CommitHashHelp hash={source.value} />
+      ) : null}
+      {!differs && source && COPYABLE_FIELDS.has(field) ? (
+        <CopyValueButton label={label} value={source.value} />
+      ) : null}
       {summary?.incomplete && (summary.value != null || differs) ? (
         <span className="block text-xs font-normal text-muted-foreground">
           Some executions unavailable
