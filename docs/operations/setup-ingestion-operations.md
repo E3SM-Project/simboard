@@ -306,22 +306,31 @@ sums failures by UTC day, machine, and category:
 ### Operations dashboard
 
 Administrators can open **Operations** in the SimBoard navigation
-(`/admin/operations`) to see each environment's job health, failed uploads,
-recent ingestions, and rejected executions on one read-only page. Jobs that
-never reported appear separately from `stale` and `failed` jobs.
+(`/admin/operations`) to see each environment's state on one read-only page:
 
-| Filter     | Applies to                                                          |
-| ---------- | ------------------------------------------------------------------- |
-| Job type   | Job health and failed upload cases                                  |
-| Site       | All sections (`site_name` on each API)                              |
-| Date range | Recent ingestions and daily failure counts (last 7–90 UTC days)     |
+- **Site summary:** per site, job problems, new executions and cases, the last
+  day with new executions, rejections (new / total), and failed uploads. Rows
+  are attributed by each machine's site. Click a site to filter the page.
+- **Job health:** each job's status, last report, and **Due by**
+  (`last_reported_at` + `max_silence_minutes`). Hover a status for details and
+  thresholds. Jobs that never reported appear separately from `stale` and
+  `failed` jobs.
+- **Failed uploads:** cases still failing in each job's latest upload run, and
+  daily failure counts.
+- **Rejected executions:** current rejections grouped by first validation error.
+
+The **Site** and **Date range** (last 7–90 UTC days) filters apply to every
+section. **Job type** in Job health filters only that table.
 
 `GET /api/v1/ingestions/rejected-executions` (administrators and service
-accounts) returns up to 200 executions that the latest validation rejected as
-incomplete or invalid, newest first, with their errors and the full `total`. It
-accepts `machine_name` and `site_name`, like `GET /api/v1/ingestions/jobs` and
-`GET /api/v1/ingestions/summary`. A rejection is updated only when a scan visits
-its execution again, so one whose directory was removed stays listed.
+accounts) groups executions that the latest validation rejected as incomplete
+or invalid by site, outcome, and first error's `code` and `file_spec` or
+`field`. Each group has execution and case counts, `new_in_range` (first
+detected in [`start_date`, `end_date`)), the latest detection time, and the
+newest example. It requires `start_date` and `end_date` (at most 90 days) and
+accepts `machine_name` and `site_name`, like `GET /api/v1/ingestions/summary`.
+A rejection is updated only when a scan visits its execution again, so one whose
+directory was removed stays listed.
 
 ### Reference: configuration files and variables
 
