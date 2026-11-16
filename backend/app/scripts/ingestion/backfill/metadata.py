@@ -59,6 +59,8 @@ FIELD_NAMES = {
     "git-repository": ("git_repository_source",),
     "grid": ("grid_long_name", "grid_alias"),
     "initialization": ("initialization_type",),
+    "source-code-path": ("source_code_path",),
+    "git-commit-hash": ("git_commit_hash",),
 }
 FIELD_FILES = {
     "simulation-dates": ("case_docs_env_run", "cpl_log"),
@@ -67,11 +69,18 @@ FIELD_FILES = {
     "git-repository": ("git_config",),
     "grid": ("readme_case", "case_docs_env_build"),
     "initialization": ("case_docs_env_run",),
+    "source-code-path": (),
+    # Only GIT_LOG has full hashes; never backfill abbreviated GIT_DESCRIBE values.
+    "git-commit-hash": ("git_log",),
 }
 
 
 class _IncompleteExecutionError(ValueError):
     """An execution lacks a required identity file for backfill."""
+
+
+class _MissingSourceError(Exception):
+    """Optional source metadata is absent, so the record is skipped."""
 
 
 def main() -> int:
@@ -93,6 +102,8 @@ def main() -> int:
             "git-repository",
             "grid",
             "initialization",
+            "source-code-path",
+            "git-commit-hash",
         ],
         required=True,
     )
@@ -199,6 +210,13 @@ def _validate_required_metadata(parsed, path: Path, fields: list[str]) -> None:
     ):
         if group in fields and not getattr(parsed, field):
             raise ValueError(f"Missing XML {entry}: {path}")
+
+    for group, field, source in (
+        ("source-code-path", "source_code_path", "XML SRCROOT"),
+        ("git-commit-hash", "git_commit_hash", "GIT_LOG commit hash"),
+    ):
+        if group in fields and not getattr(parsed, field):
+            raise _MissingSourceError(f"Missing {source}: {path}")
 
 
 def _locate_backfill_files(path: Path, directories: list[str], keys: list[str]) -> dict:
@@ -527,39 +545,29 @@ def _observed_values(record: dict, args: argparse.Namespace) -> dict:
             ) != (record["case_name"], record["hpc_username"], record["execution_id"]):
                 raise ValueError("Source identity does not match database owner")
 
-            observations.append(
-                {
-                    "simulation_start_date": _normalized_date(
-                        parsed.simulation_start_date
-                    ),
-                    "simulation_end_date": _normalized_date(parsed.simulation_end_date),
-                    "run_script": _normalize_path_candidate(parsed.run_script_path),
-                }
-            )
-            if "component-set" in args.fields:
-                observations[-1].update(
-                    compset_long_name=parsed.compset_long_name,
-                    compset_alias=parsed.compset_alias,
-                )
-            if "git-repository" in args.fields:
-                observations[-1].update(
-                    git_repository_source=parsed.git_repository_source,
-                )
-            if "grid" in args.fields:
-                observations[-1].update(
-                    grid_long_name=parsed.grid_long_name,
-                    grid_alias=parsed.grid_alias,
-                )
-            if "initialization" in args.fields:
-                observations[-1].update(
-                    initialization_type=parsed.initialization_type,
-                )
+            observations.append(_observation(parsed, args.fields))
         except (ValueError, OSError) as exc:
             raise ValueError(f"Cannot safely backfill from {path}: {exc}") from exc
 
     names = [name for group in args.fields for name in FIELD_NAMES[group]]
 
     return _consistent_values(observations, names)
+
+
+def _observation(parsed, fields: list[str]) -> dict:
+    """Map parsed source values to the requested metadata names."""
+    observation = {
+        "simulation_start_date": _normalized_date(parsed.simulation_start_date),
+        "simulation_end_date": _normalized_date(parsed.simulation_end_date),
+        "run_script": _normalize_path_candidate(parsed.run_script_path),
+    }
+    for group in fields:
+        if group not in ("simulation-dates", "run-script"):
+            observation.update(
+                {name: getattr(parsed, name) for name in FIELD_NAMES[group]}
+            )
+
+    return observation
 
 
 def _consistent_values(observations: list[dict], names: list[str]) -> dict:
@@ -690,6 +698,18 @@ def _backfill_metadata(args: argparse.Namespace, api: str, token: str) -> int:
                 result = _request(api, token, "ingestions/metadata-backfill", payload)
                 outcomes[result["outcome"]] = outcomes.get(result["outcome"], 0) + 1
                 print(json.dumps(result))
+            except _MissingSourceError as exc:
+                outcome = "skipped_missing_source"
+                outcomes[outcome] = outcomes.get(outcome, 0) + 1
+                print(
+                    json.dumps(
+                        {
+                            "record_id": record["record_id"],
+                            "outcome": outcome,
+                            "reason": str(exc),
+                        }
+                    )
+                )
             except (ValueError, OSError, IngestionRequestError) as exc:
                 failures += 1
                 print(
@@ -729,6 +749,7 @@ def _log_metadata_summary(
                 outcomes.get("changed", 0),
             ),
             ("Records unchanged", outcomes.get("unchanged", 0)),
+            ("Skipped missing source", outcomes.get("skipped_missing_source", 0)),
             ("Record/request failures", failures),
         ],
         failures,
