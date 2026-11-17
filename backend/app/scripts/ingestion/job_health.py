@@ -5,9 +5,10 @@ Ingestion modules call ``record_failure`` to leave the run's first failure in
 failed case uploads in ``SIMBOARD_JOB_UPLOAD_FAILURES_FILE``. The site launcher
 reports the run start and finish with ``start`` and ``finish``; NERSC Spin
 CronJobs wrap their module with ``run``, and site maintenance jobs wrap their
-command with ``exec``. Both report live runs when ``SIMBOARD_JOB_ID`` is set
-and exit with the wrapped exit code. Report failures are logged and never stop
-the job or replace its exit code.
+command with ``exec``, which withholds the API token from that command. Both
+report live runs when ``SIMBOARD_JOB_ID`` is set and exit with the wrapped
+exit code. Report failures are logged and never stop the job or replace its
+exit code.
 
 Usage:
     python -m app.scripts.ingestion.job_health start
@@ -45,6 +46,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
 
 FailureReason = Literal["api_request", "filesystem", "unexpected"]
 
+TOKEN_ENV = "SIMBOARD_API_TOKEN"
 STATUS_FILE_ENV = "SIMBOARD_JOB_STATUS_FILE"
 UPLOAD_FAILURES_FILE_ENV = "SIMBOARD_JOB_UPLOAD_FAILURES_FILE"
 MESSAGE_MAX_LENGTH = 500
@@ -149,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         return run_module(args.module)
     if args.command == "exec":
-        return run_command(args.argv)
+        return run_command(args.argv, pass_token=False)
 
     _report(args.command, getattr(args, "exit_code", 0))
 
@@ -161,11 +163,14 @@ def run_module(module: str) -> int:
     return run_command([sys.executable, "-m", module])
 
 
-def run_command(argv: list[str]) -> int:
-    """Run a command, reporting it when it is a live scheduled job."""
+def run_command(argv: list[str], *, pass_token: bool = True) -> int:
+    """Run a command, reporting it when it is a live scheduled job.
+
+    Commands that do not call the API run without its token.
+    """
     live = not _parse_bool(os.environ.get("DRY_RUN"), default=True)
     if not (live and os.environ.get("SIMBOARD_JOB_ID")):
-        return _run_child(argv)
+        return _run_child(argv, pass_token)
 
     run_id = str(uuid4())
     temp_dir = Path(tempfile.gettempdir())
@@ -178,7 +183,7 @@ def run_command(argv: list[str]) -> int:
         SIMBOARD_JOB_UPLOAD_FAILURES_FILE=str(upload_failures_path),
     )
     _report("start")
-    exit_code = _run_child(argv)
+    exit_code = _run_child(argv, pass_token)
     _report("finish", exit_code)
     status_path.unlink(missing_ok=True)
     upload_failures_path.unlink(missing_ok=True)
@@ -203,9 +208,12 @@ def _report(event: str, exit_code: int = 0) -> None:
         _log_event("job_report_sent", {"report": event})
 
 
-def _run_child(argv: list[str]) -> int:
+def _run_child(argv: list[str], pass_token: bool) -> int:
+    env = (
+        None if pass_token else {k: v for k, v in os.environ.items() if k != TOKEN_ENV}
+    )
     try:
-        process = subprocess.Popen(argv)
+        process = subprocess.Popen(argv, env=env)
     except OSError as exc:
         # Exit as the shell does for a missing command so the run still finishes.
         print(f"Could not start {argv[0]}: {exc}", file=sys.stderr)
@@ -227,7 +235,7 @@ def _forward_signal(process: subprocess.Popen, signum: int, _frame: object) -> N
 
 
 def _send_report(event: str, exit_code: int) -> None:
-    token = os.environ["SIMBOARD_API_TOKEN"]
+    token = os.environ[TOKEN_ENV]
     # Identity registers the job on its first report. NERSC Spin ingestion
     # secrets already set SCAN_MODE; the launcher sets SIMBOARD_JOB_SCAN_MODE.
     payload: dict[str, Any] = {
@@ -309,7 +317,7 @@ def _clean_message(message: str, max_length: int) -> str:
 
 
 def _redact(message: str) -> str:
-    token = os.environ.get("SIMBOARD_API_TOKEN")
+    token = os.environ.get(TOKEN_ENV)
 
     return message.replace(token, "[redacted]") if token else message
 

@@ -407,6 +407,16 @@ def test_exec_reports_a_live_scheduled_command(report_env, sent, monkeypatch):
     assert finish["upload_failures"] is None
 
 
+@pytest.mark.parametrize("dry_run", ["true", "false"])
+def test_exec_withholds_the_api_token_from_the_command(
+    report_env, sent, monkeypatch, dry_run
+):
+    monkeypatch.setenv("DRY_RUN", dry_run)
+    check = "import os, sys; sys.exit('SIMBOARD_API_TOKEN' in os.environ)"
+
+    assert main(["exec", "--", sys.executable, "-c", check]) == 0
+
+
 def test_exec_finishes_a_command_that_cannot_start(
     report_env, sent, monkeypatch, tmp_path: Path
 ):

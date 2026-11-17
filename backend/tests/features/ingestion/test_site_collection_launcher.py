@@ -23,6 +23,18 @@ def _write_executable(path: Path, contents: str) -> Path:
     return path
 
 
+def _reported_job_env(**overrides: str) -> dict[str, str]:
+    """Return the test environment without inherited site or API settings."""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("SIMBOARD_API_", "SIMBOARD_JOB_"))
+        and key not in {"MACHINE_NAME", "SIMBOARD_SITE_CONFIG", "SIMBOARD_ENV_FILE"}
+    }
+
+    return {**env, **overrides}
+
+
 @pytest.mark.parametrize("target", ["ingest-dry-run", "ingest-apply"])
 @pytest.mark.parametrize("scan_mode", ["staging", "archive"])
 def test_machine_make_targets_show_early_errors(
@@ -535,7 +547,7 @@ def test_cron_template_archives_logs_with_shared_run_mode(
     scripts.mkdir(parents=True)
     for name in ("archive_ingestion_logs.py", "run_reported_job.sh"):
         (scripts / name).symlink_to(_launcher_path().parent / "operations" / name)
-    env = {**os.environ, "SIMBOARD_ROOT": str(root), "LOG_RETENTION_DAYS": "7"}
+    env = _reported_job_env(SIMBOARD_ROOT=str(root), LOG_RETENTION_DAYS="7")
     env.pop("DRY_RUN", None)
     if dry_run is not None:
         env["DRY_RUN"] = dry_run
@@ -694,7 +706,7 @@ def test_reported_job_hands_the_command_to_the_reporter(tmp_path: Path) -> None:
         ],
         capture_output=True,
         check=False,
-        env={**os.environ, "SIMBOARD_ENV_FILE": str(api_file)},
+        env=_reported_job_env(SIMBOARD_ENV_FILE=str(api_file)),
         text=True,
     )
 
@@ -719,13 +731,15 @@ def test_reported_job_runs_unreported_without_a_working_reporter(
             "refresh",
             "bash",
             "-c",
-            "exit 4",
+            "[[ -z ${SIMBOARD_API_TOKEN:-} ]] && exit 4",
         ],
         capture_output=True,
         check=False,
+        env=_reported_job_env(SIMBOARD_API_TOKEN="test-token"),
         text=True,
     )
 
+    # The command runs without the API token.
     assert result.returncode == 4
     assert "running without job health reports" in result.stderr
 
