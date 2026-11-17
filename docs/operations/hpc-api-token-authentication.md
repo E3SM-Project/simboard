@@ -63,12 +63,14 @@ curl -X POST https://api.simboard.org/api/v1/tokens \
 
 #### Path-Based Ingestion
 
+`archive_path` must be under `INGESTION_ALLOWED_PATH_ROOTS` (default: `/performance_archive`, `/OLD_PERF`).
+
 ```bash
 curl -X POST https://api.simboard.org/api/v1/ingestions/from-path \
   -H "Authorization: Bearer sbk_xxxxxxxxxxxxxxxxxxxxx" \
   -H "Content-Type: application/json" \
   -d '{
-    "archive_path": "/hpc/storage/simulations/archive.tar.gz",
+    "archive_path": "/performance_archive/<path-to-case>",
     "machine_name": "perlmutter",
     "hpc_username": "johndoe"
   }'
@@ -193,7 +195,7 @@ response = requests.post(
     f"{API_BASE}/ingestions/from-path",
     headers=headers,
     json={
-        "archive_path": "/path/to/archive.tar.gz",
+        "archive_path": "/performance_archive/<path-to-case>",
         "machine_name": "perlmutter",
         "hpc_username": "johndoe"
     }
