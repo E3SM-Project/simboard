@@ -50,6 +50,7 @@ an approved deployment requires a different source, branch, or tag.
 | Machine   | `SIMBOARD_ROOT`             | Site config                      | Repository checkout                    |
 | --------- | --------------------------- | -------------------------------- | -------------------------------------- |
 | Chrysalis | `/lcrc/group/e3sm/simboard` | `sites/configs/chrysalis.config` | `${SIMBOARD_ROOT}/repository/simboard` |
+| Compy     | `/compyfs/simboard`         | `sites/configs/compy.config`     | `${SIMBOARD_ROOT}/repository/simboard` |
 
 The operator's user account owns scheduling for this deployment.
 
@@ -198,6 +199,9 @@ After reviewing the merged file, install it:
 ```bash
 crontab /lcrc/group/e3sm/simboard/operations/chrysalis.crontab
 ```
+
+Compy has no diagnostics archive yet; remove the diagnostics entries from
+`compy.crontab` before installing it.
 
 After offline diagnostics discovery succeeds, enable the reviewed diagnostics
 entries and reinstall the file with the `crontab` command above. Leave the global
@@ -439,7 +443,7 @@ Run commands from the repository root. This is useful for quicker testing and de
 Review the dry-run results before running `ingest-apply`.
 Both targets require `scan_mode=archive` or `scan_mode=staging`; there is no default.
 
-#### Chrysalis
+#### Chrysalis / Compy
 
 After provisioning Chrysalis:
 
@@ -448,8 +452,10 @@ make ingest-dry-run machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm/simboard en
 make ingest-apply machine=chrysalis SIMBOARD_ROOT=/lcrc/group/e3sm/simboard env=dev scan_mode=archive MAX_CASES_PER_RUN=5
 ```
 
+For Compy, use `machine=compy SIMBOARD_ROOT=/compyfs/simboard`.
+
 - **Environment:** Use `env=prod` for production. Targets load `$SIMBOARD_ROOT/operations/env.<env>.sh`; use `env_file=/path/to/protected.env` to override it.
-- **Execution:** Uses `chrysalis.config` and the HPC upload ingestor through the existing launcher, preserving its runtime, file logs, and locks.
+- **Execution:** Uses `<machine>.config` and the HPC upload ingestor through the existing launcher, preserving its runtime, file logs, and locks.
 - **Output:** Both Make targets print the log path and stream launcher and ingestor output to the terminal while retaining the per-run log in `$SIMBOARD_ROOT/operations/raw_logs/`. Scheduled launcher invocations remain file-only by default; set `SIMBOARD_CONSOLE_LOG=true` to also stream their output. Lock contention is reported even when a staging run exits successfully without starting ingestion.
 
 #### Perlmutter / NERSC
