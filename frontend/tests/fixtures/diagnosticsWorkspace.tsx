@@ -383,13 +383,14 @@ const render = (path: string) =>
     <QueryClientProvider client={client}>
       <MemoryRouter key={++mount} initialEntries={[path]}>
         <nav>
-          <Link to="/case/alpha">Alpha case</Link>
-          <Link to="/case/beta">Beta case</Link>
+          <Link to="/">Home</Link>
+          <Link to="/cases/alpha">Alpha case</Link>
+          <Link to="/cases/beta">Beta case</Link>
           <Link to="/diagnostics">Diagnostics workspace</Link>
         </nav>
         <Probe />
         <Routes>
-          <Route path="/case/:id" element={<Case />} />
+          <Route path="/cases/:id" element={<Case />} />
           <Route path="/cases/:machine/:user/:id" element={<Case />} />
           <Route path="/diagnostics" element={<ComparePage />} />
           <Route path="/diagnostics/compare" element={<ComparePage />} />
@@ -455,7 +456,7 @@ const input = (element: HTMLInputElement, value: string) => {
 
 async function testWorkspace() {
   localStorage.clear();
-  render('/case/metadata');
+  render('/cases/metadata');
   await waitFor(() => button('Diagnostics (4)4 supported runs'), 'metadata case loaded');
   check(
     button('Diagnostics (4)4 supported runs')?.getAttribute('aria-expanded') === 'true',
@@ -579,7 +580,7 @@ async function testWorkspace() {
     ),
   );
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
-  render('/case/alpha');
+  render('/cases/alpha');
   await waitFor(
     () =>
       document.querySelector('button[aria-label^="Add E3SM"]') &&
@@ -625,7 +626,7 @@ async function testWorkspace() {
   );
   localStorage.removeItem('simboard.diagnostics-comparison');
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
-  render('/case/alpha');
+  render('/cases/alpha');
   await waitFor(
     () =>
       document.querySelector('a[href="#diagnostics-alpha-source-0-e3sm_diags:model_vs_obs"]') ||
@@ -667,6 +668,13 @@ async function testWorkspace() {
   click(document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]'), 'first run');
   await waitFor(() => button('Expand'), 'collapsed tray');
   check(document.getElementById('comparison-tray-selections')?.hidden, 'Tray starts collapsed');
+  click(link('Home'), 'home page');
+  await waitFor(() => latest === '/', 'home page');
+  check(
+    !document.querySelector('[aria-label="Diagnostics comparison"]') &&
+      document.body.style.paddingBottom === '',
+    'Tray and its page padding hidden outside case pages',
+  );
   click(link('Beta case'), 'second case');
   await waitFor(() => document.querySelector('h1')?.textContent === 'Case beta', 'second case');
   await waitFor(() => document.querySelector('button[aria-label^="Add E3SM"]'), 'beta runs');
@@ -1016,7 +1024,7 @@ async function testAnalysisFilters() {
     'Full MPAS run URL unchanged',
   );
   check(sharedRuns[0].label === 'case.metadata 0001-0050', 'Existing comparison label unchanged');
-  render('/case/raw-only');
+  render('/cases/raw-only');
   await waitFor(() => button('Diagnostics (0)0 supported runs'), 'case without supported runs');
   check(
     button('Diagnostics (0)0 supported runs')?.getAttribute('aria-expanded') === 'false',
@@ -1038,7 +1046,7 @@ async function testAnalysisFilters() {
     !document.body.textContent?.includes('Check All for other runs.'),
     'Empty sources do not suggest hidden runs',
   );
-  render('/case/metadata');
+  render('/cases/metadata');
   await waitFor(
     () => analysisTab('Time Series') && !analysisTab('Time Series')!.disabled,
     'case data update setup',
@@ -1073,7 +1081,7 @@ async function testAnalysisFilters() {
 async function testToolFilters() {
   localStorage.clear();
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
-  render('/case/ranges');
+  render('/cases/ranges');
   await waitFor(
     () =>
       document.querySelector('h1')?.textContent === 'Case ranges' &&
@@ -1317,7 +1325,7 @@ async function testToolFilters() {
     document.querySelector('#available-case-diagnostics button[aria-label^="Remove MPAS"]'),
     'Cross-page Added state survives tool filtering',
   );
-  render('/case/alpha');
+  render('/cases/alpha');
   await waitFor(
     () => document.querySelector('h1')?.textContent === 'Case alpha',
     'leave workspace tool filter',
@@ -1634,7 +1642,7 @@ async function testViewer() {
 async function testUnifiedSelections() {
   localStorage.clear();
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
-  render('/case/alpha');
+  render('/cases/alpha');
   await waitFor(
     () => document.querySelector('button[aria-label^="Add E3SM"]'),
     'case selection setup',
@@ -1719,7 +1727,7 @@ async function testUnifiedSelections() {
     'reselect beta',
   );
   await waitFor(() => document.body.textContent?.includes('Selected runs (2/'), 'beta reselected');
-  render('/case/raw-only');
+  render('/cases/raw-only');
   await waitFor(
     () => document.querySelector('h1')?.textContent === 'Case raw-only',
     'unmount workspace for refresh',
@@ -2058,7 +2066,7 @@ async function testCompatibilityValidation() {
     'case after abandoning validation',
   );
   await new Promise((resolve) => setTimeout(resolve, 150));
-  check(latest === '/case/alpha', 'Completed request does not navigate after leaving setup');
+  check(latest === '/cases/alpha', 'Completed request does not navigate after leaving setup');
   comparisonDelay = 0;
 }
 
@@ -2080,7 +2088,7 @@ async function testTrayCompatibility() {
       ),
     );
     window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
-    render('/case/alpha');
+    render('/cases/alpha');
   };
   stage(['tray-one', 'tray-two']);
   await waitFor(
@@ -2096,7 +2104,7 @@ async function testTrayCompatibility() {
     () => document.querySelector('[aria-label="Diagnostics comparison"] button[aria-busy="true"]'),
     'tray loading state',
   );
-  check(latest === '/case/alpha', 'Tray waits for validation before navigation');
+  check(latest === '/cases/alpha', 'Tray waits for validation before navigation');
   await waitFor(
     () => document.querySelectorAll('figure').length === 2,
     'Tray opens every selected compatible run',
@@ -2115,7 +2123,7 @@ async function testTrayCompatibility() {
   click(compareAction(), 'tray unreadable validation');
   await waitFor(() => button('Retry comparison'), 'tray archive failure retry');
   check(
-    latest === '/case/alpha' && !document.querySelector('figure'),
+    latest === '/cases/alpha' && !document.querySelector('figure'),
     'Unreadable selected run blocks incomplete viewer',
   );
   check(
@@ -2136,7 +2144,7 @@ async function testTrayCompatibility() {
       'Selected runs have no plots in common. Choose compatible runs.',
     'tray specific incompatibility message',
   );
-  check(latest === '/case/alpha', 'Incompatible tray stays on case page');
+  check(latest === '/cases/alpha', 'Incompatible tray stays on case page');
   check(!button('Retry comparison'), 'Incompatibility does not offer network retry');
 
   stage(['tray-network-one', 'tray-network-two']);
@@ -2164,7 +2172,7 @@ async function testTrayCompatibility() {
     'new case after leaving',
   );
   await new Promise((resolve) => setTimeout(resolve, 150));
-  check(latest === '/case/beta', 'Tray result does not override navigation');
+  check(latest === '/cases/beta', 'Tray result does not override navigation');
   comparisonDelay = 0;
 }
 
@@ -2307,7 +2315,7 @@ async function testSelectionScrollStability() {
     );
   };
   try {
-    render('/case/dense-0');
+    render('/cases/dense-0');
     await waitFor(() => button('Diagnostics (30)30 supported runs'), 'scrolling case setup');
     const card = document.getElementById('diagnostics-dense-0')!;
     const panel = card.querySelector<HTMLElement>('.overflow-y-auto')!;
@@ -2480,7 +2488,7 @@ async function testDenseBrowser() {
     document.querySelector<HTMLButtonElement>('[aria-label="Browse cases"] li:last-child button');
   click(lastCase(), 'select case from third page');
   await waitFor(() => lastCase()?.getAttribute('aria-pressed') === 'true', 'third-page case');
-  render('/case/raw-only');
+  render('/cases/raw-only');
   await waitFor(
     () => document.querySelector('h1')?.textContent === 'Case raw-only',
     'leave dense browser',
@@ -2496,7 +2504,7 @@ async function testDenseBrowser() {
   check(!button('Load more cases'), 'Restored discovery is complete');
 
   // A saved page past the saved case must not fetch extra pages.
-  render('/case/raw-only');
+  render('/cases/raw-only');
   await waitFor(
     () => document.querySelector('h1')?.textContent === 'Case raw-only',
     'leave dense browser again',

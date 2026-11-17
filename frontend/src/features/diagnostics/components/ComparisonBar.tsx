@@ -30,7 +30,7 @@ const GROUP_TITLES: Record<string, string> = {
 };
 
 /**
- * The runs picked for comparison, shown on every page until cleared. Each
+ * The runs picked for comparison, shown on case pages until cleared. Each
  * kind of run is its own comparison, since only like runs share plots.
  */
 export const ComparisonBar = () => {
@@ -45,12 +45,8 @@ export const ComparisonBar = () => {
   const [collapsed, setCollapsed] = useState(true);
   const [selectedGroup, setSelectedGroup] = useState('');
   const { pathname, key: locationKey } = useLocation();
-  // Admin pages are unrelated to comparison, and the bar would cover their tables.
-  const hidden =
-    pathname === '/diagnostics' ||
-    pathname === '/diagnostics/compare' ||
-    pathname.startsWith('/admin/');
-  const visible = entries.length > 0 && !hidden;
+  // Runs are picked on case pages; elsewhere the bar only covers unrelated content.
+  const visible = entries.length > 0 && (pathname === '/cases' || pathname.startsWith('/cases/'));
   const barRef = useRef<HTMLDivElement | null>(null);
 
   // The bar is fixed to the viewport; pad the page so it never hides content.
@@ -122,7 +118,7 @@ export const ComparisonBar = () => {
     }
   };
 
-  if (entries.length === 0 || hidden) return null;
+  if (!visible) return null;
 
   return (
     <div
