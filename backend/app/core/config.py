@@ -132,15 +132,13 @@ class Settings(BaseSettings):
     github_oauth_state_cookie_name: str = "simboard_github_oauth_state"
     github_oauth_state_cookie_max_age: int = 600
 
-    # --- Token lifetimes ---
-    lifetime_seconds: int = 3600
-
     # --- Cookie config ---
     cookie_name: str = "simboard_auth"
     cookie_secure: bool = False
     cookie_httponly: bool = True
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"
-    cookie_max_age: int = 3600
+    # Browser login lifetime in seconds; sets both the auth cookie and JWT expiry.
+    cookie_max_age: int = 604800
 
     # --- Assistant LLM config ---
     assistant_llm_enabled: bool = False

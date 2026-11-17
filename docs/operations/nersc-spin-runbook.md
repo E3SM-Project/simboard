@@ -67,7 +67,7 @@ Environment variable keys:
 | `COOKIE_SECURE`              | Yes      | `true` or `false`                      | `backend`, `migrate` |
 | `COOKIE_HTTPONLY`            | Yes      | `true` or `false`                      | `backend`, `migrate` |
 | `COOKIE_SAMESITE`            | Yes      | `lax`, `strict`, `none`                | `backend`, `migrate` |
-| `COOKIE_MAX_AGE`             | Yes      | seconds as integer                     | `backend`, `migrate` |
+| `COOKIE_MAX_AGE`             | Yes      | login lifetime seconds, e.g. `604800`  | `backend`, `migrate` |
 
 Optional assistant summary keys for `simboard-backend-env` when enabling AI summaries:
 
@@ -887,6 +887,9 @@ Ingress annotation if that backend limit changes.
 - If backend init container `migrate` fails, the backend pod will not become Ready.
 - Fix database connectivity or migration issues, then redeploy backend.
 - Backend image rollback does not revert schema automatically; handle schema rollback explicitly via Alembic when required.
+- Browser login tokens are stateless; a copied token stays valid until `COOKIE_MAX_AGE` expires, even after logout. To revoke access:
+  - One user: in the `db` pod shell, run `psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "UPDATE users SET is_active = false WHERE email = '<email>';"`. Blocks browser logins and API tokens on the next request.
+  - All browser sessions: rotate `GITHUB_STATE_SECRET_KEY` and redeploy backend. Everyone must log in again; logins in progress during rollout must retry.
 
 ## Concurrency Note
 

@@ -24,7 +24,7 @@ services:
       COOKIE_SECURE: "true"
       COOKIE_HTTPONLY: "true"
       COOKIE_SAMESITE: lax
-      COOKIE_MAX_AGE: "3600"
+      COOKIE_MAX_AGE: "604800"
 
       # Required in all environments.
       # In production (NERSC Spin), this is injected by the platform.
