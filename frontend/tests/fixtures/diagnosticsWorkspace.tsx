@@ -489,11 +489,11 @@ async function testWorkspace() {
   check(!mpasRow?.textContent?.includes('Model vs.'), 'No inferred MPAS comparison');
   check(
     document.querySelectorAll('a[aria-label^="Open "]').length === 4,
-    'All unique runs accessible',
+    'All unique sets accessible',
   );
   check(
     document.querySelectorAll('button[aria-expanded]').length === 1,
-    'No nested run accordions',
+    'No nested set accordions',
   );
   check(
     document.documentElement.scrollWidth <= window.innerWidth + 1,
@@ -523,11 +523,11 @@ async function testWorkspace() {
   );
   check(
     document.querySelectorAll('a[aria-label^="Open "]').length === 1,
-    'Time-series filter hides climatology-only runs',
+    'Time-series filter hides climatology-only sets',
   );
   click(
     document.querySelector<HTMLButtonElement>('button[aria-label^="Add MPAS"]'),
-    'select combined MPAS run',
+    'select combined MPAS set',
   );
   await waitFor(() => document.querySelector('button[aria-label^="Remove MPAS"]'), 'MPAS added');
   click(analysisTab('Climatology'), 'return to climatology grouping');
@@ -538,7 +538,7 @@ async function testWorkspace() {
   check(
     document.querySelector('button[aria-label^="Remove MPAS"]')?.getAttribute('aria-pressed') ===
       'true',
-    'Same run stays Added across analysis filters',
+    'Same set stays Added across analysis filters',
   );
   check(
     JSON.parse(localStorage.getItem('simboard.diagnostics-comparison')!).length === 1,
@@ -546,7 +546,7 @@ async function testWorkspace() {
   );
   click(
     document.querySelector<HTMLButtonElement>('button[aria-label^="Remove MPAS"]'),
-    'remove combined run',
+    'remove combined set',
   );
   await waitFor(
     () => !document.querySelector('[aria-label="Diagnostics comparison"]'),
@@ -564,7 +564,7 @@ async function testWorkspace() {
   );
   check(
     document.querySelectorAll('a[aria-label^="Open "]').length === 4,
-    'Resource shortcut does not leave runs hidden by a filter',
+    'Resource shortcut does not leave sets hidden by a filter',
   );
   localStorage.setItem(
     'simboard.diagnostics-comparison',
@@ -585,7 +585,7 @@ async function testWorkspace() {
     () =>
       document.querySelector('button[aria-label^="Add E3SM"]') &&
       compareAction()?.textContent?.trim() === 'Compare (12)',
-    'runs with a full comparison group',
+    'sets with a full comparison group',
   );
   check(
     document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]')?.disabled &&
@@ -616,13 +616,13 @@ async function testWorkspace() {
   render('/diagnostics');
   await waitFor(
     () => document.querySelector('#available-case-diagnostics button[aria-label^="Add E3SM"]'),
-    'workspace runs while another group is selected',
+    'workspace sets while another group is selected',
   );
   check(
     document.querySelector<HTMLButtonElement>(
       '#available-case-diagnostics button[aria-label^="Add E3SM"]',
     )?.disabled,
-    'Workspace Add counts staged runs outside the selected group',
+    'Workspace Add counts staged sets outside the selected group',
   );
   localStorage.removeItem('simboard.diagnostics-comparison');
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
@@ -665,7 +665,7 @@ async function testWorkspace() {
     ),
     'Compact directory link',
   );
-  click(document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]'), 'first run');
+  click(document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]'), 'first set');
   await waitFor(() => button('Expand'), 'collapsed tray');
   check(document.getElementById('comparison-tray-selections')?.hidden, 'Tray starts collapsed');
   click(link('Home'), 'home page');
@@ -677,7 +677,7 @@ async function testWorkspace() {
   );
   click(link('Beta case'), 'second case');
   await waitFor(() => document.querySelector('h1')?.textContent === 'Case beta', 'second case');
-  await waitFor(() => document.querySelector('button[aria-label^="Add E3SM"]'), 'beta runs');
+  await waitFor(() => document.querySelector('button[aria-label^="Add E3SM"]'), 'beta sets');
   click(
     document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]'),
     'beta selection',
@@ -699,11 +699,11 @@ async function testWorkspace() {
     'No duplicate tray in workspace',
   );
   const original = latest;
-  click(button('Edit sets'), 'run editor');
+  click(button('Edit sets'), 'set editor');
   await waitFor(() => document.querySelector('[role="dialog"]'), 'editor dialog');
   check(
     document.querySelector('button[aria-label="Remove set 1"]'),
-    'Selected-run details are open by default',
+    'Selected-set details are open by default',
   );
   await expandSelections();
   click(
@@ -720,7 +720,7 @@ async function testWorkspace() {
   await waitFor(() => document.querySelector('button[aria-label="Remove set 1"]'), 'draft reset');
   click(
     document.querySelector<HTMLButtonElement>('button[aria-label="Remove set 1"]'),
-    'remove active run',
+    'remove active set',
   );
   await waitFor(
     () => document.querySelector('[role="dialog"]')?.textContent?.includes('Selected sets (1/'),
@@ -740,7 +740,7 @@ async function testWorkspace() {
   render(shared);
   await new Promise((resolve) => setTimeout(resolve, 50));
   await waitFor(() => document.querySelectorAll('figure').length === 1, 'reload without basket');
-  check(latest.includes(encodeURIComponent(url('beta'))), 'Full underlying run URL retained');
+  check(latest.includes(encodeURIComponent(url('beta'))), 'Full underlying set URL retained');
   localStorage.clear();
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
   render('/diagnostics');
@@ -753,7 +753,7 @@ async function testWorkspace() {
   await waitFor(() => button('case.beta · 2 sets'), 'supported-only results');
   check(!button('case.raw-only · 0 sets'), 'Raw resources are not supported cases');
   click(button('case.alpha · 2 sets'), 'browse indexed case');
-  await waitFor(() => document.querySelector('button[aria-label^="Add E3SM"]'), 'browser runs');
+  await waitFor(() => document.querySelector('button[aria-label^="Add E3SM"]'), 'browser sets');
   click(
     document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]'),
     'first period',
@@ -840,17 +840,17 @@ async function testWorkspace() {
   await waitFor(() => document.querySelector('[role="alert"]'), 'invalid resource feedback');
   input(document.getElementById('manual-run-url') as HTMLInputElement, url('external'));
   await new Promise((resolve) => setTimeout(resolve, 10));
-  input(document.getElementById('manual-run-label') as HTMLInputElement, 'External run');
+  input(document.getElementById('manual-run-label') as HTMLInputElement, 'External set');
   await new Promise((resolve) => setTimeout(resolve, 10));
-  click(button('Add set'), 'manual run');
+  click(button('Add set'), 'manual set');
   await waitFor(
     () => document.body.textContent?.includes('Selected sets (1/'),
-    'manual run selected',
+    'manual set selected',
   );
   click(compareAction(), 'manual comparison');
   await waitFor(() => document.querySelector('figure'), 'manual plots');
   check(
-    document.querySelector('figure')?.textContent?.includes('External run'),
+    document.querySelector('figure')?.textContent?.includes('External set'),
     'Manual label retained',
   );
   await waitFor(() => button('Retry image'), 'unavailable image recovery');
@@ -921,7 +921,7 @@ async function testAnalysisFilters() {
   );
   await waitFor(
     () => document.body.textContent?.includes('Selected sets (1/'),
-    'one whole-run selection',
+    'one whole-set selection',
   );
   click(analysisTab('Climatology'), 'workspace climatology filter');
   await waitFor(
@@ -934,7 +934,7 @@ async function testAnalysisFilters() {
   );
   check(
     document.querySelectorAll('#available-case-diagnostics a[aria-label^="Open "]').length === 4,
-    'Climatology filter keeps combined runs',
+    'Climatology filter keeps combined sets',
   );
   click(button('case.beta · 2 sets'), 'switch case with analysis filter');
   await waitFor(
@@ -993,7 +993,7 @@ async function testAnalysisFilters() {
     document.body.textContent?.includes('Selected sets (1/'),
     'Automatic fallback never removes selections',
   );
-  click(button('case.metadata · 4 sets'), 'return to combined run');
+  click(button('case.metadata · 4 sets'), 'return to combined set');
   await waitFor(
     () => document.querySelector('#available-case-diagnostics button[aria-label^="Remove MPAS"]'),
     'MPAS remains selected after automatic fallback',
@@ -1008,10 +1008,10 @@ async function testAnalysisFilters() {
     document.documentElement.scrollWidth <= window.innerWidth + 1,
     'Analysis filters have no horizontal overflow',
   );
-  click(compareAction(), 'compare whole runs after filtering');
+  click(compareAction(), 'compare whole sets after filtering');
   await waitFor(
     () => document.querySelectorAll('figure').length === 1,
-    'one comparison panel per selected run',
+    'one comparison panel per selected set',
   );
   const sharedRuns = parseCompareState(new URLSearchParams(latest.split('?')[1])).runs;
   check(sharedRuns.length === 1, 'Default comparison uses current category only');
@@ -1021,7 +1021,7 @@ async function testAnalysisFilters() {
   );
   check(
     sharedRuns[0].url === `${base}/metadata/mpas_analysis/ts_0001-0500_climo_0001-0050/`,
-    'Full MPAS run URL unchanged',
+    'Full MPAS set URL unchanged',
   );
   check(sharedRuns[0].label === 'case.metadata 0001-0050', 'Existing comparison label unchanged');
   render('/cases/raw-only');
@@ -1044,7 +1044,7 @@ async function testAnalysisFilters() {
   );
   check(
     !document.body.textContent?.includes('Check All for other sets.'),
-    'Empty sources do not suggest hidden runs',
+    'Empty sources do not suggest hidden sets',
   );
   render('/cases/metadata');
   await waitFor(
@@ -1089,12 +1089,12 @@ async function testToolFilters() {
     'unique case tool counts',
   );
   click(document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]'), 'add E3SM');
-  click(toolButton('MPAS-Analysis'), 'filter away added run');
+  click(toolButton('MPAS-Analysis'), 'filter away added set');
   await waitFor(
     () => document.body.textContent?.includes('1 added set is hidden by filters.'),
-    'hidden added run notice',
+    'hidden added set notice',
   );
-  click(button('Show all'), 'show hidden added run');
+  click(button('Show all'), 'show hidden added set');
   await waitFor(
     () =>
       toolButton('All')?.getAttribute('aria-pressed') === 'true' &&
@@ -1104,7 +1104,7 @@ async function testToolFilters() {
   click(document.querySelector<HTMLButtonElement>('button[aria-label^="Remove E3SM"]'), 'reset');
   await waitFor(
     () => document.querySelector('button[aria-label^="Add E3SM"]'),
-    'added run removed',
+    'added set removed',
   );
   check(toolButton('E3SM Diags')?.textContent === 'E3SM Diags (1)', 'Case E3SM count');
   check(
@@ -1143,7 +1143,7 @@ async function testToolFilters() {
   );
   check(
     [...document.querySelectorAll('h4')].some((item) => item.textContent?.startsWith('0101–0200')),
-    'Time-series-only run uses its time range',
+    'Time-series-only set uses its time range',
   );
   check(
     [...document.querySelectorAll('h4')].some((item) =>
@@ -1173,7 +1173,7 @@ async function testToolFilters() {
       document.querySelector('[id$="-analysis-label"]')?.textContent === 'Analysis',
     'Both filter labels remain visible',
   );
-  click(toolButton('MPAS-Analysis'), 'filter case MPAS runs');
+  click(toolButton('MPAS-Analysis'), 'filter case MPAS sets');
   await waitFor(
     () => document.querySelectorAll('a[aria-label^="Open "]').length === 3,
     'case MPAS filter',
@@ -1185,14 +1185,14 @@ async function testToolFilters() {
   );
   check(
     document.querySelector('h4')?.textContent?.startsWith('0051–0100'),
-    'Analysis filter does not regroup combined MPAS run by time series',
+    'Analysis filter does not regroup combined MPAS set by time series',
   );
   click(
     document
       .querySelector<HTMLAnchorElement>(`a[href="${combinedUrl}"]`)!
       .closest('li')!
       .querySelector<HTMLButtonElement>('button[aria-label^="Add MPAS"]'),
-    'select combined run after filtering',
+    'select combined set after filtering',
   );
   await waitFor(
     () => document.querySelector('button[aria-label^="Remove MPAS"]'),
@@ -1201,7 +1201,7 @@ async function testToolFilters() {
   check(
     toolButton('E3SM Diags')?.disabled &&
       toolButton('E3SM Diags')?.textContent === 'E3SM Diags (0)',
-    'Time Series disables tools with no matching runs',
+    'Time Series disables tools with no matching sets',
   );
   check(
     toolButton('All')?.textContent === 'All (2)' &&
@@ -1271,19 +1271,19 @@ async function testToolFilters() {
       toolButton('All')?.textContent === 'All (1)' &&
       analysisTab('All')?.textContent === 'All (1)' &&
       analysisTab('Time Series')?.textContent === 'Time Series (1)',
-    'One combined MPAS run keeps unique counts in both filter rows',
+    'One combined MPAS set keeps unique counts in both filter rows',
   );
   check(
     analysisTab('Climatology')?.textContent === 'Climatology (1)' &&
       analysisTab('Time Series')?.textContent === 'Time Series (1)',
-    'Combined analyses count one unique run each',
+    'Combined analyses count one unique set each',
   );
   check(
     toolButton('E3SM Diags')?.disabled &&
       document.querySelector('[id$="-tool-label"]')?.textContent === 'Tool',
     'Single-tool case keeps Tool label and disables unavailable tool',
   );
-  click(analysisTab('Time Series'), 'filter single combined MPAS run');
+  click(analysisTab('Time Series'), 'filter single combined MPAS set');
   await waitFor(
     () => analysisTab('Time Series')?.getAttribute('aria-selected') === 'true',
     'single MPAS time-series filter active',
@@ -1291,7 +1291,7 @@ async function testToolFilters() {
   check(
     document.querySelectorAll(`a[href="${combinedUrl}"]`).length === 1 &&
       document.querySelector('h4')?.textContent?.startsWith('0051–0100'),
-    'Single combined MPAS run keeps unique climatology-first grouping',
+    'Single combined MPAS set keeps unique climatology-first grouping',
   );
   client.setQueryData(['diagnostics', 'case-runs', 'ranges'], original);
   click(link('Diagnostics workspace'), 'workspace tool filters');
@@ -1319,7 +1319,7 @@ async function testToolFilters() {
   );
   check(
     document.querySelectorAll(`#available-case-diagnostics a[href="${combinedUrl}"]`).length === 1,
-    'Workspace combined MPAS run stays unique in discovery',
+    'Workspace combined MPAS set stays unique in discovery',
   );
   check(
     document.querySelector('#available-case-diagnostics button[aria-label^="Remove MPAS"]'),
@@ -1395,12 +1395,12 @@ async function testViewer() {
   );
   await waitFor(
     () => document.body.textContent?.includes('Plot unavailable for this set'),
-    'missing run placeholder',
+    'missing set placeholder',
   );
-  check(document.querySelectorAll('figure').length === 2, 'Failed run retains aligned cell');
+  check(document.querySelectorAll('figure').length === 2, 'Failed set retains aligned cell');
   check(
     document.querySelectorAll('figure')[1].textContent?.includes('Unavailable'),
-    'Missing run keeps its label',
+    'Missing set keeps its label',
   );
   check(button('Retry diagnostics'), 'Failed catalog can be retried');
 
@@ -1480,7 +1480,7 @@ async function testViewer() {
     [...document.querySelectorAll<HTMLButtonElement>('[aria-label="Panel"] button')].find(
       (item) => item.textContent === 'Test',
     ),
-    'run panel',
+    'Test panel',
   );
   await waitFor(
     () => document.querySelectorAll('figure').length === 4,
@@ -1784,13 +1784,13 @@ async function testUnifiedSelections() {
   );
   check(
     !document.body.textContent?.includes('case.beta'),
-    'No unrelated local run in shared comparison',
+    'No unrelated local set in shared comparison',
   );
   click(button('Edit sets'), 'edit explicit selection');
   await waitFor(() => document.querySelector('[role="dialog"]'), 'shared editor');
   check(
     document.querySelector('[role="dialog"]')?.textContent?.includes('Selected sets (1/'),
-    'Shared editor does not merge local runs',
+    'Shared editor does not merge local sets',
   );
   click(button('Cancel'), 'cancel shared edits');
 }
@@ -1801,7 +1801,7 @@ async function testDiscoveryWarnings() {
   render('/diagnostics');
   await waitFor(() => document.getElementById('diagnostic-case-search'), 'warning test setup');
   for (const [search, message] of [
-    ['partial', 'Set discovery is incomplete for case.partial. Some sets may be missing.'],
+    ['partial', 'Discovery is incomplete for case.partial. Some sets may be missing.'],
     [
       'request-failed',
       'Could not load diagnostics for case.request-failed. Results are incomplete.',
@@ -1816,7 +1816,7 @@ async function testDiscoveryWarnings() {
     );
     check(button('Retry discovery'), 'Transient failure can be retried');
     if (search === 'partial')
-      check(button('case.partial · 1 sets'), 'Partial discovery keeps available runs');
+      check(button('case.partial · 1 sets'), 'Partial discovery keeps available sets');
   }
   input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'raw-only');
   await waitFor(
@@ -1881,13 +1881,13 @@ async function testCompareFooter() {
     footerText().includes('Add sets from a case or by URL to compare them.'),
     'Empty footer explains how to start',
   );
-  check(!button('Clear selection'), 'Clear selection hidden without runs');
+  check(!button('Clear selection'), 'Clear selection hidden without sets');
   check(compareAction()?.textContent?.trim() === 'Compare (0)', 'Compare shows zero count');
   click(
     document.querySelector<HTMLButtonElement>(
       '#available-case-diagnostics button[aria-label^="Add E3SM"]',
     ),
-    'footer add run',
+    'footer add set',
   );
   await waitFor(
     () => compareAction()?.textContent?.trim() === 'Compare (1)',
@@ -1895,7 +1895,7 @@ async function testCompareFooter() {
   );
   check(
     !footerText().includes('Add sets from a case'),
-    'Empty-state hint hides once a run is selected',
+    'Empty-state hint hides once a set is selected',
   );
   const actions = compareAction()!.parentElement!;
   check(actions.className.includes('ml-auto'), 'Compare actions are right-aligned');
@@ -1903,7 +1903,7 @@ async function testCompareFooter() {
   click(button('Clear selection'), 'clear footer selection');
   await waitFor(
     () => document.body.textContent?.includes('Selected sets (0/'),
-    'Clear selection empties selected runs',
+    'Clear selection empties selected sets',
   );
   check(compareAction()?.disabled, 'Compare disabled after clearing');
   check(!button('Clear selection'), 'Clear selection hides after clearing');
@@ -1914,19 +1914,19 @@ async function testCompatibilityValidation() {
   window.dispatchEvent(new StorageEvent('storage', { key: 'simboard.diagnostics-comparison' }));
   render('/diagnostics');
   await waitFor(() => button('case.alpha · 2 sets'), 'compatibility setup');
-  check(compareAction()?.disabled, 'Compare disabled without a run');
+  check(compareAction()?.disabled, 'Compare disabled without a set');
   const before = validations;
   click(
     document.querySelector<HTMLButtonElement>(
       '#available-case-diagnostics button[aria-label^="Add E3SM"]',
     ),
-    'select first supported run',
+    'select first supported set',
   );
   await waitFor(
     () => document.body.textContent?.includes('Selected sets (1/'),
     'minimum selection',
   );
-  check(!compareAction()?.disabled, 'Compare enabled at API minimum of one run');
+  check(!compareAction()?.disabled, 'Compare enabled at API minimum of one set');
   click(button('case.beta · 2 sets'), 'select second case for validation');
   await waitFor(
     () =>
@@ -1938,7 +1938,7 @@ async function testCompatibilityValidation() {
     document.querySelector<HTMLButtonElement>(
       '#available-case-diagnostics button[aria-label^="Add E3SM"]',
     ),
-    'select second supported run',
+    'select second supported set',
   );
   await waitFor(
     () => document.body.textContent?.includes('Selected sets (2/'),
@@ -1963,7 +1963,7 @@ async function testCompatibilityValidation() {
   );
   await waitFor(
     () => document.querySelectorAll('figure').length === 2,
-    'Compatible runs navigate to viewer',
+    'Compatible sets navigate to viewer',
   );
   await new Promise((resolve) => setTimeout(resolve, 20));
   check(
@@ -1980,7 +1980,7 @@ async function testCompatibilityValidation() {
   await waitFor(() => document.getElementById('manual-run-url'), 'manual compatibility input');
   input(document.getElementById('manual-run-url') as HTMLInputElement, url('incompatible'));
   await new Promise((resolve) => setTimeout(resolve, 10));
-  click(button('Add set'), 'select incompatible run');
+  click(button('Add set'), 'select incompatible set');
   await waitFor(
     () => document.body.textContent?.includes('Selected sets (1/'),
     'incompatible selection accepted',
@@ -2008,18 +2008,18 @@ async function testCompatibilityValidation() {
   await expandSelections();
   click(
     document.querySelector<HTMLButtonElement>('button[aria-label="Remove set 1"]'),
-    'replace incompatible run',
+    'replace incompatible set',
   );
   await waitFor(
     () => document.body.textContent?.includes('Selected sets (0/'),
-    'removed incompatible run',
+    'removed incompatible set',
   );
   input(document.getElementById('manual-run-url') as HTMLInputElement, url('network-fail'));
   await new Promise((resolve) => setTimeout(resolve, 10));
-  click(button('Add set'), 'select run before network error');
+  click(button('Add set'), 'select set before network error');
   await waitFor(
     () => document.body.textContent?.includes('Selected sets (1/'),
-    'network run selected',
+    'network set selected',
   );
   comparisonFailures = 1;
   click(compareAction(), 'trigger network validation failure');
@@ -2049,10 +2049,10 @@ async function testCompatibilityValidation() {
   await waitFor(() => document.getElementById('manual-run-url'), 'abandoned manual input');
   input(document.getElementById('manual-run-url') as HTMLInputElement, url('abandoned'));
   await new Promise((resolve) => setTimeout(resolve, 10));
-  click(button('Add set'), 'select run before navigation');
+  click(button('Add set'), 'select set before navigation');
   await waitFor(
     () => document.body.textContent?.includes('Selected sets (1/'),
-    'abandoned run selected',
+    'abandoned set selected',
   );
   comparisonDelay = 100;
   click(compareAction(), 'start abandoned validation');
@@ -2107,7 +2107,7 @@ async function testTrayCompatibility() {
   check(latest === '/cases/alpha', 'Tray waits for validation before navigation');
   await waitFor(
     () => document.querySelectorAll('figure').length === 2,
-    'Tray opens every selected compatible run',
+    'Tray opens every selected compatible set',
   );
   check(
     validations === before + 1,
@@ -2124,11 +2124,11 @@ async function testTrayCompatibility() {
   await waitFor(() => button('Retry comparison'), 'tray archive failure retry');
   check(
     latest === '/cases/alpha' && !document.querySelector('figure'),
-    'Unreadable selected run blocks incomplete viewer',
+    'Unreadable selected set blocks incomplete viewer',
   );
   check(
     document.querySelector('[role="alert"]')?.textContent?.includes('case.unreadable'),
-    'Tray identifies unreadable selected run',
+    'Tray identifies unreadable selected set',
   );
   check(
     JSON.parse(localStorage.getItem('simboard.diagnostics-comparison')!).length === 2,
@@ -2155,7 +2155,7 @@ async function testTrayCompatibility() {
   click(button('Retry comparison'), 'tray retry network');
   await waitFor(
     () => document.querySelectorAll('figure').length === 2,
-    'Tray retry opens both runs',
+    'Tray retry opens both sets',
   );
 
   stage(['tray-abandon-one', 'tray-abandon-two']);
@@ -2200,12 +2200,12 @@ async function testExampleRetryAndGroupSwitch() {
   click(button('Retry comparison'), 'retry original example');
   await waitFor(
     () => document.querySelectorAll('figure').length === 4,
-    'Retry opens all original example runs',
+    'Retry opens all original example sets',
   );
   check(
     parseCompareState(new URLSearchParams(latest.split('?')[1])).runs[0].label ===
       'E3SMv2 historical',
-    'Retry uses example runs, not empty draft',
+    'Retry uses example sets, not empty draft',
   );
 
   const staged = [
@@ -2236,14 +2236,14 @@ async function testExampleRetryAndGroupSwitch() {
     () => selectedSummary()?.textContent?.includes('Selected sets (1/'),
     'staged group switch setup',
   );
-  click(button('Add by URL'), 'manual run before group switch');
+  click(button('Add by URL'), 'manual set before group switch');
   await waitFor(() => document.getElementById('manual-run-url'), 'manual group-switch input');
   input(document.getElementById('manual-run-url') as HTMLInputElement, url('manual-group-switch'));
   await new Promise((resolve) => setTimeout(resolve, 10));
-  click(button('Add set'), 'add manual run to staged group');
+  click(button('Add set'), 'add manual set to staged group');
   await waitFor(
     () => document.body.textContent?.includes('Selected sets (2/'),
-    'manual and staged runs selected',
+    'manual and staged sets selected',
   );
   comparisonFailures = 1;
   click(compareAction(), 'fail check before changing group');
@@ -2350,7 +2350,7 @@ async function testSelectionScrollStability() {
       () =>
         document.querySelectorAll('#available-case-diagnostics li button[aria-pressed]').length ===
         30,
-      'dense workspace runs',
+      'dense workspace sets',
     );
     const available = document.getElementById('available-case-diagnostics')!;
     const workspacePanel = available.lastElementChild as HTMLElement;
@@ -2437,7 +2437,7 @@ async function testDenseBrowser() {
   for (let index = 1; index <= 12; index++) {
     click(
       diagnostics.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]'),
-      'select dense run',
+      'select dense set',
     );
     await waitFor(
       () => document.body.textContent?.includes(`Selected sets (${index}/`),
@@ -2623,7 +2623,7 @@ async function testComparisonGroups() {
     'shared nondefault category groups',
   );
   state = parseCompareState(new URLSearchParams(latest.split('?')[1]));
-  check(state.runs.length === 2, 'Runs sharing only nondefault category remain together');
+  check(state.runs.length === 2, 'Sets sharing only nondefault category remain together');
   check(state.plot === 'atmosphere/temperature/DJF', 'Group switch keeps variable and season');
   click(button('Edit sets'), 'edit active group with inactive selections');
   await waitFor(() => document.querySelector('[role="dialog"]'), 'active group editor');

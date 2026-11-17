@@ -713,7 +713,7 @@ const CaseBrowser = ({
               ) : null}
               {partial.length ? (
                 <p>
-                  Set discovery is incomplete for{' '}
+                  Discovery is incomplete for{' '}
                   {partial.map((item) => item.record.name).join(', ')}. Some sets may be missing.
                   Retry discovery.
                 </p>

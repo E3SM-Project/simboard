@@ -174,7 +174,7 @@ export const DiagnosticRunList = ({
             ) : null}
             {source.partial ? (
               <Alert variant="warning" role="note" className="mt-1 px-2 py-1.5 text-xs">
-                Set discovery is incomplete. Open the directory or retry to check for missing sets.
+                Discovery is incomplete. Open the directory or retry to check for missing sets.
               </Alert>
             ) : null}
           </section>
