@@ -1816,7 +1816,7 @@ async function testDiscoveryWarnings() {
     );
     check(button('Retry discovery'), 'Transient failure can be retried');
     if (search === 'partial')
-      check(button('case.partial · 1 sets'), 'Partial discovery keeps available sets');
+      check(button('case.partial · 1 set'), 'Partial discovery keeps available sets');
   }
   input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'raw-only');
   await waitFor(
@@ -1847,7 +1847,7 @@ async function testDiscoveryWarnings() {
   );
   input(document.getElementById('diagnostic-case-search') as HTMLInputElement, 'mixed');
   await waitFor(
-    () => button('case.mixed · 1 sets'),
+    () => button('case.mixed · 1 set'),
     'Case with both supported and unsupported directories',
   );
   check(
@@ -2584,7 +2584,7 @@ async function testComparisonGroups() {
     option.focus();
     option.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   };
-  await chooseGroup('(1 sets)');
+  await chooseGroup('(1 set)');
   await waitFor(
     () => document.querySelector('figure')?.textContent?.includes('Ocean one'),
     'ocean plots',
@@ -2696,7 +2696,7 @@ async function testComparisonGroups() {
     () => document.querySelector('[aria-labelledby="comparison-group-label"]'),
     'missing-category selector',
   );
-  await chooseGroup('(1 sets)');
+  await chooseGroup('(1 set)');
   await waitFor(
     () => parseCompareState(new URLSearchParams(latest.split('?')[1])).set === 'lat_lon',
     'Switch resolves missing category in URL',

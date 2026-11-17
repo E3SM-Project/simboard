@@ -119,7 +119,7 @@ export const DiagnosticRunList = ({
               className="mb-1 flex items-center gap-2 border-b pb-1 text-xs font-semibold text-foreground"
             >
               {period}
-              <span className="text-xs font-normal text-muted-foreground">{runs.length} sets</span>
+              <span className="text-xs font-normal text-muted-foreground">{runs.length} {runs.length === 1 ? 'set' : 'sets'}</span>
             </h4>
             <ul className="space-y-1">
               {runs.map((run) => (

@@ -95,6 +95,13 @@ const EXAMPLES: { name: string; runs: CompareRun[] }[] = [
   },
 ];
 
+/** ``1 set`` or ``N sets`` across a case's period groups. */
+const setCount = (groups: ReturnType<typeof periodGroups>): string => {
+  const count = groups.reduce((total, [, runs]) => total + runs.length, 0);
+
+  return `${count} ${count === 1 ? 'set' : 'sets'}`;
+};
+
 interface RunEditorProps {
   initialRuns: CompareRun[];
   onApply: (runs: CompareRun[], entries: BasketEntry[], selected?: CompareRun[]) => string | void;
@@ -779,11 +786,7 @@ const CaseBrowser = ({
                   </span>
                   <span className="shrink-0 text-xs font-normal text-muted-foreground">
                     <span className="sr-only"> · </span>
-                    {periodGroups(diagnostics?.sources ?? []).reduce(
-                      (count, [, runs]) => count + runs.length,
-                      0,
-                    )}{' '}
-                    sets
+                    {setCount(periodGroups(diagnostics?.sources ?? []))}
                   </span>
                 </Button>
               </li>

@@ -107,7 +107,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
                       ? 'Reading the diagnostics archive…'
                       : query.isError
                         ? 'Diagnostics could not be read. Browse the original output or try again.'
-                        : `${runs.length} supported sets${selected ? ` · ${selected} added to compare` : ''}`}
+                        : `${runs.length} supported ${runs.length === 1 ? 'set' : 'sets'}${selected ? ` · ${selected} added to compare` : ''}`}
                   </span>
                 </span>
                 <ChevronDown

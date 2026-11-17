@@ -414,7 +414,7 @@ export const ComparePage = () => {
                   {comparisonGroups.filter((item) => item.title === group.title).length > 1
                     ? ` · Group ${index + 1}`
                     : ''}{' '}
-                  ({group.runs.length} sets){!group.plots.size ? ' · No plots' : ''}
+                  ({group.runs.length} {group.runs.length === 1 ? 'set' : 'sets'}){!group.plots.size ? ' · No plots' : ''}
                 </SelectItem>
               ))}
             </SelectContent>
