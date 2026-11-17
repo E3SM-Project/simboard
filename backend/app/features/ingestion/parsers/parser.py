@@ -685,7 +685,9 @@ def _resolve_run_script_path(
 
     if len(matches) > 1:
         submit_time = (
-            parse_case_submit_time(case_status_path, execution_id.split(".")[0])
+            parse_case_submit_time(
+                case_status_path, execution_id.split(".")[0], matches.values()
+            )
             if case_status_path
             else None
         )

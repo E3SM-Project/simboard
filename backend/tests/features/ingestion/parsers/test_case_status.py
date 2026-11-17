@@ -1,3 +1,4 @@
+import gzip
 from pathlib import Path
 from unittest.mock import patch
 
@@ -170,6 +171,25 @@ class TestCaseSubmitTime:
                 ],
                 None,
             ),
+            (
+                [
+                    "2025-03-19 11:38:00: case.submit success 100",
+                    "2025-03-20 08:00:00: st_archive success ",
+                    "2025-03-20 08:00:10: case.submit success 37013148",
+                ],
+                "20250319113800",
+            ),
+            (
+                [
+                    "2025-03-19 11:38:00: case.submit success 100",
+                    "2025-03-20 08:00:00: case.run error ",
+                    "ERROR:  missing restart file",
+                    " ---------------------------------------------------",
+                    "2025-03-20 09:00:10: case.submit success 37013148",
+                ],
+                "20250320090010",
+            ),
+            (["2025-03-19 11:38:00: case.submit success"], None),
             (["2025-03-19 11:38:00: case.submit success 370131480"], None),
             (["2025-03-19 11:38:00: case.submit starting 37013148"], None),
             (["2025-03-19 11:38:00: case.submit error 37013148"], None),
@@ -186,3 +206,28 @@ class TestCaseSubmitTime:
 
     def test_returns_none_on_read_error(self, tmp_path) -> None:
         assert parse_case_submit_time(tmp_path / "missing", "37013148") is None
+
+    @pytest.mark.parametrize(
+        "script_times,expected",
+        [((), "20250319113800"), (("20250322090000",), "20250322090010")],
+    )
+    def test_script_saved_after_run_success_marks_manual_submit(
+        self, tmp_path, script_times, expected
+    ) -> None:
+        case_status = tmp_path / "CaseStatus.001"
+        case_status.write_text(
+            "2025-03-19 11:38:00: case.submit success 100\n"
+            "2025-03-21 08:00:00: case.run success 100\n"
+            "2025-03-22 09:00:10: case.submit success 37013148\n"
+        )
+
+        assert parse_case_submit_time(case_status, "37013148", script_times) == expected
+
+    def test_truncated_gzip_is_treated_as_unreadable(self, tmp_path) -> None:
+        case_status = tmp_path / "CaseStatus.001.gz"
+        with gzip.open(case_status, "wt") as stream:
+            stream.write("2025-03-19 11:38:00: case.submit success 37013148\n" * 50)
+        case_status.write_bytes(case_status.read_bytes()[:-12])
+
+        assert parse_case_submit_time(case_status, "37013148") is None
+        assert parse_case_status(case_status)["status"] == "unknown"

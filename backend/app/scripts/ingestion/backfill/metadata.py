@@ -217,6 +217,9 @@ def _locate_backfill_files(path: Path, directories: list[str], keys: list[str]) 
     files = {}
     for key in keys:
         matches = _find_spec_matches(str(path), directories, FILE_SPECS[key])
+        if len(matches) > 1 and key == "case_status":
+            # Optional run-script evidence: ambiguity leaves the script unresolved.
+            matches = []
         if len(matches) > 1:
             raise ValueError(f"Ambiguous {key}: {path}")
         if not matches and key in ("case_docs_env_case", "e3sm_timing"):

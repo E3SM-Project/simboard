@@ -179,6 +179,13 @@ def test_run_script_repair_selects_script_that_submitted_execution(tmp_path):
         f"/case/run_script_provenance/run.{execution.parent.name}.sh.20250416-235000"
     )
 
+    # An ambiguous CaseStatus is missing evidence, not a failed record.
+    status = execution / f"CaseStatus.{lid}.gz"
+    shutil.copy(status, execution / f"CaseStatus.{lid}.gz.bak")
+    assert (
+        _read_execution(execution, "chrysalis", ["run-script"]).run_script_path is None
+    )
+
 
 def test_source_code_repair_reads_srcroot_and_full_git_log_hash(tmp_path):
     # The real case has SRCROOT and GIT_DESCRIBE but no GIT_LOG.

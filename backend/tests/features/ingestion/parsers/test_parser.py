@@ -348,6 +348,14 @@ class TestMainParser:
                 "run.case.sh.20250319-111614",
             ),
             (
+                # A script saved after the run's success shows a manual submit.
+                ["run.case.sh.20250319-111614", "run.case.sh.20250322-090000"],
+                "2025-03-19 11:38:00: case.submit success 100\n"
+                "2025-03-21 08:00:00: case.run success 100\n"
+                "2025-03-22 09:00:10: case.submit success 729179\n",
+                "run.case.sh.20250322-090000",
+            ),
+            (
                 ["run.case.sh.20250319-111614", "run.case.sh.20250319-113750"],
                 "2025-03-19 11:38:00: case.submit error 729179",
                 None,
