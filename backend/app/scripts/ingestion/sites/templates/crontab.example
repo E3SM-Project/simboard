@@ -21,11 +21,12 @@ SIMBOARD_ROOT=/path/to/simboard_root
 # =============================================================================
 # Deployment update
 # =============================================================================
-# Refresh the clean deployment checkout weekly before scheduled scans begin.
-# The refresh installs backend dependencies only when the revision changed and
-# uses `flock` for a process lock when it is available; review
+# Refresh the clean deployment checkout twice daily at 00:00 and 15:00 UTC
+# (5 PM and 8 AM Pacific daylight time; 4 PM and 7 AM standard time). The
+# refresh installs backend dependencies only when the revision changed and uses
+# `flock` for a process lock when it is available; review
 # simboard-ingestion-provision.log after each update.
-0 0 * * 0 PATH="$HOME/.local/bin:$PATH" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/refresh_repository.sh" >> "${SIMBOARD_ROOT}/operations/simboard-ingestion-provision.log" 2>&1
+0 0,15 * * * PATH="$HOME/.local/bin:$PATH" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/refresh_repository.sh" >> "${SIMBOARD_ROOT}/operations/simboard-ingestion-provision.log" 2>&1
 
 # =============================================================================
 # API environment and run mode
