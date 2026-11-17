@@ -325,7 +325,7 @@ Prerequisites for this section:
      -H "Authorization: Bearer $SIMBOARD_API_TOKEN" \
      -H "Content-Type: application/json" \
      -d '{
-           "archive_path": "/global/cfs/cdirs/e3sm/simulations/archive.tar.gz",
+           "archive_path": "/performance_archive/<path-to-case>",
            "machine_name": "perlmutter",
            "hpc_username": "<your_hpc_username>"
          }'
