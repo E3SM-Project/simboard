@@ -296,10 +296,20 @@ The repository refresh and launcher-log archiving cron commands run through
 `sites/operations/run_reported_job.sh <site> <job-type> <command> [args...]`.
 It loads `MACHINE_NAME` from the site config and the API environment from
 `SIMBOARD_ENV_FILE`, then reports the command as a `refresh` or `log_archive`
-job. Both jobs run once per machine, so the template reports them to
+job. The command runs from `backend/` without the API token, so pass absolute
+paths. Both jobs run once per machine, so the template reports them to
 production only. The refresh has no dry-run mode, so its entry sets
-`DRY_RUN=false` and always reports; log archiving follows the global setting. If the backend runtime cannot load the reporter, the command
-runs unreported so a refresh can repair it; the job then shows `stale`.
+`DRY_RUN=false` and always reports; log archiving follows the global setting.
+
+If the backend runtime cannot load the reporter, the command still runs
+unreported, and the job turns `stale` after its silence limit. A refresh
+reinstalls the runtime only after a revision change; otherwise repair it with
+`make backend-install` from the deployment checkout.
+
+Installed crontabs do not change when the checkout refreshes. To report these
+jobs on an existing deployment, replace its refresh and log-archiving entries
+with the template's, set the site argument and job IDs to the site name, and
+reinstall the crontab.
 
 A job registers itself on its first report. Its owner is the service account
 whose token that environment's `env.*.sh` file uses, and only that account may

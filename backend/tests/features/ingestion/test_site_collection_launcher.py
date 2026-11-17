@@ -751,6 +751,33 @@ def test_reported_job_runs_unreported_without_a_working_reporter(
     assert "running without job health reports" in result.stderr
 
 
+def test_reported_job_runs_the_command_through_the_real_reporter() -> None:
+    # Without an API environment the reports fail, which must not affect the run.
+    result = subprocess.run(
+        [
+            _launcher_path().parent / "operations/run_reported_job.sh",
+            "chrysalis",
+            "refresh",
+            "bash",
+            "-c",
+            "[[ -z ${SIMBOARD_API_TOKEN:-} ]] && exit 4",
+        ],
+        capture_output=True,
+        check=False,
+        env=_reported_job_env(
+            DRY_RUN="false",
+            SIMBOARD_JOB_ID="chrysalis-refresh",
+            SIMBOARD_API_TOKEN="test-token",
+        ),
+        text=True,
+        timeout=60,
+    )
+
+    assert result.returncode == 4, result.stderr
+    assert "running without job health reports" not in result.stderr
+    assert result.stderr.count("event=job_report_failed") == 2
+
+
 def test_reported_job_requires_a_site_job_type_and_command(tmp_path: Path) -> None:
     result = subprocess.run(
         [_launcher_path().parent / "operations/run_reported_job.sh", "chrysalis"],

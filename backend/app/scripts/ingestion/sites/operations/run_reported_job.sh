@@ -4,10 +4,10 @@
 # Usage: run_reported_job.sh <site> <job-type> <command> [args...]
 #
 # Live runs (DRY_RUN=false) that set SIMBOARD_JOB_ID report their start and
-# finish to the API environment in SIMBOARD_ENV_FILE. The command never
-# receives the API token. Reporting is best effort:
-# a missing site config, API environment, or interpreter never stops the
-# command or changes its exit code.
+# finish to the API environment in SIMBOARD_ENV_FILE. The command runs from the
+# backend directory without the API token, so pass absolute paths. Reporting is
+# best effort: a missing site config, API environment, or interpreter never
+# stops the command or changes its exit code.
 
 if (( $# < 3 )) || [[ ! $1 =~ ^[abcdefghijklmnopqrstuvwxyz0123456789_-]+$ ]]; then
   echo "Usage: $0 <site> <job-type> <command> [args...]" >&2
@@ -41,7 +41,8 @@ if [[ -n "${SIMBOARD_ENV_FILE:-}" ]]; then
   source "${SIMBOARD_ENV_FILE}" > /dev/null 2>&1 || warn "API environment failed to load"
 fi
 
-# A refresh repairs a broken backend environment, so run unreported without it.
+# Without a working backend runtime, still run the command (a refresh can
+# deploy a fix) but unreported.
 reporter=app.scripts.ingestion.job_health
 if ! cd "${backend_dir}" || ! "${python_bin}" -c "import ${reporter}" > /dev/null 2>&1; then
   warn "${python_bin} cannot load the reporter; running without job health reports"
