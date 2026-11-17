@@ -26,7 +26,7 @@ export const validateComparison = async (
   }
   if (!result.sets.length) {
     return {
-      problem: 'Selected runs have no plots in common. Choose compatible runs.',
+      problem: 'Selected sets have no plots in common. Choose compatible sets.',
       retryable: false,
     };
   }

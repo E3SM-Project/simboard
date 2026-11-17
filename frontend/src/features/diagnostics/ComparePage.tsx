@@ -61,7 +61,7 @@ const EMPTY_STATE = 'rounded-xl border border-dashed p-6 text-sm text-muted-fore
 const KBD = 'rounded border bg-muted-subtle px-1 font-mono text-[0.6875rem] text-foreground';
 
 const PANEL_LABELS: Record<PanelView, string> = {
-  test: 'Run',
+  test: 'Set',
   ref: 'Reference',
   diff: 'Difference',
 };
@@ -164,7 +164,7 @@ export const ComparePage = () => {
         additions,
       )
     )
-      return 'Your selection is full for this diagnostic kind. Remove selected runs or choose fewer runs.';
+      return 'Your selection is full for this diagnostic kind. Remove selected sets or choose fewer sets.';
     setEditing(false);
     const selected = state.runs.length
       ? [
@@ -270,8 +270,8 @@ export const ComparePage = () => {
         <header>
           <h1 className="text-2xl font-semibold tracking-tight">Compare diagnostics</h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            View E3SM Diags and MPAS-Analysis plots from several runs side by side. Browse cases for
-            published diagnostics or add a run by URL, select up to {MAX_COMPARED_RUNS} runs of one
+            View E3SM Diags and MPAS-Analysis plots from several sets side by side. Browse cases for
+            published diagnostics or add a set by URL, select up to {MAX_COMPARED_RUNS} sets of one
             kind, then choose Compare.
           </p>
         </header>
@@ -318,7 +318,7 @@ export const ComparePage = () => {
           <Dialog open={editing} onOpenChange={setEditing}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm">
-                Edit runs
+                Edit sets
               </Button>
             </DialogTrigger>
             <DialogContent
@@ -326,9 +326,9 @@ export const ComparePage = () => {
               className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto motion-reduce:animate-none"
             >
               <DialogHeader>
-                <DialogTitle>Edit diagnostic runs</DialogTitle>
+                <DialogTitle>Edit diagnostic sets</DialogTitle>
                 <DialogDescription>
-                  Apply changes updates only compared runs. Other selected runs stay in your
+                  Apply changes updates only compared sets. Other selected sets stay in your
                   selection.
                 </DialogDescription>
               </DialogHeader>
@@ -365,7 +365,7 @@ export const ComparePage = () => {
                 </Button>
               </TooltipTrigger>
               <TooltipContent className="max-w-64">
-                Selected runs are grouped by the plots they share. Only runs in the same group can
+                Selected sets are grouped by the plots they share. Only sets in the same group can
                 be compared side by side.
               </TooltipContent>
             </Tooltip>
@@ -414,7 +414,7 @@ export const ComparePage = () => {
                   {comparisonGroups.filter((item) => item.title === group.title).length > 1
                     ? ` · Group ${index + 1}`
                     : ''}{' '}
-                  ({group.runs.length} runs){!group.plots.size ? ' · No plots' : ''}
+                  ({group.runs.length} sets){!group.plots.size ? ' · No plots' : ''}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -432,11 +432,11 @@ export const ComparePage = () => {
 
       {state.runs.length > MAX_COMPARED_RUNS ? (
         <Alert variant="warning" role="group">
-          This link has {state.runs.length} runs; compare at most {MAX_COMPARED_RUNS} at a time. Use
-          Edit runs to remove some.
+          This link has {state.runs.length} sets; compare at most {MAX_COMPARED_RUNS} at a time. Use
+          Edit sets to remove some.
         </Alert>
       ) : query.isLoading ? (
-        <LoadingState kind="section" label="Reading each run's published plots…" />
+        <LoadingState kind="section" label="Reading each set's published plots…" />
       ) : query.isError ? (
         <Alert variant="error" role="group" className="flex flex-wrap items-center gap-2">
           <p>The diagnostics archive could not be read just now.</p>
@@ -448,7 +448,7 @@ export const ComparePage = () => {
         <>
           {failed.length > 0 ? (
             <Alert variant="warning">
-              Could not be read: {names(failed)}. Use Edit runs to replace or remove these runs.
+              Could not be read: {names(failed)}. Use Edit sets to replace or remove these sets.
             </Alert>
           ) : null}
           {partial.length > 0 ? (
@@ -469,9 +469,9 @@ export const ComparePage = () => {
 
           {data.sets.length === 0 ? (
             <p className={EMPTY_STATE}>
-              These runs have no plots in common. Compare runs of the same kind, for example
-              model-vs-observations runs with each other. Switch comparison group, edit runs, or use
-              Back to Diagnostics to add runs.
+              These sets have no plots in common. Compare sets of the same kind, for example
+              model-vs-observations sets with each other. Switch comparison group, edit sets, or use
+              Back to Diagnostics to add sets.
             </p>
           ) : (
             <>
@@ -510,7 +510,7 @@ export const ComparePage = () => {
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {detail?.missing ? `${detail.missing} plots not in every run` : null}
+                    {detail?.missing ? `${detail.missing} plots not in every set` : null}
                   </p>
                   {!visible.length ? (
                     <div className={cn(EMPTY_STATE, 'space-y-2')}>
@@ -579,7 +579,7 @@ export const ComparePage = () => {
                           <span className="font-normal text-muted-foreground">
                             vs{' '}
                             {new Set(activePlot.references.filter(Boolean)).size > 1
-                              ? 'per-run references'
+                              ? 'per-set references'
                               : activeGroup.reference}
                           </span>
                         </h2>
@@ -620,7 +620,7 @@ export const ComparePage = () => {
                     </div>
                     {view === 'diff' && !activePlot.singlePanel ? (
                       <p className="text-xs text-muted-foreground">
-                        Difference shows each run minus its own reference, not the difference
+                        Difference shows each set minus its own reference, not the difference
                         between selected simulations. Colors use each published image’s scale.
                       </p>
                     ) : null}
@@ -705,7 +705,7 @@ interface PlotsProps {
 
 /**
  * One cell per run. E3SM Diags images stack run, reference and difference
- * panels; in "Run" view each run's reference panel follows the runs, labeled
+ * panels; in "Set" view each run's reference panel follows the runs, labeled
  * with its reference and run, and identical images are shown once.
  */
 const Plots = ({ data, detail, plot, view }: PlotsProps) => {
@@ -767,7 +767,7 @@ const Plots = ({ data, detail, plot, view }: PlotsProps) => {
             />
           ) : (
             <p className="flex min-h-48 items-center justify-center p-4 text-sm text-muted-foreground">
-              Plot unavailable for this run. Use Edit runs to replace it.
+              Plot unavailable for this set. Use Edit sets to replace it.
             </p>
           )}
         </figure>

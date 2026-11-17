@@ -94,7 +94,7 @@ test('labels preserve supplied text and shorten only the unlabeled UI fallback',
   assert.equal(displayLabel({ url: VIEWER, label: 'a!b' }), 'a!b');
   assert.equal(displayLabel({ url: VIEWER, label: '' }), 'case 1985-2014');
   assert.equal(displayLabel({ url: 'https://example.test/', label: '' }), 'example.test');
-  assert.equal(displayLabel({ url: 'not a URL', label: '' }), 'Diagnostic run');
+  assert.equal(displayLabel({ url: 'not a URL', label: '' }), 'Diagnostic set');
   assert.equal(
     parseCompareState(
       new URLSearchParams(
@@ -185,7 +185,7 @@ test('MPAS keeps both analysis periods without inventing comparison categories',
   assert.equal(diagnosticTitle(timeSeries), 'Time Series');
   const unknown = { ...timeSeries, tsStartYear: null, tsEndYear: null };
   assert.equal(diagnosticPeriod(unknown), 'Unknown time range');
-  assert.equal(diagnosticTitle(unknown), 'Diagnostic run');
+  assert.equal(diagnosticTitle(unknown), 'Diagnostic set');
 });
 
 test('analysis filters preserve climatology-first grouping for whole runs', () => {

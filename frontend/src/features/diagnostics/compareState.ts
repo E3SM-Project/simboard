@@ -85,7 +85,7 @@ export const displayLabel = (run: CompareRun): string => {
     const compact = name.length > 54 ? `${name.slice(0, 30)}…${name.slice(-20)}` : name;
     return [compact, period && !compact.includes(period) ? period : ''].filter(Boolean).join(' ');
   } catch {
-    return 'Diagnostic run';
+    return 'Diagnostic set';
   }
 };
 

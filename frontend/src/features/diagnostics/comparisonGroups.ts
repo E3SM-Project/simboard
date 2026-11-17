@@ -49,7 +49,7 @@ export const loadComparisonGroups = async (
           ? 'MPAS-Analysis'
           : tool === 'e3sm_diags'
             ? `E3SM Diags${run.url.includes('model_vs_model') ? ' · Model vs. Model' : run.url.includes('model_vs_obs') ? ' · Model vs. Observations' : ''}`
-            : 'Diagnostic runs';
+            : 'Diagnostic sets';
 
       return {
         run,
@@ -70,7 +70,7 @@ export const loadComparisonGroups = async (
       group.runs.push(catalog.run);
       group.plots = new Set([...group.plots].filter((key) => catalog.plots.has(key)));
       group.id = comparisonGroupId(group.runs);
-      if (group.title !== catalog.title) group.title = 'Compatible diagnostic runs';
+      if (group.title !== catalog.title) group.title = 'Compatible diagnostic sets';
     } else {
       groups.push({
         id: comparisonGroupId([catalog.run]),

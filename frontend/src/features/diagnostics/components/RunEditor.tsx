@@ -163,7 +163,7 @@ export const RunEditor = ({
         next.flatMap((run) => (run.entry ? [run.entry] : [])),
       )
     ) {
-      setProblem(`Compare at most ${MAX_COMPARED_RUNS} runs of one kind at a time.`);
+      setProblem(`Compare at most ${MAX_COMPARED_RUNS} sets of one kind at a time.`);
       return false;
     }
     setRuns(next);
@@ -186,24 +186,24 @@ export const RunEditor = ({
   const add = (run: SelectedRun) => {
     if (!isRunUrl(run.url))
       return setProblem(
-        'Use an HTTPS E3SM Diags viewer page or an MPAS-Analysis run directory, not a general resource directory.',
+        'Use an HTTPS E3SM Diags viewer page or an MPAS-Analysis output directory, not a general resource directory.',
       );
     if (runs.some((item) => item.url === run.url.trim() && item.label === run.label.trim()))
       return setProblem(
-        'This run and label are already selected. Choose another case, time range, or IICE case override.',
+        'This set and label are already selected. Choose another case, time range, or IICE case override.',
       );
     if (
       runs.filter((item) => selectedRunGroup(item) === selectedRunGroup(run)).length >=
       MAX_COMPARED_RUNS
     )
-      return setProblem(`Compare at most ${MAX_COMPARED_RUNS} runs at a time.`);
+      return setProblem(`Compare at most ${MAX_COMPARED_RUNS} sets at a time.`);
     if (!changeRuns([...runs, { ...run, url: run.url.trim(), label: run.label.trim() }])) return;
     if (!runs.length) setSelectionGroup(selectedRunGroup(run));
     else if (!onCancel && selectedRunGroup(run) !== currentGroup) {
       const title =
         RUN_GROUPS.find((group) => group.key === selectedRunGroup(run))?.title ??
         'another comparison group';
-      setSelectionNotice(`Run added to ${title}. Switch comparison group to review it.`);
+      setSelectionNotice(`Set added to ${title}. Switch comparison group to review it.`);
     }
     setManual({ url: '', label: '' });
   };
@@ -212,18 +212,18 @@ export const RunEditor = ({
     if (validating.current) return;
     setRetryRuns(null);
     if (!next.length)
-      return setProblem('Add at least one diagnostic run. Add two or more to compare.');
+      return setProblem('Add at least one diagnostic set. Add two or more to compare.');
     if (next.length > MAX_COMPARED_RUNS)
-      return setProblem(`Compare at most ${MAX_COMPARED_RUNS} runs at a time.`);
+      return setProblem(`Compare at most ${MAX_COMPARED_RUNS} sets at a time.`);
     if (next.some((run) => !isRunUrl(run.url)))
       return setProblem(
-        'One or more run addresses are invalid. Use a supported HTTPS diagnostic run address.',
+        'One or more set addresses are invalid. Use a supported HTTPS diagnostic set address.',
       );
     if (
       new Set(next.map((run) => JSON.stringify([run.url.trim(), run.label.trim()]))).size !==
       next.length
     )
-      return setProblem('Each selected run must have a different address or label.');
+      return setProblem('Each selected set must have a different address or label.');
     const selected = next.map(({ url, label }) => ({ url: url.trim(), label: label.trim() }));
     validating.current = true;
     setChecking(true);
@@ -250,7 +250,7 @@ export const RunEditor = ({
       if (error) setProblem(error);
     } catch {
       if (mounted.current) {
-        setProblem('Could not check run compatibility. Check your connection and try again.');
+        setProblem('Could not check set compatibility. Check your connection and try again.');
         setRetryRuns(next);
       }
     } finally {
@@ -290,7 +290,7 @@ export const RunEditor = ({
           }}
         >
           <div className="space-y-1">
-            <Label htmlFor="manual-run-url">Diagnostic run URL</Label>
+            <Label htmlFor="manual-run-url">Diagnostic set URL</Label>
             <Input
               id="manual-run-url"
               value={manual.url}
@@ -308,7 +308,7 @@ export const RunEditor = ({
           </div>
           <Button type="submit" variant="outline" size="sm">
             <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
-            Add run
+            Add set
           </Button>
         </form>
         <details className="rounded-xl border p-3">
@@ -338,14 +338,14 @@ export const RunEditor = ({
       <fieldset disabled={checking} className="min-w-0 space-y-3">
         {onCancel ? (
           <p className="text-sm text-muted-foreground">
-            Edit compared runs here. Use Back to Diagnostics to browse cases and add runs.
+            Edit compared sets here. Use Back to Diagnostics to browse cases and add sets.
           </p>
         ) : (
           browser
         )}
-        <section className="space-y-2 border-t pt-3" aria-label="Selected runs">
+        <section className="space-y-2 border-t pt-3" aria-label="Selected sets">
           <h2 className="text-sm font-semibold">
-            Selected runs{' '}
+            Selected sets{' '}
             <span aria-live="polite">
               ({visibleRuns.length}/{MAX_COMPARED_RUNS})
             </span>
@@ -385,7 +385,7 @@ export const RunEditor = ({
             </Select>
           ) : null}
           {!visibleRuns.length ? (
-            <p className="text-sm text-muted-foreground">No runs selected.</p>
+            <p className="text-sm text-muted-foreground">No sets selected.</p>
           ) : null}
           <div
             className={cn(
@@ -414,7 +414,7 @@ export const RunEditor = ({
                         size="icon"
                         className="h-7 w-7 shrink-0"
                         variant="ghost"
-                        aria-label={`Remove run ${visibleIndex + 1}`}
+                        aria-label={`Remove set ${visibleIndex + 1}`}
                         onClick={() => changeRuns(runs.filter((_, i) => i !== index))}
                       >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -432,12 +432,12 @@ export const RunEditor = ({
                     </summary>
                     <div className="grid gap-2 py-2 sm:grid-cols-2">
                       <Input
-                        aria-label={`Run ${visibleIndex + 1} address`}
+                        aria-label={`Set ${visibleIndex + 1} address`}
                         value={run.url}
                         onChange={(event) => edit(index, { url: event.target.value })}
                       />
                       <Input
-                        aria-label={`Run ${visibleIndex + 1} label`}
+                        aria-label={`Set ${visibleIndex + 1} label`}
                         placeholder="Label (optional)"
                         value={run.label}
                         onChange={(event) => edit(index, { label: event.target.value })}
@@ -472,7 +472,7 @@ export const RunEditor = ({
         <div className="flex flex-wrap items-center justify-between gap-2">
           {visibleRuns.length ? null : (
             <p className="text-xs text-muted-foreground">
-              Add runs from a case or by URL to compare them.
+              Add sets from a case or by URL to compare them.
             </p>
           )}
           <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -679,7 +679,7 @@ const CaseBrowser = ({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-64">
-                  Only publicly accessible E3SM Diags and MPAS-Analysis runs supported by the
+                  Only publicly accessible E3SM Diags and MPAS-Analysis sets supported by the
                   comparison viewer are listed.
                 </TooltipContent>
               </Tooltip>
@@ -713,8 +713,8 @@ const CaseBrowser = ({
               ) : null}
               {partial.length ? (
                 <p>
-                  Run discovery is incomplete for{' '}
-                  {partial.map((item) => item.record.name).join(', ')}. Some runs may be missing.
+                  Set discovery is incomplete for{' '}
+                  {partial.map((item) => item.record.name).join(', ')}. Some sets may be missing.
                   Retry discovery.
                 </p>
               ) : null}
@@ -783,7 +783,7 @@ const CaseBrowser = ({
                       (count, [, runs]) => count + runs.length,
                       0,
                     )}{' '}
-                    runs
+                    sets
                   </span>
                 </Button>
               </li>
