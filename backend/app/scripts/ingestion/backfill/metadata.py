@@ -64,7 +64,8 @@ FIELD_NAMES = {
 }
 FIELD_FILES = {
     "simulation-dates": ("case_docs_env_run", "cpl_log"),
-    "run-script": (),
+    # CaseStatus records case.submit, which identifies the submitting script.
+    "run-script": ("case_status",),
     "component-set": ("readme_case",),
     "git-repository": ("git_config",),
     "grid": ("readme_case", "case_docs_env_build"),

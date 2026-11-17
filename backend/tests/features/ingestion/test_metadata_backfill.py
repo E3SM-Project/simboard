@@ -157,6 +157,29 @@ def test_initialization_repair_reads_continue_run_not_execution_order(tmp_path):
         metadata._observed_values(record, args)
 
 
+def test_run_script_repair_selects_script_that_submitted_execution(tmp_path):
+    execution = sorted(stage_continuation_case(tmp_path).iterdir())[0]
+    lid = execution.name
+    docs = execution / f"CaseDocs.{lid}"
+    env_case = docs / f"env_case.xml.{lid}.gz"
+    with gzip.open(env_case, "rt") as stream:
+        xml = stream.read()
+    with gzip.open(env_case, "wt") as stream:
+        stream.write(
+            xml.replace("</config>", '<entry id="CASEROOT" value="/case" /></config>')
+        )
+    for saved_at in ["20250416-235000", "20250416-235500"]:
+        (docs / f"run.{execution.parent.name}.sh.{saved_at}.{lid}.gz").touch()
+    with gzip.open(execution / f"CaseStatus.{lid}.gz", "wt") as stream:
+        stream.write(f"2025-04-16 23:53:39: case.submit success {lid.split('.')[0]}\n")
+
+    parsed = _read_execution(execution, "chrysalis", ["run-script"])
+
+    assert parsed.run_script_path == (
+        f"/case/run_script_provenance/run.{execution.parent.name}.sh.20250416-235000"
+    )
+
+
 def test_source_code_repair_reads_srcroot_and_full_git_log_hash(tmp_path):
     # The real case has SRCROOT and GIT_DESCRIBE but no GIT_LOG.
     execution = sorted(stage_continuation_case(tmp_path).iterdir())[0]
