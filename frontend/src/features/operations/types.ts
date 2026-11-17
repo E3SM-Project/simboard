@@ -1,6 +1,6 @@
 /** Response shapes of the read-only ingestion operations APIs. */
 
-export const JOB_TYPES = ['staging', 'archive', 'diagnostics'] as const;
+export const JOB_TYPES = ['staging', 'archive', 'diagnostics', 'refresh', 'log_archive'] as const;
 export type JobType = (typeof JOB_TYPES)[number];
 
 export type ScheduledJobHealth = 'healthy' | 'failed' | 'running' | 'stale';

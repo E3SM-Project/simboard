@@ -25,8 +25,13 @@ SIMBOARD_ROOT=/path/to/simboard_root
 # (5 PM and 8 AM Pacific daylight time; 4 PM and 7 AM standard time). The
 # refresh installs backend dependencies only when the revision changed and uses
 # `flock` for a process lock when it is available; review
-# simboard-ingestion-provision.log after each update.
-0 0,15 * * * PATH="$HOME/.local/bin:$PATH" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/refresh_repository.sh" >> "${SIMBOARD_ROOT}/operations/simboard-ingestion-provision.log" 2>&1
+# simboard-ingestion-provision.log after each update. Replace `chrysalis` with
+# the site-config name. run_reported_job.sh runs the refresh once and reports
+# it as the `refresh` job to each API environment in SIMBOARD_ENV_FILES; a
+# missing or unreachable environment is skipped and never stops the refresh or
+# changes its exit code. The refresh has no dry-run mode, so this entry always
+# sets DRY_RUN=false.
+0 0,15 * * * PATH="$HOME/.local/bin:$PATH" DRY_RUN=false SIMBOARD_ENV_FILES="${SIMBOARD_ROOT}/operations/env.dev.sh:${SIMBOARD_ROOT}/operations/env.prod.sh" SIMBOARD_JOB_ID=chrysalis-refresh "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/run_reported_job.sh" chrysalis refresh "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/refresh_repository.sh" >> "${SIMBOARD_ROOT}/operations/simboard-ingestion-provision.log" 2>&1
 
 # =============================================================================
 # API environment and run mode
@@ -91,7 +96,9 @@ SIMBOARD_ROOT=/path/to/simboard_root
 # =============================================================================
 # Run weekly at 01:00 UTC on Sunday, offset from the repository refresh.
 # Inherit DRY_RUN: true or unset only previews; false archives completed weeks
-# and deletes verified, unchanged raw logs. No API credentials are needed.
-# Keep at least seven days of raw logs; optionally override this default below.
+# and deletes verified, unchanged raw logs. Archiving needs no API credentials;
+# the API environments are used only to report live runs as the `log_archive`
+# job. Keep at least seven days of raw logs; optionally override
+# this default below.
 # LOG_RETENTION_DAYS=7
-0 1 * * 0 "${SIMBOARD_ROOT}/repository/simboard/backend/.venv/bin/python" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/archive_ingestion_logs.py" >> "${SIMBOARD_ROOT}/operations/simboard-log-archiving.log" 2>&1
+0 1 * * 0 SIMBOARD_ENV_FILES="${SIMBOARD_ROOT}/operations/env.dev.sh:${SIMBOARD_ROOT}/operations/env.prod.sh" SIMBOARD_JOB_ID=chrysalis-log-archive "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/run_reported_job.sh" chrysalis log_archive "${SIMBOARD_ROOT}/repository/simboard/backend/.venv/bin/python" "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/archive_ingestion_logs.py" >> "${SIMBOARD_ROOT}/operations/simboard-log-archiving.log" 2>&1

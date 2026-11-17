@@ -122,6 +122,8 @@ const describeFailure = (run: ScheduledJobHealthOut['latest_completed_run']) => 
   return `${FAILURE_REASON_LABELS[run.failure_reason]}${httpStatus}${message}`;
 };
 
+export const formatJobType = (jobType: string) => jobType.replaceAll('_', ' ');
+
 export const filterJobs = (jobs: ScheduledJobHealthOut[], jobType?: JobType) =>
   jobType ? jobs.filter((job) => job.scan_mode === jobType) : jobs;
 

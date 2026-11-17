@@ -223,7 +223,8 @@ deployment complete.
 The copied crontab:
 
 - runs `make ops-refresh` (via the deployed refresh helper) twice daily at
-  00:00 and 15:00 UTC to refresh a clean checkout;
+  00:00 and 15:00 UTC to refresh a clean checkout, and reports every refresh
+  to development and production [job health](#report-scheduled-job-health);
 - synchronizes the backend runtime only after a revision change;
 - writes refresh output to `simboard-ingestion-provision.log`; review it after
   each update;
@@ -239,7 +240,8 @@ The copied crontab:
 - runs diagnostics every six hours at 02:00, 08:00, 14:00, and 20:00 UTC
   with separate locks and the shared top-level run mode;
 - archives completed launcher logs weekly on Sunday at 01:00 UTC, using the
-  deployment's backend Python and shared `DRY_RUN` setting.
+  deployment's backend Python and shared `DRY_RUN` setting, and reports live
+  runs to development and production job health.
 
 ### Weekly launcher-log archiving
 
@@ -258,7 +260,8 @@ Run `make ops-provision` to create both directories with the correct access poli
   deleting unchanged sources. Identical members are not duplicated; conflicts
   preserve sources and stop the run. Allow space for both old and new archives.
 - **Mode:** Unset or true `DRY_RUN` previews only. Set `DRY_RUN=false` to apply;
-  `--dry-run` always forces a read-only preview. No API credentials are needed.
+  `--dry-run` always forces a read-only preview. Archiving needs no API
+  credentials; cron uses the `env.*.sh` files only for job health reports.
 
 Preview from any directory:
 
@@ -287,7 +290,30 @@ Live cron commands (`DRY_RUN=false`) with `SIMBOARD_JOB_ID` report each run's
 start and finish to their API environment. Failed runs include a reason
 (`api_request`, `filesystem`, or `unexpected`) and a short message. Reporting
 is best effort: failures are logged as `job_report_failed` and never change the
-ingestion result. Dry runs and manual runs without a job ID do not report.
+job's result. Dry runs and manual runs without a job ID do not report.
+
+The repository refresh and launcher-log archiving cron commands run through
+`sites/operations/run_reported_job.sh <site> <job-type> <command> [args...]`.
+It runs the command once and reports it as a `refresh` or `log_archive` job to
+each API environment in `SIMBOARD_ENV_FILES`, a colon-separated list of
+`env.*.sh` files; the template lists development and production. Only the
+report processes load the site config (for `MACHINE_NAME`) and the API
+environments, so the command never receives a token. The refresh has no
+dry-run mode, so its entry sets `DRY_RUN=false` and always reports; log
+archiving follows the global setting.
+
+A missing environment file is skipped with a warning, and an unreachable API
+logs `job_report_failed`, so an environment that is not deployed yet never
+affects the job or the other environment's reports. Each unreachable report
+waits up to 10 seconds. If a refresh breaks the backend runtime, its finish
+report fails and the run turns `stale` after its duration limit. A refresh
+reinstalls the runtime only after a revision change; otherwise repair it with
+`make backend-install` from the deployment checkout.
+
+Installed crontabs do not change when the checkout refreshes. To report these
+jobs on an existing deployment, replace its refresh and log-archiving entries
+with the template's, set the site argument and job IDs to the site name, and
+reinstall the crontab.
 
 A job registers itself on its first report. Its owner is the service account
 whose token that environment's `env.*.sh` file uses, and only that account may
@@ -298,6 +324,8 @@ report the job's runs. New jobs get default thresholds for their scan mode:
 | `staging`     | `45`                  | `60`                   |
 | `archive`     | `1560`                | `720`                  |
 | `diagnostics` | `420`                 | `300`                  |
+| `refresh`     | `1020`                | `60`                   |
+| `log_archive` | `10200`               | `120`                  |
 
 Reports for a registered job ID from another machine or scan mode are rejected,
 so give each job a unique ID per API environment.

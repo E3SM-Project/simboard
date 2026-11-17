@@ -31,7 +31,10 @@ ARCHIVE_SNAPSHOT_NAME_PATTERN = (
 SCHEDULED_JOB_ID_PATTERN = r"^[a-z0-9][a-z0-9_-]{0,99}$"
 # One year keeps derived deadlines within datetime range.
 SCHEDULED_JOB_MAX_THRESHOLD_MINUTES = 525_600
-ScheduledJobScanMode = Literal["staging", "archive", "diagnostics"]
+# Scan modes plus the site maintenance jobs that share the crontab.
+ScheduledJobScanMode = Literal[
+    "staging", "archive", "diagnostics", "refresh", "log_archive"
+]
 UPLOAD_FAILURE_CASES_MAX = 50
 UPLOAD_FAILURE_MESSAGE_MAX_LENGTH = 200
 # Failure counts are keyed by HTTP status, or "network" for errors and timeouts.

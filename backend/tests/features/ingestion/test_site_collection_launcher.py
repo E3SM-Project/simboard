@@ -23,6 +23,25 @@ def _write_executable(path: Path, contents: str) -> Path:
     return path
 
 
+def _reported_job_env(**overrides: str) -> dict[str, str]:
+    """Return the test environment without inherited site or API settings."""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("SIMBOARD_API_", "SIMBOARD_JOB_"))
+        and key
+        not in {
+            "DRY_RUN",
+            "MACHINE_NAME",
+            "SIMBOARD_ENV_FILE",
+            "SIMBOARD_ENV_FILES",
+            "SIMBOARD_SITE_CONFIG",
+        }
+    }
+
+    return {**env, **overrides}
+
+
 @pytest.mark.parametrize("target", ["ingest-dry-run", "ingest-apply"])
 @pytest.mark.parametrize("scan_mode", ["staging", "archive"])
 def test_machine_make_targets_show_early_errors(
@@ -491,6 +510,34 @@ def test_cron_template_refreshes_repository_twice_daily() -> None:
     assert jobs[0].startswith("0 0,15 * * * ")
 
 
+@pytest.mark.parametrize(
+    ("script", "job_type", "job_id"),
+    [
+        ("refresh_repository.sh", "refresh", "chrysalis-refresh"),
+        ("archive_ingestion_logs.py", "log_archive", "chrysalis-log-archive"),
+    ],
+)
+def test_cron_template_reports_maintenance_jobs_to_every_environment(
+    script: str, job_type: str, job_id: str
+) -> None:
+    template = (_launcher_path().parent / "templates/crontab.example").read_text()
+    jobs = [line for line in template.splitlines() if f"/{script}" in line]
+    assert len(jobs) == 1
+    assert (
+        'SIMBOARD_ENV_FILES="${SIMBOARD_ROOT}/operations/env.dev.sh:'
+        '${SIMBOARD_ROOT}/operations/env.prod.sh" '
+    ) in jobs[0]
+    # Cron applies the global DRY_RUN line only to later entries, so the earlier
+    # refresh entry sets its own; log archiving follows the global setting.
+    assert ("DRY_RUN=false " in jobs[0]) is (job_type == "refresh")
+    global_dry_run = template.splitlines().index("# DRY_RUN=false")
+    assert (template.splitlines().index(jobs[0]) > global_dry_run) is (
+        job_type == "log_archive"
+    )
+    assert f"SIMBOARD_JOB_ID={job_id} " in jobs[0]
+    assert f'/run_reported_job.sh" chrysalis {job_type} ' in jobs[0]
+
+
 @pytest.mark.parametrize("dry_run", [None, "true", "false", "invalid"])
 def test_cron_template_archives_logs_with_shared_run_mode(
     tmp_path: Path, dry_run: str | None
@@ -515,10 +562,9 @@ def test_cron_template_archives_logs_with_shared_run_mode(
     (runtime / "python").symlink_to(sys.executable)
     scripts = backend / "app/scripts/ingestion/sites/operations"
     scripts.mkdir(parents=True)
-    (scripts / "archive_ingestion_logs.py").symlink_to(
-        _launcher_path().parent / "operations/archive_ingestion_logs.py"
-    )
-    env = {**os.environ, "SIMBOARD_ROOT": str(root), "LOG_RETENTION_DAYS": "7"}
+    for name in ("archive_ingestion_logs.py", "run_reported_job.sh"):
+        (scripts / name).symlink_to(_launcher_path().parent / "operations" / name)
+    env = _reported_job_env(SIMBOARD_ROOT=str(root), LOG_RETENTION_DAYS="7")
     env.pop("DRY_RUN", None)
     if dry_run is not None:
         env["DRY_RUN"] = dry_run
@@ -630,6 +676,172 @@ def test_launcher_reports_scheduled_live_runs(
         assert not reports.exists()
     assert not list(operations.glob("job-status-*"))
     assert not list(operations.glob("job-upload-failures-*"))
+
+
+def _reported_job_backend(tmp_path: Path, python: str | None) -> Path:
+    """Copy the reported job wrapper into a fake backend with a site config."""
+    backend = tmp_path / "backend"
+    sites = backend / "app/scripts/ingestion/sites"
+    (sites / "operations").mkdir(parents=True)
+    (sites / "configs").mkdir()
+    wrapper = _launcher_path().parent / "operations/run_reported_job.sh"
+    _write_executable(
+        sites / "operations/run_reported_job.sh", wrapper.read_text(encoding="utf-8")
+    )
+    (sites / "configs/chrysalis.config").write_text(
+        'export MACHINE_NAME="${MACHINE_NAME:-chrysalis}"\n', encoding="utf-8"
+    )
+    if python is not None:
+        (backend / ".venv/bin").mkdir(parents=True)
+        _write_executable(backend / ".venv/bin/python", python)
+
+    return backend
+
+
+# Records each report's arguments and the API environment it was sent with.
+_FAKE_REPORTER = (
+    "#!/usr/bin/env bash\n"
+    "if [[ $1 == -c ]]; then echo run-123; exit 0; fi\n"
+    'printf "%s|%s|%s|%s|%s|%s|%s\\n" "${*:3}" "$SIMBOARD_API_BASE_URL" '
+    '"$SIMBOARD_API_TOKEN" "$MACHINE_NAME" "$SIMBOARD_JOB_ID" '
+    '"$SIMBOARD_JOB_SCAN_MODE" "$SIMBOARD_JOB_RUN_ID" >> "$REPORTS"\n'
+)
+# Records what the wrapped command can see, then fails with a known code.
+_RECORDING_COMMAND = [
+    "bash",
+    "-c",
+    'printf "%s|%s|%s" "${SIMBOARD_API_TOKEN:-}" "${SIMBOARD_JOB_RUN_ID:-}" '
+    '"${MACHINE_NAME:-}" > "$SEEN"; exit 3',
+]
+
+
+def _write_api_env(path: Path, base_url: str, token: str) -> Path:
+    path.write_text(
+        f"echo leaked-{token} >&2\n"
+        f"export SIMBOARD_API_BASE_URL={base_url}\n"
+        f"export SIMBOARD_API_TOKEN={token}\n",
+        encoding="utf-8",
+    )
+
+    return path
+
+
+def _run_reported_job(
+    wrapper: Path, command: list[str], **env: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [wrapper, "chrysalis", "refresh", *command],
+        capture_output=True,
+        check=False,
+        env=_reported_job_env(**env),
+        text=True,
+        timeout=60,
+    )
+
+
+@pytest.mark.parametrize(
+    ("dry_run", "job_id", "reported"),
+    [
+        ("false", "chrysalis-refresh", True),
+        ("FALSE", "chrysalis-refresh", True),
+        ("true", "chrysalis-refresh", False),
+        ("false", None, False),
+    ],
+)
+def test_reported_job_runs_once_and_reports_each_api_environment(
+    tmp_path: Path, dry_run: str, job_id: str | None, reported: bool
+) -> None:
+    backend = _reported_job_backend(tmp_path, _FAKE_REPORTER)
+    dev = _write_api_env(tmp_path / "env.dev.sh", "https://dev.test", "dev-token")
+    prod = _write_api_env(tmp_path / "env.prod.sh", "https://prod.test", "prod-token")
+    reports = tmp_path / "reports"
+    seen = tmp_path / "seen"
+    env = {
+        "DRY_RUN": dry_run,
+        # A missing environment, such as one not yet deployed, is skipped.
+        "SIMBOARD_ENV_FILES": f"{dev}:{tmp_path / 'env.missing.sh'}:{prod}",
+        "REPORTS": str(reports),
+        "SEEN": str(seen),
+    }
+    if job_id is not None:
+        env["SIMBOARD_JOB_ID"] = job_id
+
+    result = _run_reported_job(
+        backend / "app/scripts/ingestion/sites/operations/run_reported_job.sh",
+        _RECORDING_COMMAND,
+        **env,
+    )
+
+    assert result.returncode == 3, result.stderr
+    # The command sees no token, report setting, or site config.
+    assert seen.read_text() == "||"
+    assert "leaked" not in result.stdout + result.stderr
+    if reported:
+        identity = "chrysalis|chrysalis-refresh|refresh|run-123"
+        assert reports.read_text().splitlines() == [
+            f"start|https://dev.test|dev-token|{identity}",
+            f"start|https://prod.test|prod-token|{identity}",
+            f"finish --exit-code 3|https://dev.test|dev-token|{identity}",
+            f"finish --exit-code 3|https://prod.test|prod-token|{identity}",
+        ]
+        assert result.stderr.count("API environment not readable") == 2
+    else:
+        assert not reports.exists()
+
+
+def test_reported_job_runs_unreported_without_an_interpreter(tmp_path: Path) -> None:
+    backend = _reported_job_backend(tmp_path, None)
+    seen = tmp_path / "seen"
+
+    result = _run_reported_job(
+        backend / "app/scripts/ingestion/sites/operations/run_reported_job.sh",
+        _RECORDING_COMMAND,
+        DRY_RUN="false",
+        SIMBOARD_JOB_ID="chrysalis-refresh",
+        SIMBOARD_ENV_FILES=str(
+            _write_api_env(tmp_path / "env.dev.sh", "https://dev.test", "dev-token")
+        ),
+        SEEN=str(seen),
+    )
+
+    assert result.returncode == 3
+    assert seen.read_text() == "||"
+    assert "running without job health reports" in result.stderr
+
+
+def test_reported_job_survives_unreachable_apis_with_the_real_reporter(
+    tmp_path: Path,
+) -> None:
+    # Port 9 refuses connections, like an API environment that is not up yet.
+    env_files = [
+        _write_api_env(tmp_path / f"env.{name}.sh", "http://127.0.0.1:9", "token")
+        for name in ("dev", "prod")
+    ]
+
+    result = _run_reported_job(
+        _launcher_path().parent / "operations/run_reported_job.sh",
+        _RECORDING_COMMAND,
+        DRY_RUN="false",
+        SIMBOARD_JOB_ID="chrysalis-refresh",
+        SIMBOARD_ENV_FILES=":".join(map(str, env_files)),
+        SEEN=str(tmp_path / "seen"),
+    )
+
+    assert result.returncode == 3, result.stderr
+    assert result.stderr.count("event=job_report_failed") == 4
+    assert "report not sent" not in result.stderr
+
+
+def test_reported_job_requires_a_site_job_type_and_command(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [_launcher_path().parent / "operations/run_reported_job.sh", "chrysalis"],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Usage:" in result.stderr
 
 
 @pytest.mark.parametrize(

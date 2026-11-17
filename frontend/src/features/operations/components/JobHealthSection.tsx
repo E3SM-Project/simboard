@@ -18,6 +18,7 @@ import {
 } from '@/features/operations/components/OperationsSection';
 import {
   filterJobs,
+  formatJobType,
   formatRelative,
   formatUtc,
   getJobDetails,
@@ -64,7 +65,7 @@ export const JobHealthSection = ({
 }: JobHealthSectionProps) => (
   <OperationsSection
     title="Job Health"
-    description="Latest status of each scheduled ingestion job."
+    description="Latest status of each scheduled job."
     icon={Activity}
     query={query}
     actions={
@@ -76,7 +77,7 @@ export const JobHealthSection = ({
           <SelectItem value={ALL}>All job types</SelectItem>
           {JOB_TYPES.map((value) => (
             <SelectItem key={value} value={value} className="capitalize">
-              {value}
+              {formatJobType(value)}
             </SelectItem>
           ))}
         </SelectContent>
@@ -99,7 +100,7 @@ export const JobHealthSection = ({
             {jobs.map(({ job, status }) => (
               <TableRow key={job.id} title={`Job ${job.id}`}>
                 <TableCell>{job.machine_name}</TableCell>
-                <TableCell className="capitalize">{job.scan_mode}</TableCell>
+                <TableCell className="capitalize">{formatJobType(job.scan_mode)}</TableCell>
                 <TableCell>
                   <JobStatusBadge status={status} />
                   {status === 'healthy' ? null : (
