@@ -23,7 +23,8 @@ MPAS runs use climatology years first, otherwise time-series years, otherwise
 when available. Filters do not change its primary time-range group.
 Select **Add** on runs
 from different cases or different periods of one case. Picks persist across
-pages in a compact selection tray. **Expand** reviews or removes selections;
+pages and appear in a compact selection tray on case pages. **Expand** reviews
+or removes selections;
 **Compare** checks shared plots before opening the viewer. Failed checks keep
 the tray selections and offer recovery actions. Choose a compatible group if several tools
 or comparison types are selected.
