@@ -632,6 +632,99 @@ def test_launcher_reports_scheduled_live_runs(
     assert not list(operations.glob("job-upload-failures-*"))
 
 
+def _reported_job_backend(tmp_path: Path, python: str | None) -> Path:
+    """Copy the reported job wrapper into a fake backend with a site config."""
+    backend = tmp_path / "backend"
+    sites = backend / "app/scripts/ingestion/sites"
+    (sites / "operations").mkdir(parents=True)
+    (sites / "configs").mkdir()
+    wrapper = _launcher_path().parent / "operations/run_reported_job.sh"
+    _write_executable(
+        sites / "operations/run_reported_job.sh", wrapper.read_text(encoding="utf-8")
+    )
+    (sites / "configs/chrysalis.config").write_text(
+        'export MACHINE_NAME="${MACHINE_NAME:-chrysalis}"\n', encoding="utf-8"
+    )
+    if python is not None:
+        (backend / ".venv/bin").mkdir(parents=True)
+        _write_executable(backend / ".venv/bin/python", python)
+
+    return backend
+
+
+def test_reported_job_hands_the_command_to_the_reporter(tmp_path: Path) -> None:
+    backend = _reported_job_backend(
+        tmp_path,
+        "#!/usr/bin/env bash\n"
+        "if [[ $1 == -c ]]; then exit 0; fi\n"
+        'printf "%s|%s|%s|%s|%s\\n" "$*" "$PWD" "$MACHINE_NAME" '
+        '"$SIMBOARD_JOB_SCAN_MODE" "$SIMBOARD_API_TOKEN"\n'
+        "exit 5\n",
+    )
+    api_file = tmp_path / "env.prod.sh"
+    api_file.write_text(
+        "echo leaked-token >&2\nexport SIMBOARD_API_TOKEN=test-token\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            backend / "app/scripts/ingestion/sites/operations/run_reported_job.sh",
+            "chrysalis",
+            "refresh",
+            "/bin/echo",
+            "--flag",
+        ],
+        capture_output=True,
+        check=False,
+        env={**os.environ, "SIMBOARD_ENV_FILE": str(api_file)},
+        text=True,
+    )
+
+    assert result.returncode == 5, result.stderr
+    assert result.stdout == (
+        "-m app.scripts.ingestion.job_health exec -- /bin/echo --flag"
+        f"|{backend.resolve()}|chrysalis|refresh|test-token\n"
+    )
+    assert result.stderr == ""
+
+
+@pytest.mark.parametrize("python", [None, "#!/usr/bin/env bash\nexit 1\n"])
+def test_reported_job_runs_unreported_without_a_working_reporter(
+    tmp_path: Path, python: str | None
+) -> None:
+    backend = _reported_job_backend(tmp_path, python)
+
+    result = subprocess.run(
+        [
+            backend / "app/scripts/ingestion/sites/operations/run_reported_job.sh",
+            "chrysalis",
+            "refresh",
+            "bash",
+            "-c",
+            "exit 4",
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 4
+    assert "running without job health reports" in result.stderr
+
+
+def test_reported_job_requires_a_site_job_type_and_command(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [_launcher_path().parent / "operations/run_reported_job.sh", "chrysalis"],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "Usage:" in result.stderr
+
+
 @pytest.mark.parametrize(
     ("scan_mode", "legacy_lock_contended", "expected_returncode"),
     [

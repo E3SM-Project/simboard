@@ -390,6 +390,32 @@ def test_run_keeps_the_module_exit_code_when_reports_fail(
     assert [event for event, _ in events] == ["job_report_failed"] * 2
 
 
+def test_exec_reports_a_live_scheduled_command(report_env, sent, monkeypatch):
+    monkeypatch.setenv("DRY_RUN", "false")
+    monkeypatch.setenv("SIMBOARD_JOB_SCAN_MODE", "refresh")
+    command = [sys.executable, "-c", "import sys; sys.exit(len(sys.argv))", "--x"]
+
+    assert main(["exec", "--", *command]) == 2
+
+    start, finish = (json.loads(request.data) for request, _ in sent)
+    assert start["scan_mode"] == finish["scan_mode"] == "refresh"
+    assert finish["exit_code"] == 2
+    assert finish["failure"] == {
+        "reason": "unexpected",
+        "message": "Exited with code 2.",
+    }
+    assert finish["upload_failures"] is None
+
+
+def test_exec_finishes_a_command_that_cannot_start(
+    report_env, sent, monkeypatch, tmp_path: Path
+):
+    monkeypatch.setenv("DRY_RUN", "false")
+
+    assert main(["exec", str(tmp_path / "missing")]) == 127
+    assert json.loads(sent[-1][0].data)["exit_code"] == 127
+
+
 def test_run_forwards_termination_to_the_module(tmp_path: Path, monkeypatch):
     received: list[tuple[str, dict]] = []
 
