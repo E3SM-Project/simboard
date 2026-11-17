@@ -280,6 +280,112 @@ class TestMainParser:
         assert len(results) == 1
         assert results[0].run_script_path is None
 
+    def test_resolves_run_script_that_submitted_issue_434_execution(self, tmp_path):
+        # Excerpt of OLD_PERF/<case>/37013148.250320-123519 from issue #434.
+        lid = "37013148.250320-123519"
+        case_name = "20250319.v3.LR.CBGC.FrazilEcosys.noSpinu.Icepack1.5.0.pm-cpu"
+        execution_dir = tmp_path / lid
+        execution_dir.mkdir()
+        self._create_execution_metadata_files(
+            execution_dir,
+            lid,
+            case_status_content=(
+                "2025-03-19 11:08:18: case.setup success\n"
+                "2025-03-19 11:38:00: case.submit starting 37013148\n"
+                "2025-03-19 11:38:00: case.submit success 37013148\n"
+                "2025-03-20 12:35:19: case.run starting 37013148\n"
+                "2025-03-21 07:33:15: case.run success 37013148\n"
+            ),
+        )
+        for saved_at in ["20250319-111614", "20250319-112114", "20250319-113750"]:
+            with gzip.open(
+                execution_dir / "CaseDocs" / f"run.{case_name}.sh.{saved_at}.{lid}.gz",
+                "wt",
+            ) as stream:
+                stream.write("#!/bin/bash\n")
+
+        with self._mock_all_parsers(
+            parse_env_case={
+                "case_name": case_name,
+                "case_root": "/remote/case_scripts",
+            },
+            parse_e3sm_timing={"execution_id": lid},
+        ):
+            results, skipped = parser.main_parser(tmp_path, tmp_path / "out")
+
+        assert skipped == 0
+        assert results[0].run_script_path == (
+            "/remote/case_scripts/run_script_provenance/"
+            f"run.{case_name}.sh.20250319-113750"
+        )
+
+    @pytest.mark.parametrize(
+        "scripts,case_status,expected",
+        [
+            (
+                ["run.case.sh.20250319-111614", "run.case.sh.20250319-113750"],
+                "2025-03-19 11:30:00: case.submit success 729179",
+                "run.case.sh.20250319-111614",
+            ),
+            (
+                ["run.case.sh.20250319-111614", "case.sh.20250319-113750"],
+                "2025-03-19 11:38:00: case.submit success 729179",
+                "case.sh.20250319-113750",
+            ),
+            (
+                ["run.case.sh.20250319-111614", "run.case.sh.20250319-113750"],
+                "2025-03-19 11:38:00: case.submit error 729179",
+                None,
+            ),
+            (
+                ["run.case.sh.20250319-111614", "run.case.sh.20250319-113750"],
+                "2025-03-19 11:38:00: case.submit success 729278",
+                None,
+            ),
+            (
+                ["run.case.sh.20250319-111614", "run.case.sh.20250319-113750"],
+                "2025-03-19 11:00:00: case.submit success 729179",
+                None,
+            ),
+            (
+                ["run.case.sh.20250319-113750", "case.sh.20250319-113750"],
+                "2025-03-19 11:38:00: case.submit success 729179",
+                None,
+            ),
+            (
+                ["run.case.sh.20250319-111614", "run.case.sh.20250319-113750"],
+                None,
+                None,
+            ),
+        ],
+    )
+    def test_multiple_run_scripts_resolve_by_case_submit(
+        self, tmp_path, scripts, case_status, expected
+    ):
+        lid = "729179.250417-002844"
+        docs = tmp_path / f"CaseDocs.{lid}"
+        docs.mkdir()
+        for provenance in scripts:
+            (docs / f"{provenance}.{lid}.gz").touch()
+        case_status_path = None
+        if case_status is not None:
+            case_status_path = tmp_path / f"CaseStatus.{lid}"
+            case_status_path.write_text(case_status)
+
+        result = parser._resolve_run_script_path(
+            str(tmp_path),
+            lid,
+            "case",
+            "/remote/case_scripts",
+            str(case_status_path) if case_status_path else None,
+        )
+
+        assert result == (
+            f"/remote/case_scripts/run_script_provenance/{expected}"
+            if expected
+            else None
+        )
+
     @pytest.mark.parametrize("compressed", [False, True])
     def test_coupler_dates_override_xml_without_changing_run_dates(
         self, tmp_path, compressed

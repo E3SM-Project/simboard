@@ -36,7 +36,10 @@ from app.features.ingestion.parsers.case_docs import (
     parse_env_case,
     parse_env_run,
 )
-from app.features.ingestion.parsers.case_status import parse_case_status
+from app.features.ingestion.parsers.case_status import (
+    parse_case_status,
+    parse_case_submit_time,
+)
 from app.features.ingestion.parsers.cpl_log import parse_cpl_log
 from app.features.ingestion.parsers.e3sm_timing import parse_e3sm_timing
 from app.features.ingestion.parsers.git_info import (
@@ -641,6 +644,7 @@ def _parse_all_files(exec_dir: str, files: dict[str, str | None]) -> ParsedExecu
             execution_id,
             metadata.get("case_name"),
             metadata.get("case_root"),
+            files.get("case_status"),
         ),
     )
 
@@ -650,33 +654,59 @@ def _resolve_run_script_path(
     execution_id: str,
     case_name: str | None,
     case_root: str | None,
+    case_status_path: str | None = None,
 ) -> str | None:
     """Resolve an archived E3SM script to its original HPC provenance path.
 
     CaseDocs copies append the execution LID to the saved provenance filename.
     Only the observed [run.]<case>[_<digits>].sh.<timestamp> convention is supported; CIME
     wrappers and run output must not be used as fallbacks.
+
+    The run script copies itself to provenance just before ``case.submit``. When
+    several provenance scripts exist, the latest one saved at or before this
+    job's successful ``case.submit`` in CaseStatus is the one that submitted it.
     """
     if not case_name or not case_root or not case_root.strip():
         return None
 
     pattern = re.compile(
-        rf"(?P<provenance>(?:run\.)?{re.escape(case_name)}(?:_[0-9]+)?\.sh\.\d{{8}}-\d{{6}})"
+        rf"(?P<provenance>(?:run\.)?{re.escape(case_name)}(?:_[0-9]+)?"
+        rf"\.sh\.(?P<timestamp>\d{{8}}-\d{{6}}))"
         rf"\.{re.escape(execution_id)}(?:\.gz)?"
     )
-    matches: set[str] = set()
+    matches: dict[str, str] = {}
     for directory in _find_casedocs_dirs(exec_dir):
         for path in Path(directory).iterdir():
             match = pattern.fullmatch(path.name)
             if match and path.is_file():
-                matches.add(match.group("provenance"))
+                matches[match.group("provenance")] = match.group("timestamp").replace(
+                    "-", ""
+                )
 
     if len(matches) > 1:
-        logger.warning(
-            "Skipping run-script artifact for '%s': multiple E3SM provenance scripts.",
-            exec_dir,
+        submit_time = (
+            parse_case_submit_time(case_status_path, execution_id.split(".")[0])
+            if case_status_path
+            else None
         )
-        return None
+        submitted = {
+            name: saved_at
+            for name, saved_at in matches.items()
+            if submit_time is not None and saved_at <= submit_time
+        }
+        latest = max(submitted.values(), default=None)
+        matches = {
+            name: saved_at for name, saved_at in submitted.items() if saved_at == latest
+        }
+
+        if len(matches) != 1:
+            logger.warning(
+                "Skipping run-script artifact for '%s': multiple E3SM provenance "
+                "scripts and none uniquely precedes this job's case.submit.",
+                exec_dir,
+            )
+            return None
+
     if not matches:
         return None
 
