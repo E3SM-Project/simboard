@@ -517,6 +517,13 @@ def test_cron_template_reports_maintenance_jobs_to_production(
     jobs = [line for line in template.splitlines() if f"/{script}" in line]
     assert len(jobs) == 1
     assert '/operations/env.prod.sh"' in jobs[0]
+    # Cron applies the global DRY_RUN line only to later entries, so the earlier
+    # refresh entry sets its own; log archiving follows the global setting.
+    assert ("DRY_RUN=false " in jobs[0]) is (job_type == "refresh")
+    global_dry_run = template.splitlines().index("# DRY_RUN=false")
+    assert (template.splitlines().index(jobs[0]) > global_dry_run) is (
+        job_type == "log_archive"
+    )
     assert f"SIMBOARD_JOB_ID={job_id} " in jobs[0]
     assert f'/run_reported_job.sh" chrysalis {job_type} ' in jobs[0]
 

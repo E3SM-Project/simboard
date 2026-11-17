@@ -223,7 +223,7 @@ deployment complete.
 The copied crontab:
 
 - runs `make ops-refresh` (via the deployed refresh helper) twice daily at
-  00:00 and 15:00 UTC to refresh a clean checkout, and reports live refreshes
+  00:00 and 15:00 UTC to refresh a clean checkout, and reports every refresh
   to production [job health](#report-scheduled-job-health);
 - synchronizes the backend runtime only after a revision change;
 - writes refresh output to `simboard-ingestion-provision.log`; review it after
@@ -297,7 +297,8 @@ The repository refresh and launcher-log archiving cron commands run through
 It loads `MACHINE_NAME` from the site config and the API environment from
 `SIMBOARD_ENV_FILE`, then reports the command as a `refresh` or `log_archive`
 job. Both jobs run once per machine, so the template reports them to
-production only. If the backend runtime cannot load the reporter, the command
+production only. The refresh has no dry-run mode, so its entry sets
+`DRY_RUN=false` and always reports; log archiving follows the global setting. If the backend runtime cannot load the reporter, the command
 runs unreported so a refresh can repair it; the job then shows `stale`.
 
 A job registers itself on its first report. Its owner is the service account

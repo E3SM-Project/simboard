@@ -26,9 +26,10 @@ SIMBOARD_ROOT=/path/to/simboard_root
 # refresh installs backend dependencies only when the revision changed and uses
 # `flock` for a process lock when it is available; review
 # simboard-ingestion-provision.log after each update. Replace `chrysalis` with
-# the site-config name. run_reported_job.sh reports live runs as the production
+# the site-config name. run_reported_job.sh reports each run as the production
 # `refresh` job; reporting never stops the refresh or changes its exit code.
-0 0,15 * * * PATH="$HOME/.local/bin:$PATH" SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" SIMBOARD_JOB_ID=chrysalis-refresh "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/run_reported_job.sh" chrysalis refresh "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/refresh_repository.sh" >> "${SIMBOARD_ROOT}/operations/simboard-ingestion-provision.log" 2>&1
+# The refresh has no dry-run mode, so this entry always sets DRY_RUN=false.
+0 0,15 * * * PATH="$HOME/.local/bin:$PATH" DRY_RUN=false SIMBOARD_ENV_FILE="${SIMBOARD_ROOT}/operations/env.prod.sh" SIMBOARD_JOB_ID=chrysalis-refresh "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/run_reported_job.sh" chrysalis refresh "${SIMBOARD_ROOT}/repository/simboard/backend/app/scripts/ingestion/sites/operations/refresh_repository.sh" >> "${SIMBOARD_ROOT}/operations/simboard-ingestion-provision.log" 2>&1
 
 # =============================================================================
 # API environment and run mode
