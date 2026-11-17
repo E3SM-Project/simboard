@@ -12,7 +12,8 @@ def get_jwt_strategy() -> JWTStrategy:
         The JWT strategy configured with the secret key and token lifetime.
     """
     strategy: JWTStrategy = JWTStrategy(
-        secret=settings.github_state_secret_key, lifetime_seconds=3600
+        secret=settings.github_state_secret_key,
+        lifetime_seconds=settings.cookie_max_age,
     )
 
     return strategy
