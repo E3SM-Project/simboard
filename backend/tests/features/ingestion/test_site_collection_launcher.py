@@ -491,6 +491,24 @@ def test_cron_template_refreshes_repository_twice_daily() -> None:
     assert jobs[0].startswith("0 0,15 * * * ")
 
 
+@pytest.mark.parametrize(
+    ("script", "job_type", "job_id"),
+    [
+        ("refresh_repository.sh", "refresh", "chrysalis-refresh"),
+        ("archive_ingestion_logs.py", "log_archive", "chrysalis-log-archive"),
+    ],
+)
+def test_cron_template_reports_maintenance_jobs_to_production(
+    script: str, job_type: str, job_id: str
+) -> None:
+    template = (_launcher_path().parent / "templates/crontab.example").read_text()
+    jobs = [line for line in template.splitlines() if f"/{script}" in line]
+    assert len(jobs) == 1
+    assert '/operations/env.prod.sh"' in jobs[0]
+    assert f"SIMBOARD_JOB_ID={job_id} " in jobs[0]
+    assert f'/run_reported_job.sh" chrysalis {job_type} ' in jobs[0]
+
+
 @pytest.mark.parametrize("dry_run", [None, "true", "false", "invalid"])
 def test_cron_template_archives_logs_with_shared_run_mode(
     tmp_path: Path, dry_run: str | None
@@ -515,9 +533,8 @@ def test_cron_template_archives_logs_with_shared_run_mode(
     (runtime / "python").symlink_to(sys.executable)
     scripts = backend / "app/scripts/ingestion/sites/operations"
     scripts.mkdir(parents=True)
-    (scripts / "archive_ingestion_logs.py").symlink_to(
-        _launcher_path().parent / "operations/archive_ingestion_logs.py"
-    )
+    for name in ("archive_ingestion_logs.py", "run_reported_job.sh"):
+        (scripts / name).symlink_to(_launcher_path().parent / "operations" / name)
     env = {**os.environ, "SIMBOARD_ROOT": str(root), "LOG_RETENTION_DAYS": "7"}
     env.pop("DRY_RUN", None)
     if dry_run is not None:
