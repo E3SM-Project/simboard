@@ -146,6 +146,15 @@ class TestSettings:
             "https://example2.com",
         ]
 
+    def test_ingestion_allowed_path_roots_list_keeps_root_slash(self, monkeypatch):
+        monkeypatch.setattr(
+            settings, "ingestion_allowed_path_roots", " /performance_archive/ , /, "
+        )
+        assert settings.ingestion_allowed_path_roots_list == [
+            "/performance_archive/",
+            "/",
+        ]
+
     def test_assistant_livai_env_names_are_canonical_and_strip_whitespace(self):
         configured = Settings(
             _env_file=None,

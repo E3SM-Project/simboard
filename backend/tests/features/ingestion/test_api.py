@@ -20,6 +20,7 @@ from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from app.api.version import API_BASE
+from app.core.config import settings
 from app.features.catalog.enums import ArtifactKind
 from app.features.catalog.models import Case, Execution
 from app.features.catalog.schemas import ExecutionCreate
@@ -3629,3 +3630,42 @@ class TestIngestionApiCoverage:
 
         assert exc_info.value.status_code == 400
         assert "must be a file or directory" in exc_info.value.detail
+
+    @staticmethod
+    def _allow_only_root(tmp_path, monkeypatch) -> Path:
+        root = tmp_path / "root"
+        (root / "case").mkdir(parents=True)
+        (tmp_path / "outside" / "case").mkdir(parents=True)
+        (root / "link").symlink_to(tmp_path / "outside")
+        monkeypatch.setattr(settings, "ingestion_allowed_path_roots", [str(root)])
+
+        return root
+
+    def test_validate_archive_path_accepts_path_under_allowed_root(
+        self, tmp_path, monkeypatch
+    ):
+        root = self._allow_only_root(tmp_path, monkeypatch)
+
+        _validate_archive_path(root / "case")
+
+    @pytest.mark.parametrize(
+        "relative_path",
+        [
+            "outside/case",
+            "root/../outside/case",
+            "root_evil/case",
+            "root/link/case",
+            "root/bad\x00name",
+        ],
+        ids=["outside", "dotdot-escape", "sibling-prefix", "symlink-escape", "null"],
+    )
+    def test_validate_archive_path_rejects_path_outside_allowed_roots(
+        self, tmp_path, monkeypatch, relative_path
+    ):
+        self._allow_only_root(tmp_path, monkeypatch)
+
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_archive_path(tmp_path / relative_path)
+
+        assert exc_info.value.status_code == 400
+        assert "outside the allowed ingestion roots" in exc_info.value.detail
