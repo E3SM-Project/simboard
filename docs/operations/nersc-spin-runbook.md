@@ -888,8 +888,8 @@ Ingress annotation if that backend limit changes.
 - Fix database connectivity or migration issues, then redeploy backend.
 - Backend image rollback does not revert schema automatically; handle schema rollback explicitly via Alembic when required.
 - Browser login tokens are stateless; a copied token stays valid until `COOKIE_MAX_AGE` expires, even after logout. To revoke access:
-  - One user: as a superuser, `PATCH /api/v1/users/{id}` with `{"is_active": false}`. Takes effect on the next request.
-  - All browser sessions: rotate `GITHUB_STATE_SECRET_KEY` and redeploy backend. Everyone must log in again.
+  - One user: in the `db` pod shell, run `psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "UPDATE users SET is_active = false WHERE email = '<email>';"`. Blocks browser logins and API tokens on the next request.
+  - All browser sessions: rotate `GITHUB_STATE_SECRET_KEY` and redeploy backend. Everyone must log in again; logins in progress during rollout must retry.
 
 ## Concurrency Note
 

@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi_users.authentication import AuthenticationBackend, BearerTransport
 from sqlalchemy.orm import Session
 
-from app.features.user.auth.utils import get_jwt_strategy
+from app.features.user.auth.utils import get_bearer_jwt_strategy
 from app.features.user.models import ApiToken, User, UserRole
 
 # Bearer transport for JWT login (returns token as JSON).
@@ -16,7 +16,7 @@ BEARER_TRANSPORT = BearerTransport(tokenUrl="auth/jwt/login")
 
 # JWT auth backend for username/password login via Bearer token.
 JWT_BEARER_BACKEND: AuthenticationBackend = AuthenticationBackend(
-    name="jwt", transport=BEARER_TRANSPORT, get_strategy=get_jwt_strategy
+    name="jwt", transport=BEARER_TRANSPORT, get_strategy=get_bearer_jwt_strategy
 )
 
 
