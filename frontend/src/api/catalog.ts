@@ -20,6 +20,7 @@ export interface PageParams {
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
   recentExecution?: boolean;
+  pastExecution?: boolean;
   [key: string]: string | number | boolean | string[] | undefined;
 }
 

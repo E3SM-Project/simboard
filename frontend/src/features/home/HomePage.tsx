@@ -253,20 +253,33 @@ export const HomePage = ({ machines, sites }: HomePageProps) => {
         </div>
       </section>
 
-      <section className="mx-auto mt-10 w-full max-w-7xl">
-        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="space-y-1">
-            <h2 className="text-2xl font-semibold">Recent Production Cases</h2>
-            <p className="text-muted-foreground">
-              Production-classified simulations with a completed execution in the last six calendar
-              months.
-            </p>
-          </div>
+      <section className="mx-auto mt-10 w-full max-w-7xl space-y-8">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <h2 className="text-2xl font-semibold">Production Cases</h2>
           <Button asChild variant="secondary">
             <Link to="/cases?simulationType=production">Browse Production Cases</Link>
           </Button>
         </div>
-        <ProductionCasesTable />
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold">Recent</h3>
+            <p className="text-sm text-muted-foreground">
+              Production-classified simulations with a completed execution in the last six calendar
+              months.
+            </p>
+          </div>
+          <ProductionCasesTable recency="recent" />
+        </div>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold">Past</h3>
+            <p className="text-sm text-muted-foreground">
+              Production-classified simulations whose latest completed execution is more than six
+              calendar months old.
+            </p>
+          </div>
+          <ProductionCasesTable recency="past" />
+        </div>
       </section>
 
       <section className="mx-auto mt-10 w-full max-w-7xl">

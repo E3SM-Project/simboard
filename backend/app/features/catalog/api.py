@@ -94,6 +94,12 @@ def list_cases(
         False,
         description="Only cases with a completed run in the last six calendar months.",
     ),
+    past_execution: bool = Query(
+        False,
+        description=(
+            "Only cases whose latest completed run is older than six calendar months."
+        ),
+    ),
     has_diagnostics: bool = Query(
         False,
         description="Only cases that link to published diagnostics.",
@@ -132,9 +138,11 @@ def list_cases(
     execution_count = _case_execution_count_subquery(db)
     rows_query = _case_list_projection(query, execution_count, latest_execution)
 
+    cutoff = datetime.now(timezone.utc) - relativedelta(months=6)
     if recent_execution:
-        cutoff = datetime.now(timezone.utc) - relativedelta(months=6)
         rows_query = rows_query.filter(latest_execution.c.latest_run_activity >= cutoff)
+    if past_execution:
+        rows_query = rows_query.filter(latest_execution.c.latest_run_activity < cutoff)
 
     total = rows_query.order_by(None).count()
     ordering = _case_list_ordering(
