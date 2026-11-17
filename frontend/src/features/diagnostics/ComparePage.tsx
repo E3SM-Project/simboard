@@ -61,7 +61,7 @@ const EMPTY_STATE = 'rounded-xl border border-dashed p-6 text-sm text-muted-fore
 const KBD = 'rounded border bg-muted-subtle px-1 font-mono text-[0.6875rem] text-foreground';
 
 const PANEL_LABELS: Record<PanelView, string> = {
-  test: 'Set',
+  test: 'Test',
   ref: 'Reference',
   diff: 'Difference',
 };
@@ -705,7 +705,7 @@ interface PlotsProps {
 
 /**
  * One cell per run. E3SM Diags images stack run, reference and difference
- * panels; in "Set" view each run's reference panel follows the runs, labeled
+ * panels; in "Test" view each run's reference panel follows the runs, labeled
  * with its reference and run, and identical images are shown once.
  */
 const Plots = ({ data, detail, plot, view }: PlotsProps) => {

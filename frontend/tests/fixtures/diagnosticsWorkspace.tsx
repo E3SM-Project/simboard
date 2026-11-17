@@ -1478,7 +1478,7 @@ async function testViewer() {
   check(document.activeElement?.textContent === 'ANN', 'Radio arrow moves focus');
   click(
     [...document.querySelectorAll<HTMLButtonElement>('[aria-label="Panel"] button')].find(
-      (item) => item.textContent === 'Set',
+      (item) => item.textContent === 'Test',
     ),
     'run panel',
   );
