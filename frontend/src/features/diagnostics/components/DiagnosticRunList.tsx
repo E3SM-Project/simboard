@@ -119,7 +119,7 @@ export const DiagnosticRunList = ({
               className="mb-1 flex items-center gap-2 border-b pb-1 text-xs font-semibold text-foreground"
             >
               {period}
-              <span className="text-xs font-normal text-muted-foreground">{runs.length} runs</span>
+              <span className="text-xs font-normal text-muted-foreground">{runs.length} {runs.length === 1 ? 'set' : 'sets'}</span>
             </h4>
             <ul className="space-y-1">
               {runs.map((run) => (
@@ -148,7 +148,7 @@ export const DiagnosticRunList = ({
                 id={`${id}-source-${index}-${group}`}
                 tabIndex={-1}
                 role="group"
-                aria-label={`${RUN_GROUPS.find((item) => item.key === group)?.title ?? group} in ${source.label || 'diagnostics directory'}; runs grouped by period below`}
+                aria-label={`${RUN_GROUPS.find((item) => item.key === group)?.title ?? group} in ${source.label || 'diagnostics directory'}; sets grouped by period below`}
                 className="block scroll-mt-20 rounded focus-visible:ring-2 focus-visible:ring-ring"
               />
             ))}
@@ -174,7 +174,7 @@ export const DiagnosticRunList = ({
             ) : null}
             {source.partial ? (
               <Alert variant="warning" role="note" className="mt-1 px-2 py-1.5 text-xs">
-                Run discovery is incomplete. Open the directory or retry to check for missing runs.
+                Discovery is incomplete. Open the directory or retry to check for missing sets.
               </Alert>
             ) : null}
           </section>
@@ -215,7 +215,7 @@ export const DiagnosticRunList = ({
       <div aria-live="polite">
         {hiddenAdded ? (
           <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-            {hiddenAdded} added {hiddenAdded === 1 ? 'run is' : 'runs are'} hidden by filters.
+            {hiddenAdded} added {hiddenAdded === 1 ? 'set is' : 'sets are'} hidden by filters.
             <Button
               type="button"
               variant="link"
@@ -332,7 +332,7 @@ const DiagnosticRunRow = ({
   );
 };
 
-const LIMIT_REASON = `Compare up to ${MAX_COMPARED_RUNS} runs of one kind. Remove one first.`;
+const LIMIT_REASON = `Compare up to ${MAX_COMPARED_RUNS} sets of one kind. Remove one first.`;
 
 /** Disabled buttons cannot take focus, so a focusable wrapper explains the limit. */
 const LimitReason = ({ full, children }: { full: boolean; children: React.ReactNode }) =>

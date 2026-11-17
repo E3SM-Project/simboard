@@ -109,7 +109,7 @@ export const ComparisonBar = () => {
       );
     } catch {
       if (mounted.current && currentSignature.current === startedSignature) {
-        setProblem('Could not check run compatibility. Check your connection and try again.');
+        setProblem('Could not check set compatibility. Check your connection and try again.');
         setRetryable(true);
       }
     } finally {
@@ -204,7 +204,7 @@ export const ComparisonBar = () => {
         <div id="comparison-tray-selections" hidden={collapsed} className="space-y-2">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs text-muted-foreground">
-              Compare runs of the same kind, across cases or time ranges.
+              Compare sets of the same kind, across cases or time ranges.
             </p>
             <Button variant="ghost" size="sm" disabled={checking} onClick={clear}>
               Clear selection

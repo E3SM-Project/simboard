@@ -75,8 +75,8 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
   const add = (run: DiagnosticsRunOut) => {
     if (!basket.add(toEntry(run, caseId, caseName, location.pathname))) {
       toast({
-        title: `Compare up to ${MAX_RUNS_PER_GROUP} runs of one kind at a time`,
-        description: 'Remove a run from your selection first.',
+        title: `Compare up to ${MAX_RUNS_PER_GROUP} sets of one kind at a time`,
+        description: 'Remove a set from your selection first.',
         variant: 'destructive',
       });
     }
@@ -107,7 +107,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
                       ? 'Reading the diagnostics archive…'
                       : query.isError
                         ? 'Diagnostics could not be read. Browse the original output or try again.'
-                        : `${runs.length} supported runs${selected ? ` · ${selected} added to compare` : ''}`}
+                        : `${runs.length} supported ${runs.length === 1 ? 'set' : 'sets'}${selected ? ` · ${selected} added to compare` : ''}`}
                   </span>
                 </span>
                 <ChevronDown
@@ -162,7 +162,7 @@ export const DiagnosticsRunsCard = ({ caseId, caseName, directories = [] }: Prop
             />
             {query.isSuccess && !runs.length ? (
               <p className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-                No supported runs were found. Original directories may contain other tools or raw
+                No supported sets were found. Original directories may contain other tools or raw
                 outputs.
               </p>
             ) : null}

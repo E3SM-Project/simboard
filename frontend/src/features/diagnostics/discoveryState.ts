@@ -78,7 +78,7 @@ export const diagnosticTitle = (run: DiagnosticsRunOut): string => {
         }[run.comparison]
       : '';
 
-  return [...(analyses.length ? analyses : ['Diagnostic run']), comparison]
+  return [...(analyses.length ? analyses : ['Diagnostic set']), comparison]
     .filter(Boolean)
     .join(' · ');
 };
