@@ -663,8 +663,8 @@ def _resolve_run_script_path(
     wrappers and run output must not be used as fallbacks.
 
     The run script copies itself to provenance just before ``case.submit``. When
-    several provenance scripts exist, the latest one saved at or before this
-    job's successful ``case.submit`` in CaseStatus is the one that submitted it.
+    several provenance scripts exist, the latest one saved at or before the
+    user's ``case.submit`` for this job's chain in CaseStatus submitted it.
     """
     if not case_name or not case_root or not case_root.strip():
         return None
@@ -702,8 +702,9 @@ def _resolve_run_script_path(
         if len(matches) != 1:
             logger.warning(
                 "Skipping run-script artifact for '%s': multiple E3SM provenance "
-                "scripts and none uniquely precedes this job's case.submit.",
+                "scripts and case.submit time %s identifies none uniquely.",
                 exec_dir,
+                submit_time or "unknown",
             )
             return None
 

@@ -14,9 +14,11 @@ CASE_RUN_START_PATTERN = re.compile(
 CASE_RUN_TERMINAL_PATTERN = re.compile(
     rf"^{TIMESTAMP_PATTERN}:\s+case\.run\s+(?P<state>success|error)\b"
 )
-CASE_SUBMIT_SUCCESS_PATTERN = re.compile(
-    rf"^{TIMESTAMP_PATTERN}:\s+case\.submit\s+success\s+(?P<job_ids>.+)$"
+CASE_STATUS_ENTRY_PATTERN = re.compile(
+    rf"^{TIMESTAMP_PATTERN}:\s+(?P<action>\S+\s+\S+)(?:\s+(?P<detail>.*))?$"
 )
+# CIME resubmits the next job when a run (or short-term archive) succeeds.
+RESUBMIT_TRIGGER_ACTIONS = {"case.run success", "st_archive success"}
 
 
 def parse_case_status(
@@ -77,10 +79,14 @@ def parse_case_status(
 
 
 def parse_case_submit_time(file_path: str | Path, job_id: str) -> str | None:
-    """Return the latest successful ``case.submit`` time for ``job_id``.
+    """Return when a user submitted ``job_id``'s chain with ``case.submit``.
 
-    The time is returned as ``YYYYMMDDHHMMSS`` digits so it compares directly
-    with run-script provenance timestamps. Read errors return ``None``;
+    A manual submit returns its own time. An automatic resubmit, logged right
+    after the previous job's success, returns the manual submit that started the
+    chain, so scripts saved later without submitting are excluded; a resubmit
+    without a logged manual submit returns ``None``. Times are
+    ``YYYYMMDDHHMMSS`` digits, comparable with run-script provenance timestamps
+    saved in the same login environment. Read errors return ``None``;
     ``parse_case_status`` already reports them.
     """
     try:
@@ -88,18 +94,25 @@ def parse_case_submit_time(file_path: str | Path, job_id: str) -> str | None:
     except (OSError, UnicodeDecodeError):
         return None
 
+    chain_start: str | None = None
     submit_time: str | None = None
+    resubmit = False
     for line in lines:
-        match = CASE_SUBMIT_SUCCESS_PATTERN.match(line.strip())
-        if not match:
+        entry = CASE_STATUS_ENTRY_PATTERN.match(line.strip())
+        if not entry or entry.group("action") == "case.submit starting":
             continue
 
-        job_ids = {
-            token.split(".")[0]
-            for token in re.split(r"[\s,]+", match.group("job_ids"))
-            if token
-        }
-        if job_id in job_ids:
-            submit_time = re.sub(r"\D", "", match.group("timestamp"))
+        if entry.group("action") == "case.submit success":
+            if not resubmit:
+                chain_start = re.sub(r"\D", "", entry.group("timestamp"))
+
+            job_ids = {
+                token.rsplit(":", 1)[-1].split(".")[0]
+                for token in re.split(r"[\s,]+", entry.group("detail") or "")
+            }
+            if job_id in job_ids:
+                submit_time = chain_start
+
+        resubmit = entry.group("action") in RESUBMIT_TRIGGER_ACTIONS
 
     return submit_time

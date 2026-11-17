@@ -333,6 +333,21 @@ class TestMainParser:
                 "case.sh.20250319-113750",
             ),
             (
+                ["run.case.sh.20250319-111614", "run.case.sh.20250319-113800"],
+                "2025-03-19 11:38:00: case.submit success 729179",
+                "run.case.sh.20250319-113800",
+            ),
+            (
+                # A script rerun without submitting while the previous job ran
+                # must not be credited with the automatic resubmit.
+                ["run.case.sh.20250319-111614", "run.case.sh.20250320-090000"],
+                "2025-03-19 11:38:00: case.submit success 100\n"
+                "2025-03-21 08:00:00: case.run success 100\n"
+                "2025-03-21 08:00:10: case.submit starting 729179\n"
+                "2025-03-21 08:00:10: case.submit success 729179\n",
+                "run.case.sh.20250319-111614",
+            ),
+            (
                 ["run.case.sh.20250319-111614", "run.case.sh.20250319-113750"],
                 "2025-03-19 11:38:00: case.submit error 729179",
                 None,

@@ -130,6 +130,46 @@ class TestCaseSubmitTime:
                 ["2025-03-19 11:38:00: case.submit success 37013148.pbs"],
                 "20250319113800",
             ),
+            (
+                [
+                    "2025-03-19 11:38:00: case.submit success "
+                    "case.run:37013148, case.st_archive:37013149"
+                ],
+                "20250319113800",
+            ),
+            (
+                [
+                    "2025-03-19 11:38:00: case.submit success 100",
+                    " ---------------------------------------------------",
+                    "2025-03-19 11:40:00: xmlchange success <command> ./xmlchange "
+                    "STOP_N=1 </command>",
+                    "2025-03-20 08:00:00: case.run success 100",
+                    " ---------------------------------------------------",
+                    "2025-03-20 08:00:10: case.submit starting 200",
+                    "2025-03-20 08:00:10: case.submit success 200",
+                    "2025-03-21 08:00:00: case.run success 200",
+                    "2025-03-21 08:00:10: case.submit starting 37013148",
+                    "2025-03-21 08:00:10: case.submit success 37013148",
+                ],
+                "20250319113800",
+            ),
+            (
+                [
+                    "2025-03-19 11:38:00: case.submit success 100",
+                    "2025-03-20 08:00:00: case.run success 100",
+                    "2025-03-20 09:00:00: xmlchange success <command> ./xmlchange "
+                    "STOP_N=1 </command>",
+                    "2025-03-20 09:00:10: case.submit success 37013148",
+                ],
+                "20250320090010",
+            ),
+            (
+                [
+                    "2025-03-20 08:00:00: case.run success 100",
+                    "2025-03-20 08:00:10: case.submit success 37013148",
+                ],
+                None,
+            ),
             (["2025-03-19 11:38:00: case.submit success 370131480"], None),
             (["2025-03-19 11:38:00: case.submit starting 37013148"], None),
             (["2025-03-19 11:38:00: case.submit error 37013148"], None),
