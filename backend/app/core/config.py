@@ -196,7 +196,8 @@ class Settings(BaseSettings):
         roots = self.ingestion_allowed_path_roots
         if isinstance(roots, str):
             roots = roots.split(",")
-        return _normalize_list(roots)
+        # Keep slashes: stripping them would turn "/" into "" (the cwd).
+        return [root.strip() for root in roots if root.strip()]
 
     @field_validator("assistant_livai_base_url", mode="before")
     @classmethod
