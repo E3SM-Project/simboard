@@ -169,7 +169,13 @@ def test_only_the_bound_service_account_reports_runs(client, users, act_as, job,
 @pytest.mark.parametrize("action", ["start", "finish"])
 @pytest.mark.parametrize(
     ("scan_mode", "thresholds"),
-    [("staging", (45, 60)), ("archive", (1560, 720)), ("diagnostics", (420, 300))],
+    [
+        ("staging", (45, 60)),
+        ("archive", (1560, 720)),
+        ("diagnostics", (420, 300)),
+        ("refresh", (1020, 60)),
+        ("log_archive", (10200, 120)),
+    ],
 )
 def test_first_report_registers_the_job(
     client, db, users, act_as, action, scan_mode, thresholds

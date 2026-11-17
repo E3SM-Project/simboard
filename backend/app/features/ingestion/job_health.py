@@ -34,6 +34,8 @@ DEFAULT_THRESHOLD_MINUTES: dict[str, tuple[int, int]] = {
     "staging": (45, 60),
     "archive": (1560, 720),
     "diagnostics": (420, 300),
+    "refresh": (1020, 60),
+    "log_archive": (10200, 120),
 }
 UPLOAD_FAILURE_CATEGORIES: dict[str, ScheduledJobUploadFailureCategory] = {
     **dict.fromkeys(["401", "403"], ScheduledJobUploadFailureCategory.AUTH),
