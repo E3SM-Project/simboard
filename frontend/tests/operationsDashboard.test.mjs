@@ -106,6 +106,12 @@ test('filters ignore unknown values and default to the last 7 days', () => {
   });
   // The site list may not have loaded yet.
   assert.equal(parse('site=LCRC', []).siteName, 'LCRC');
+  assert.equal(parse('job_type=log_archive').jobType, 'log_archive');
+});
+
+test('job types display without underscores', () => {
+  assert.equal(utils.formatJobType('log_archive'), 'log archive');
+  assert.equal(utils.formatJobType('refresh'), 'refresh');
 });
 
 test('date windows cover whole UTC days through today', () => {
