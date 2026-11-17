@@ -14,6 +14,9 @@ CASE_RUN_START_PATTERN = re.compile(
 CASE_RUN_TERMINAL_PATTERN = re.compile(
     rf"^{TIMESTAMP_PATTERN}:\s+case\.run\s+(?P<state>success|error)\b"
 )
+CASE_SUBMIT_SUCCESS_PATTERN = re.compile(
+    rf"^{TIMESTAMP_PATTERN}:\s+case\.submit\s+success\s+(?P<job_ids>.+)$"
+)
 
 
 def parse_case_status(
@@ -71,3 +74,32 @@ def parse_case_status(
 
     result["status"] = ExecutionStatus.RUNNING.value
     return result
+
+
+def parse_case_submit_time(file_path: str | Path, job_id: str) -> str | None:
+    """Return the latest successful ``case.submit`` time for ``job_id``.
+
+    The time is returned as ``YYYYMMDDHHMMSS`` digits so it compares directly
+    with run-script provenance timestamps. Read errors return ``None``;
+    ``parse_case_status`` already reports them.
+    """
+    try:
+        lines = _open_text(Path(file_path)).splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+
+    submit_time: str | None = None
+    for line in lines:
+        match = CASE_SUBMIT_SUCCESS_PATTERN.match(line.strip())
+        if not match:
+            continue
+
+        job_ids = {
+            token.split(".")[0]
+            for token in re.split(r"[\s,]+", match.group("job_ids"))
+            if token
+        }
+        if job_id in job_ids:
+            submit_time = re.sub(r"\D", "", match.group("timestamp"))
+
+    return submit_time

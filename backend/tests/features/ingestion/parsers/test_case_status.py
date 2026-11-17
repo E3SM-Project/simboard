@@ -3,7 +3,10 @@ from unittest.mock import patch
 
 import pytest
 
-from app.features.ingestion.parsers.case_status import parse_case_status
+from app.features.ingestion.parsers.case_status import (
+    parse_case_status,
+    parse_case_submit_time,
+)
 
 
 class TestCaseStatusParser:
@@ -105,3 +108,41 @@ class TestCaseStatusParser:
         assert result["run_start_date"] is None
         assert result["run_end_date"] is None
         assert result["status"] == "unknown"
+
+
+class TestCaseSubmitTime:
+    @pytest.mark.parametrize(
+        "lines,expected",
+        [
+            (["2025-03-19 11:38:00: case.submit success 37013148"], "20250319113800"),
+            (
+                [
+                    "2025-03-19 11:20:00: case.submit success 37013148",
+                    "2025-03-19 11:38:00: case.submit success 37013148",
+                ],
+                "20250319113800",
+            ),
+            (
+                ["2025-03-19 11:38:00: case.submit success 1, 37013148"],
+                "20250319113800",
+            ),
+            (
+                ["2025-03-19 11:38:00: case.submit success 37013148.pbs"],
+                "20250319113800",
+            ),
+            (["2025-03-19 11:38:00: case.submit success 370131480"], None),
+            (["2025-03-19 11:38:00: case.submit starting 37013148"], None),
+            (["2025-03-19 11:38:00: case.submit error 37013148"], None),
+            ([], None),
+        ],
+    )
+    def test_returns_latest_successful_submit_for_job(
+        self, tmp_path, lines, expected
+    ) -> None:
+        case_status = tmp_path / "CaseStatus.001"
+        case_status.write_text("\n".join(lines))
+
+        assert parse_case_submit_time(case_status, "37013148") == expected
+
+    def test_returns_none_on_read_error(self, tmp_path) -> None:
+        assert parse_case_submit_time(tmp_path / "missing", "37013148") is None
