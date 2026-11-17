@@ -196,12 +196,12 @@ Required for NERSC global file system (NGF/CFS) mounts to ensure correct permiss
 
 `Storage`:
 
-| Rancher field                | Value                                        |
-| ---------------------------- | -------------------------------------------- |
-| Volume type                  | `Bind-Mount`                                 |
-| Volume name                  | `archive`                                    |
-| Path on node                 | `/global/cfs/cdirs/e3sm/performance_archive` |
-| The Path on the Node must be | `An existing directory`                      |
+| Rancher field                | Value                             |
+| ---------------------------- | --------------------------------- |
+| Volume type                  | `Bind-Mount`                      |
+| Volume name                  | `archive`                         |
+| Path on node                 | `/global/cfs/cdirs/e3sm/OLD_PERF` |
+| The Path on the Node must be | `An existing directory`           |
 
 #### 2. Container tab (`backend`)
 
@@ -340,31 +340,31 @@ Prerequisites for this section:
 
 Key table for `nersc-staging-ingestor-env`:
 
-| Key                     | Required | Example/Allowed Value                                      | Used By                  |
-| ----------------------- | -------- | ---------------------------------------------------------- | ------------------------ |
-| `SIMBOARD_API_TOKEN`    | Yes      | service-account bearer token (from Setup Procedure step 2) | `nersc-staging-ingestor` |
-| `SIMBOARD_API_BASE_URL` | Yes      | `http://backend:8000`                                      | `nersc-staging-ingestor` |
-| `SCAN_MODE`             | Yes      | `staging`                                                  | `nersc-staging-ingestor` |
-| `PERF_ARCHIVE_ROOT`     | Yes      | `/performance_archive`                                     | `nersc-staging-ingestor` |
-| `PERF_SOURCE_ROOT`      | Yes | `/global/cfs/cdirs/e3sm/performance_archive`; absolute host prefix for recorded source directories only | `nersc-staging-ingestor` |
-| `MACHINE_NAME`          | Yes      | `perlmutter`                                               | `nersc-staging-ingestor` |
-| `DRY_RUN`               | No       | `true` or `false`                                          | `nersc-staging-ingestor` |
-| `SIMBOARD_JOB_ID`       | No       | `spin-perlmutter-staging`; enables job health reporting    | `nersc-staging-ingestor` |
+| Key                     | Required | Example/Allowed Value                                                                                   | Used By                  |
+| ----------------------- | -------- | ------------------------------------------------------------------------------------------------------- | ------------------------ |
+| `SIMBOARD_API_TOKEN`    | Yes      | service-account bearer token (from Setup Procedure step 2)                                              | `nersc-staging-ingestor` |
+| `SIMBOARD_API_BASE_URL` | Yes      | `http://backend:8000`                                                                                   | `nersc-staging-ingestor` |
+| `SCAN_MODE`             | Yes      | `staging`                                                                                               | `nersc-staging-ingestor` |
+| `PERF_ARCHIVE_ROOT`     | Yes      | `/performance_archive`                                                                                  | `nersc-staging-ingestor` |
+| `PERF_SOURCE_ROOT`      | Yes      | `/global/cfs/cdirs/e3sm/performance_archive`; absolute host prefix for recorded source directories only | `nersc-staging-ingestor` |
+| `MACHINE_NAME`          | Yes      | `perlmutter`                                                                                            | `nersc-staging-ingestor` |
+| `DRY_RUN`               | No       | `true` or `false`                                                                                       | `nersc-staging-ingestor` |
+| `SIMBOARD_JOB_ID`       | No       | `spin-perlmutter-staging`; enables job health reporting                                                 | `nersc-staging-ingestor` |
 
 Key table for `nersc-archive-ingestor-env`:
 
-| Key                     | Required                  | Example/Allowed Value                                      | Used By                  |
-| ----------------------- | ------------------------- | ---------------------------------------------------------- | ------------------------ |
-| `SIMBOARD_API_TOKEN`    | Yes                       | service-account bearer token (from Setup Procedure step 2) | `nersc-archive-ingestor` |
-| `SIMBOARD_API_BASE_URL` | Yes                       | `http://backend:8000`                                      | `nersc-archive-ingestor` |
-| `SCAN_MODE`             | Yes                       | `archive`                                                  | `nersc-archive-ingestor` |
-| `OLD_PERF_ARCHIVE_ROOT` | Yes                       | `/OLD_PERF`                                                | `nersc-archive-ingestor` |
-| `OLD_PERF_SOURCE_ROOT`  | Yes | `/global/cfs/cdirs/e3sm/OLD_PERF`; canonical absolute host prefix for recorded source directories only (`projectdirs` is an alias) | `nersc-archive-ingestor` |
-| `MACHINE_NAME`          | Yes                       | `perlmutter`                                               | `nersc-archive-ingestor` |
-| `DRY_RUN`               | No                        | `true` or `false`                                          | `nersc-archive-ingestor` |
-| `SIMBOARD_JOB_ID`       | No                        | `spin-perlmutter-archive`; enables job health reporting    | `nersc-archive-ingestor` |
-| `ARCHIVE_YEAR_START`    | No, defaults to `2025-01` | `2025-01`; explicit earlier bounds for backfills            | `nersc-archive-ingestor` |
-| `ARCHIVE_YEAR_END`      | No, scoped backfills only | `2025` or `2025-03`                                        | `nersc-archive-ingestor` |
+| Key                     | Required                  | Example/Allowed Value                                                                                                              | Used By                  |
+| ----------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| `SIMBOARD_API_TOKEN`    | Yes                       | service-account bearer token (from Setup Procedure step 2)                                                                         | `nersc-archive-ingestor` |
+| `SIMBOARD_API_BASE_URL` | Yes                       | `http://backend:8000`                                                                                                              | `nersc-archive-ingestor` |
+| `SCAN_MODE`             | Yes                       | `archive`                                                                                                                          | `nersc-archive-ingestor` |
+| `OLD_PERF_ARCHIVE_ROOT` | Yes                       | `/OLD_PERF`                                                                                                                        | `nersc-archive-ingestor` |
+| `OLD_PERF_SOURCE_ROOT`  | Yes                       | `/global/cfs/cdirs/e3sm/OLD_PERF`; canonical absolute host prefix for recorded source directories only (`projectdirs` is an alias) | `nersc-archive-ingestor` |
+| `MACHINE_NAME`          | Yes                       | `perlmutter`                                                                                                                       | `nersc-archive-ingestor` |
+| `DRY_RUN`               | No                        | `true` or `false`                                                                                                                  | `nersc-archive-ingestor` |
+| `SIMBOARD_JOB_ID`       | No                        | `spin-perlmutter-archive`; enables job health reporting                                                                            | `nersc-archive-ingestor` |
+| `ARCHIVE_YEAR_START`    | No, defaults to `2025-01` | `2025-01`; explicit earlier bounds for backfills                                                                                   | `nersc-archive-ingestor` |
+| `ARCHIVE_YEAR_END`      | No, scoped backfills only | `2025` or `2025-03`                                                                                                                | `nersc-archive-ingestor` |
 
 `OLD_PERF_ARCHIVE_ROOT` must point at archive root whose immediate children are
 `YYYY-MM` buckets containing immutable `performance_archive_<timestamp>` or
@@ -499,15 +499,15 @@ immediate cleanup. Removing it affects future Jobs only.
 
 `General`:
 
-| Rancher field         | Value                                                  |
-| --------------------- | ------------------------------------------------------ |
-| Container Name        | `nersc-staging-ingestor`                               |
-| Container image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`       |
-| Pull policy           | `Always` for `:dev`; `IfNotPresent` for versioned tags |
-| Image pull secret     | `registry-nersc`                                       |
-| Command               | `python`                                               |
+| Rancher field         | Value                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------- |
+| Container Name        | `nersc-staging-ingestor`                                                               |
+| Container image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`                                       |
+| Pull policy           | `Always` for `:dev`; `IfNotPresent` for versioned tags                                 |
+| Image pull secret     | `registry-nersc`                                                                       |
+| Command               | `python`                                                                               |
 | Arguments             | `-m app.scripts.ingestion.job_health run app.scripts.ingestion.nersc_archive_ingestor` |
-| Environment Variables | Type: Secret, Secret: `nersc-staging-ingestor-env`     |
+| Environment Variables | Type: Secret, Secret: `nersc-staging-ingestor-env`                                     |
 
 `Security Context`:
 
@@ -567,26 +567,26 @@ immediate cleanup. Removing it affects future Jobs only.
 
 `Storage`:
 
-| Rancher field                | Value                                   |
-| ---------------------------- | --------------------------------------- |
-| Volume type                  | `Bind-Mount`                            |
-| Volume name                  | `archive`                               |
+| Rancher field                | Value                             |
+| ---------------------------- | --------------------------------- |
+| Volume type                  | `Bind-Mount`                      |
+| Volume name                  | `archive`                         |
 | Path on node                 | `/global/cfs/cdirs/e3sm/OLD_PERF` |
-| The Path on the Node must be | `An existing directory`                 |
+| The Path on the Node must be | `An existing directory`           |
 
 ##### 3. Container tab
 
 `General`:
 
-| Rancher field         | Value                                                  |
-| --------------------- | ------------------------------------------------------ |
-| Container Name        | `nersc-archive-ingestor`                               |
-| Container image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`       |
-| Pull policy           | `Always` for `:dev`; `IfNotPresent` for versioned tags |
-| Image pull secret     | `registry-nersc`                                       |
-| Command               | `python`                                               |
+| Rancher field         | Value                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------- |
+| Container Name        | `nersc-archive-ingestor`                                                               |
+| Container image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`                                       |
+| Pull policy           | `Always` for `:dev`; `IfNotPresent` for versioned tags                                 |
+| Image pull secret     | `registry-nersc`                                                                       |
+| Command               | `python`                                                                               |
 | Arguments             | `-m app.scripts.ingestion.job_health run app.scripts.ingestion.nersc_archive_ingestor` |
-| Environment Variables | Type: Secret, Secret: `nersc-archive-ingestor-env`     |
+| Environment Variables | Type: Secret, Secret: `nersc-archive-ingestor-env`                                     |
 
 `Security Context`:
 
@@ -617,12 +617,12 @@ Canonical values for all workloads that mount the E3SM performance archive:
 These values should already be set in the instructions above, but are repeated here for
 clarity and to highlight security context requirements.
 
-| Field                   | Staging value                                | Archive value                           |
-| ----------------------- | -------------------------------------------- | --------------------------------------- |
+| Field                   | Staging value                                | Archive value                     |
+| ----------------------- | -------------------------------------------- | --------------------------------- |
 | Path on node            | `/global/cfs/cdirs/e3sm/performance_archive` | `/global/cfs/cdirs/e3sm/OLD_PERF` |
-| Volume name             | `staging`                                    | `archive`                               |
-| In-container mount path | `/performance_archive`                       | `/OLD_PERF`                             |
-| Read only               | `true` (recommended)                         | `true` (recommended)                    |
+| Volume name             | `staging`                                    | `archive`                         |
+| In-container mount path | `/performance_archive`                       | `/OLD_PERF`                       |
+| Read only               | `true` (recommended)                         | `true` (recommended)              |
 
 Security context requirements for NERSC global file system (NGF/CFS) mounts:
 
@@ -659,36 +659,36 @@ keep **An existing directory**, not `DirectoryOrCreate`. zppy creates the conten
 Under **Storage -> Secrets**, create the **Opaque** secret
 `nersc-diagnostics-scanner-env`:
 
-| Key | Value |
-| --- | --- |
-| `MACHINE_NAME` | `perlmutter` |
-| `DRY_RUN` | `false` |
-| `SIMBOARD_API_BASE_URL` | `http://backend:8000` |
-| `SIMBOARD_API_TOKEN` | Ingestion service-account token authorized for diagnostics |
-| `SIMBOARD_JOB_ID` | `spin-perlmutter-diagnostics`; enables [job health reporting](#workload-3-nersc-archive-collection-cronjobs) (Workload 3, step 7) |
-| `SIMBOARD_JOB_SCAN_MODE` | `diagnostics`; required with `SIMBOARD_JOB_ID` |
+| Key                      | Value                                                                                                                             |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `MACHINE_NAME`           | `perlmutter`                                                                                                                      |
+| `DRY_RUN`                | `false`                                                                                                                           |
+| `SIMBOARD_API_BASE_URL`  | `http://backend:8000`                                                                                                             |
+| `SIMBOARD_API_TOKEN`     | Ingestion service-account token authorized for diagnostics                                                                        |
+| `SIMBOARD_JOB_ID`        | `spin-perlmutter-diagnostics`; enables [job health reporting](#workload-3-nersc-archive-collection-cronjobs) (Workload 3, step 7) |
+| `SIMBOARD_JOB_SCAN_MODE` | `diagnostics`; required with `SIMBOARD_JOB_ID`                                                                                    |
 
 Use the same namespace's backend image and API credentials. Keep `DRY_RUN=false`
 for linking; `true` is an optional offline scan. Omitting it defaults to dry run.
 
 Open **Workloads -> CronJobs -> Create**:
 
-| Rancher field | Value |
-| --- | --- |
-| Name | `nersc-diagnostics-scanner` |
-| Schedule | `0 2,8,14,20 * * *` |
-| Time zone | `Etc/UTC` |
+| Rancher field | Value                       |
+| ------------- | --------------------------- |
+| Name          | `nersc-diagnostics-scanner` |
+| Schedule      | `0 2,8,14,20 * * *`         |
+| Time zone     | `Etc/UTC`                   |
 
 #### 1. CronJob tab
 
 `Scaling and Upgrade Policy`:
 
-| Rancher field | Value |
-| --- | --- |
-| Concurrency policy | `Skip next run if current run hasn't finished` (`Forbid`) |
-| Successful jobs history limit | `4` |
-| Failed jobs history limit | `3` |
-| Job backoff limit | `0` (retry at the next schedule) |
+| Rancher field                 | Value                                                     |
+| ----------------------------- | --------------------------------------------------------- |
+| Concurrency policy            | `Skip next run if current run hasn't finished` (`Forbid`) |
+| Successful jobs history limit | `4`                                                       |
+| Failed jobs history limit     | `3`                                                       |
+| Job backoff limit             | `0` (retry at the next schedule)                          |
 
 In Rancher, use **⋮ → Edit YAML** to remove
 `spec.jobTemplate.spec.ttlSecondsAfterFinished`, then save and verify it is absent.
@@ -704,52 +704,52 @@ verify the controller uses UTC. Avoid overlapping manual jobs;
 
 `Security Context` and `Pod`:
 
-| Rancher field | Value |
-| --- | --- |
+| Rancher field        | Value                                                   |
+| -------------------- | ------------------------------------------------------- |
 | Pod Filesystem Group | `62756` (`e3sm`); match the container's Run as Group ID |
-| Restart policy | `Never` |
+| Restart policy       | `Never`                                                 |
 
 `Storage`:
 
-| Rancher field | Value |
-| --- | --- |
-| Volume type | `Bind-Mount` |
-| Volume name | `diagnostics` |
-| Path on node | `/global/cfs/cdirs/e3sm/www/diagnostics_archive` |
-| The Path on the Node must be | `An existing directory` |
+| Rancher field                | Value                                            |
+| ---------------------------- | ------------------------------------------------ |
+| Volume type                  | `Bind-Mount`                                     |
+| Volume name                  | `diagnostics`                                    |
+| Path on node                 | `/global/cfs/cdirs/e3sm/www/diagnostics_archive` |
+| The Path on the Node must be | `An existing directory`                          |
 
 #### 3. Container tab
 
 `General`:
 
-| Rancher field | Value |
-| --- | --- |
-| Container Name | `nersc-diagnostics-scanner` |
-| Container image | `registry.nersc.gov/e3sm/simboard/backend:<tag>` |
-| Pull policy | `Always` for `:dev`; `IfNotPresent` for versioned tags |
-| Image pull secret | `registry-nersc` |
-| Working directory | `/app` |
-| Command | `python` |
-| Arguments | `-m app.scripts.ingestion.job_health run app.scripts.ingestion.diagnostics_link_scanner` |
-| Environment Variables | Type: Secret, Secret: `nersc-diagnostics-scanner-env` |
+| Rancher field         | Value                                                                                    |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| Container Name        | `nersc-diagnostics-scanner`                                                              |
+| Container image       | `registry.nersc.gov/e3sm/simboard/backend:<tag>`                                         |
+| Pull policy           | `Always` for `:dev`; `IfNotPresent` for versioned tags                                   |
+| Image pull secret     | `registry-nersc`                                                                         |
+| Working directory     | `/app`                                                                                   |
+| Command               | `python`                                                                                 |
+| Arguments             | `-m app.scripts.ingestion.job_health run app.scripts.ingestion.diagnostics_link_scanner` |
+| Environment Variables | Type: Secret, Secret: `nersc-diagnostics-scanner-env`                                    |
 
 `Security Context`:
 
-| Rancher field | Value |
-| --- | --- |
-| Run as User | Numeric NERSC UID authorized to read the archive |
-| Run as Group ID | `62756` (`e3sm`); also use it for Pod Filesystem Group |
-| allowPrivilegeEscalation | `false` |
-| privileged | `false` |
-| capabilities | drop `ALL` |
+| Rancher field            | Value                                                  |
+| ------------------------ | ------------------------------------------------------ |
+| Run as User              | Numeric NERSC UID authorized to read the archive       |
+| Run as Group ID          | `62756` (`e3sm`); also use it for Pod Filesystem Group |
+| allowPrivilegeEscalation | `false`                                                |
+| privileged               | `false`                                                |
+| capabilities             | drop `ALL`                                             |
 
 `Storage`:
 
-| Rancher field | Value |
-| --- | --- |
-| Archive volume | `diagnostics` |
+| Rancher field      | Value                                            |
+| ------------------ | ------------------------------------------------ |
+| Archive volume     | `diagnostics`                                    |
 | Archive mount path | `/global/cfs/cdirs/e3sm/www/diagnostics_archive` |
-| Archive read only | `true` |
+| Archive read only  | `true`                                           |
 
 Mount the archive at the exact path registered in `diagnostics_archives.py` and
 confirm the configured UID/group can read it. No root/URL environment override
