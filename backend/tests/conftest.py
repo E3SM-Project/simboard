@@ -125,6 +125,14 @@ def setup_test_db():
         _drop_test_database()
 
 
+@pytest.fixture(autouse=True)
+def allow_tmp_ingestion_paths(monkeypatch, tmp_path_factory):
+    """Allow path-based ingestion to read archives under pytest temp dirs."""
+    monkeypatch.setattr(
+        settings, "ingestion_allowed_path_roots", [str(tmp_path_factory.getbasetemp())]
+    )
+
+
 @pytest.fixture
 def normal_user_sync(db):
     """Sync version of normal_user for use with sync tests."""

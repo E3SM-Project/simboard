@@ -183,6 +183,21 @@ class Settings(BaseSettings):
             prefixes = prefixes.split(",")
         return _normalize_list(prefixes)
 
+    # --- Path-based ingestion ---
+    # The from-path endpoint only reads archives under these roots, which are
+    # the NERSC Spin backend's read-only performance archive mounts.
+    ingestion_allowed_path_roots: str | list[str] = [
+        "/performance_archive",
+        "/OLD_PERF",
+    ]
+
+    @property
+    def ingestion_allowed_path_roots_list(self) -> list[str]:
+        roots = self.ingestion_allowed_path_roots
+        if isinstance(roots, str):
+            roots = roots.split(",")
+        return _normalize_list(roots)
+
     @field_validator("assistant_livai_base_url", mode="before")
     @classmethod
     def _strip_livai_base_url(cls, value: str) -> str:

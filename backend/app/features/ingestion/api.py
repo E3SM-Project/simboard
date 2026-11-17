@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.common.dependencies import get_database_session
 from app.common.utils import _normalize_hpc_username
+from app.core.config import settings
 from app.core.database import transaction
 from app.features.catalog.enums import CaseSimulationType
 from app.features.catalog.models import Artifact, Case, Execution, ExternalLink
@@ -282,15 +283,11 @@ def ingest_from_path(
 ) -> IngestionResponse:
     """Ingest an archive from a filesystem path and persist executions.
 
-    NOTE: Arbitrary filesystem paths are currently permitted to support HPC
-    ingestion workflows (e.g., NERSC). This endpoint is restricted to users with
-    the ADMIN or SERVICE_ACCOUNT role.
+    NOTE: This endpoint is restricted to users with the ADMIN or SERVICE_ACCOUNT
+    role, and archive_path must resolve within one of the configured
+    ``ingestion_allowed_path_roots``.
     Path artifacts parsed from the archive are treated as opaque provenance
     metadata and stored exactly as they appear in the archive metadata.
-
-    TODO: Consider enforcing that archive_path must reside within a configured
-    base directory (e.g., a designated HPC storage or ingestion directory)
-    before exposing this endpoint beyond a trusted environment.
 
     Parameters
     ----------
@@ -682,6 +679,24 @@ def _build_hpc_upload_payload(
 
 
 def _validate_archive_path(archive_path: Path) -> None:
+    # Check the allowlist first so paths outside it cannot probe existence.
+    roots = [
+        Path(root).resolve() for root in settings.ingestion_allowed_path_roots_list
+    ]
+    try:
+        resolved = archive_path.resolve()
+    except (OSError, RuntimeError, ValueError):
+        resolved = None
+
+    if resolved is None or not any(resolved.is_relative_to(root) for root in roots):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Archive path '{archive_path}' is outside the allowed ingestion "
+                f"roots: {', '.join(map(str, roots))}."
+            ),
+        )
+
     if not archive_path.exists():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
