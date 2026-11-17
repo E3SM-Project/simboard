@@ -222,8 +222,8 @@ deployment complete.
 
 The copied crontab:
 
-- runs `make ops-refresh` (via the deployed refresh helper) weekly to
-  refresh a clean checkout;
+- runs `make ops-refresh` (via the deployed refresh helper) twice daily at
+  00:00 and 15:00 UTC to refresh a clean checkout;
 - synchronizes the backend runtime only after a revision change;
 - writes refresh output to `simboard-ingestion-provision.log`; review it after
   each update;

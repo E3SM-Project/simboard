@@ -484,6 +484,13 @@ def test_cron_template_schedules_diagnostics_independently() -> None:
         assert "&&" not in job
 
 
+def test_cron_template_refreshes_repository_twice_daily() -> None:
+    template = (_launcher_path().parent / "templates/crontab.example").read_text()
+    jobs = [line for line in template.splitlines() if "refresh_repository.sh" in line]
+    assert len(jobs) == 1
+    assert jobs[0].startswith("0 0,15 * * * ")
+
+
 @pytest.mark.parametrize("dry_run", [None, "true", "false", "invalid"])
 def test_cron_template_archives_logs_with_shared_run_mode(
     tmp_path: Path, dry_run: str | None
