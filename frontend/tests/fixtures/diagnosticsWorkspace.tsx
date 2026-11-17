@@ -383,6 +383,7 @@ const render = (path: string) =>
     <QueryClientProvider client={client}>
       <MemoryRouter key={++mount} initialEntries={[path]}>
         <nav>
+          <Link to="/">Home</Link>
           <Link to="/cases/alpha">Alpha case</Link>
           <Link to="/cases/beta">Beta case</Link>
           <Link to="/diagnostics">Diagnostics workspace</Link>
@@ -667,11 +668,12 @@ async function testWorkspace() {
   click(document.querySelector<HTMLButtonElement>('button[aria-label^="Add E3SM"]'), 'first run');
   await waitFor(() => button('Expand'), 'collapsed tray');
   check(document.getElementById('comparison-tray-selections')?.hidden, 'Tray starts collapsed');
-  render('/');
+  click(link('Home'), 'home page');
   await waitFor(() => latest === '/', 'home page');
   check(
-    !document.querySelector('[aria-label="Diagnostics comparison"]'),
-    'Tray hidden outside case pages',
+    !document.querySelector('[aria-label="Diagnostics comparison"]') &&
+      document.body.style.paddingBottom === '',
+    'Tray and its page padding hidden outside case pages',
   );
   click(link('Beta case'), 'second case');
   await waitFor(() => document.querySelector('h1')?.textContent === 'Case beta', 'second case');
