@@ -195,6 +195,47 @@ def test_single_execution_rejects_normal_scan_exclusions(
     )
 
 
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "performance_archive_2026_10_12_10_02_55/user/case/100.1-1",
+        "pace-exps-test/user/case/100.1-1",
+        "OLD_PERF/2026-10/user/case/100.1-1",
+    ],
+)
+def test_upload_single_execution_rejects_staging_exclusions(
+    tmp_path, monkeypatch, relative
+) -> None:
+    root = tmp_path / "performance_archive"
+    execution = root / relative
+    execution.mkdir(parents=True)
+    monkeypatch.setattr(
+        upload_module, "_fetch_ingestion_state", lambda *a, **kw: _fresh_state()
+    )
+    config = IngestorConfig(
+        api_base_url="https://example.test",
+        api_token="test-token",
+        archive_root=root,
+        machine_name="chrysalis",
+        dry_run=False,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="staging",
+        execution_dir=execution,
+    )
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Excluded selections must not validate or submit executions")
+
+    assert (
+        upload_module._run_ingestor(
+            config, metadata_locator=forbidden, post_request_fn=forbidden
+        )
+        == 1
+    )
+
+
 @pytest.mark.parametrize("runner", [ingestor_module, upload_module])
 @pytest.mark.parametrize("rejection", [IncompleteArchiveError, ArchiveValidationError])
 @pytest.mark.parametrize("move_to_archive", [False, True])
