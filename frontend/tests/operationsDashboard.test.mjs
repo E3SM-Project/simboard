@@ -398,6 +398,9 @@ test('only admins see the Operations navigation item', async () => {
   const adminHtml = render('admin');
   assert.match(adminHtml, /title="Admins only"[^>]*href="\/admin\/operations"/);
   assert.match(adminHtml, /\(admins only\)/);
+  // The desktop nav and mobile menu trigger must switch at the same breakpoint.
+  assert.match(adminHtml, /<nav class="hidden lg:flex/);
+  assert.match(adminHtml, /aria-controls="mobile-menu" class="lg:hidden/);
   for (const role of ['user', 'service_account'])
     assert.doesNotMatch(render(role), /\/admin\/operations/);
 });

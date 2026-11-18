@@ -95,7 +95,7 @@ export const MobileMenu = ({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls="mobile-menu"
-        className="md:hidden flex items-center justify-center h-9 w-9 rounded-md hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+        className="lg:hidden flex items-center justify-center h-9 w-9 rounded-md hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
         onClick={() => setOpen(true)}
       >
         <svg
@@ -113,7 +113,7 @@ export const MobileMenu = ({
 
       {open && (
         <div
-          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm lg:hidden"
           role="dialog"
           aria-modal="true"
           aria-label="Mobile navigation"
