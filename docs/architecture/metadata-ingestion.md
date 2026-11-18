@@ -478,8 +478,10 @@ rejects machines absent from its machine catalog; missing machine metadata is no
 replaced with the scanner's configured machine.
 
 NERSC staging scans only discover `<root>/<username>/<case>/<execution_id>`.
-They exclude top-level `performance_archive_*` batches and `pace-exps-*`
-directories and do not recurse into other layouts below a case directory.
+They exclude top-level `performance_archive_*` batches, `pace-exps-*`
+directories, and an `OLD_PERF` archive root nested in staging, and do not
+recurse into other layouts below a case directory. Remote-upload staging scans
+apply the same top-level exclusions.
 Processed batches temporarily remaining under the staging root are ignored;
 archive scans discover them after they move to `OLD_PERF_ARCHIVE_ROOT/YYYY-MM/`,
 subject to the existing archive range and status rules.
