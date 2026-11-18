@@ -1970,11 +1970,14 @@ def test_staging_scan_excludes_batches_and_unrelated_layouts(
         for case in case_paths
     }
     batch = root / "performance_archive_2026_10_15_10_03_11"
-    excluded_roots = [batch, root / "pace-exps-test"]
+    excluded_roots = [batch, root / "pace-exps-test", root / "OLD_PERF"]
     excluded_cases = [
         batch / status / "ndk" / "archived-case"
         for status in ("COMPLETED", "FAILED", "NODE_FAIL", "TIMEOUT", "UNKNOWN")
-    ] + [root / "pace-exps-test" / "experiment-case"]
+    ] + [
+        root / "pace-exps-test" / "experiment-case",
+        root / "OLD_PERF" / "2026-10" / "ndk" / "archived-case",
+    ]
     for case in case_paths + excluded_cases:
         (case / execution_id).mkdir(parents=True)
     nested = case_paths[0] / "unrelated" / "nested-case"

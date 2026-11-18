@@ -22,6 +22,7 @@ from app.features.ingestion.parsers.parser import (
     _find_spec_matches,
 )
 from app.scripts.ingestion.archive_ingestor_core import (
+    ARCHIVE_ROOT_BASENAME,
     DISCOVERY_PROGRESS_LOG_EVERY_DIRECTORIES,
     STAGING_ROOT_BASENAME,
     ArchiveSnapshotScan,
@@ -51,6 +52,40 @@ from app.scripts.ingestion.archive_layout import (
 from app.scripts.ingestion.archive_logging import scan_finished
 
 EXECUTION_DIR_PATTERN = re.compile(r"\d+\.\d+-\d+$")
+# PACE leaves these under a staging root: processed batches waiting to move,
+# upload work trees, and, on sites such as Aurora, the archive root itself.
+STAGING_EXCLUDED_DIR_PREFIXES = ("performance_archive_", "pace-exps-")
+STAGING_EXCLUDED_DIR_NAMES = frozenset({ARCHIVE_ROOT_BASENAME})
+
+
+def _prune_staging_pace_dirnames(
+    dirpath: str, dirnames: list[str], *, archive_root: Path
+) -> None:
+    """Skip PACE batches, upload work trees, and a nested archive root."""
+    if Path(dirpath) != archive_root:
+        return
+    dirnames[:] = [
+        name
+        for name in dirnames
+        if not name.startswith(STAGING_EXCLUDED_DIR_PREFIXES)
+        and name not in STAGING_EXCLUDED_DIR_NAMES
+    ]
+
+
+def _prune_staging_walk_dirnames(
+    dirpath: str, dirnames: list[str], *, archive_root: Path
+) -> None:
+    """Limit staging walks to ``username/case/execution`` directories."""
+    _prune_staging_pace_dirnames(dirpath, dirnames, archive_root=archive_root)
+    depth = len(Path(dirpath).relative_to(archive_root).parts)
+    if depth < 2:
+        dirnames[:] = [
+            name for name in dirnames if not EXECUTION_DIR_PATTERN.fullmatch(name)
+        ]
+    else:
+        dirnames[:] = [
+            name for name in dirnames if EXECUTION_DIR_PATTERN.fullmatch(name)
+        ]
 
 
 @dataclass(frozen=True)

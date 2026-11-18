@@ -5,6 +5,7 @@ import runpy
 import tarfile
 import urllib.error
 import urllib.request
+from dataclasses import replace
 from email.message import Message
 from pathlib import Path
 from types import SimpleNamespace
@@ -33,6 +34,7 @@ from app.scripts.ingestion.archive_ingestor_core import (
 from app.scripts.ingestion.hpc_upload_archive_ingestor import (
     _build_endpoint_url,
     _create_case_archive,
+    _default_dir_pruner,
     _post_hpc_upload_ingestion_request,
     _prepared_hpc_case_submission,
     _run_ingestor,
@@ -785,6 +787,80 @@ def test_run_ingestor_scan_completed_logs_outcome_counters(
     assert scan_completed["execution_dirs_scanned"] == 1
     assert scan_completed["execution_dirs_accepted"] == 1
     assert "accepted_execution_ids" not in scan_completed
+
+
+def test_run_ingestor_staging_skips_pace_batches_and_nested_archive_root(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    archive_root = tmp_path / "performance_archive"
+    for case_dir in (
+        archive_root / "user_a" / "case_a",
+        archive_root / "performance_archive_2026_10_15_10_03_11" / "user_a" / "case_b",
+        archive_root / "pace-exps-test" / "user_a" / "case_c",
+        archive_root / "OLD_PERF" / "2026-10" / "user_a" / "case_d",
+    ):
+        (case_dir / "100.1-1").mkdir(parents=True)
+    logged_events: list[tuple[str, dict[str, object]]] = []
+
+    def fake_log_event(event: str, fields: dict[str, object] | None = None) -> None:
+        logged_events.append((event, {} if fields is None else fields))
+
+    monkeypatch.setattr(upload_ingestor_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(discovery_module, "_log_event", fake_log_event)
+    monkeypatch.setattr(
+        upload_ingestor_module,
+        "_fetch_ingestion_state",
+        lambda *args, **kwargs: _fresh_state(),
+    )
+
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=archive_root,
+        machine_name="compy",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="staging",
+    )
+
+    exit_code = _run_ingestor(
+        config,
+        metadata_locator=lambda *_: {},
+        sleep_fn=lambda *_: None,
+    )
+
+    scan_completed = [
+        fields for event, fields in logged_events if event == "scan_completed"
+    ][0]
+
+    assert exit_code == 0
+    assert scan_completed["execution_dirs_scanned"] == 1
+    assert scan_completed["submission_qualified_cases"] == 1
+
+
+def test_default_dir_pruner_keeps_caller_pruner_and_archive_scans(
+    tmp_path: Path,
+) -> None:
+    config = IngestorConfig(
+        api_base_url="http://backend:8000",
+        api_token="token",
+        archive_root=tmp_path,
+        machine_name="compy",
+        dry_run=True,
+        max_cases_per_run=None,
+        max_attempts=1,
+        request_timeout_seconds=30,
+        scan_mode="staging",
+    )
+
+    def caller_pruner(dirpath: str, dirnames: list[str]) -> None:
+        del dirpath, dirnames
+
+    assert _default_dir_pruner(config, caller_pruner) is caller_pruner
+    assert _default_dir_pruner(replace(config, scan_mode="archive"), None) is None
 
 
 def test_run_ingestor_missing_archive_root_returns_failure(
