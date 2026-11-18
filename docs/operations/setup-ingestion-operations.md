@@ -215,10 +215,20 @@ linking, and verified raw-log deletion. Reinstall the reviewed file; use per-job
 `DRY_RUN=true` overrides for tasks not yet approved. Use `MAX_CASES_PER_RUN` to
 bound the first live ingestion run; it does not limit diagnostics.
 
+The first live staging and archive runs may process a large backlog. They can
+show `running` for a long time, then `stale` once they exceed
+`max_duration_minutes`, while still making progress. Check
+`operations/raw_logs/` before treating such a run as failed. To avoid this,
+bound the run with `MAX_CASES_PER_RUN` or
+[register the job](#report-scheduled-job-health) with a larger
+`max_duration_minutes`.
+
 After installation, verify `crontab -l` matches the reviewed schedules and new
 root, retains unrelated entries, and has no obsolete duplicate jobs in the
-operator's account. Review the first scheduled-run logs before declaring the
-deployment complete.
+operator's account. Review the first scheduled-run logs, and after the first
+live runs confirm each job appears in the
+[Operations dashboard](#operations-dashboard), before declaring the deployment
+complete. Dry runs do not report job health.
 
 The copied crontab:
 
