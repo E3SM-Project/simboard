@@ -50,15 +50,15 @@ export const NavBar = () => {
 
   return (
     <header className="w-full bg-background border-b">
-      <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-4 py-3 md:px-6">
+      <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-4 py-3 lg:px-6">
         <div className="flex items-center gap-4">
-          <Link to="/" className="flex items-center gap-3 text-xl font-bold">
+          <Link to="/" className="flex shrink-0 items-center gap-3 text-xl font-bold">
             <img src="/logos/simboard-logo.png" alt="" className="h-8 w-8 shrink-0" />
             <span>SimBoard</span>
           </Link>
         </div>
 
-        <nav className="hidden md:flex gap-3 ml-6">
+        <nav className="hidden lg:flex gap-3 ml-6">
           {visibleNavItems.map((item) => {
             const isActive =
               !item.external &&
@@ -72,7 +72,7 @@ export const NavBar = () => {
                 href={item.href}
                 target="_blank"
                 rel="noreferrer"
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent px-2 py-1 rounded flex items-center gap-1"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent px-2 py-1 rounded flex items-center gap-1 whitespace-nowrap"
               >
                 {item.label}
               </a>
@@ -85,7 +85,7 @@ export const NavBar = () => {
                   to={item.href}
                   title={item.adminOnly ? 'Admins only' : undefined}
                   className={cn(
-                    'text-sm font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent px-2 py-1 rounded flex items-center gap-1',
+                    'text-sm font-medium text-muted-foreground hover:text-foreground transition border-b-2 border-transparent px-2 py-1 rounded flex items-center gap-1 whitespace-nowrap',
                     isActive && 'text-foreground border-foreground font-semibold',
                   )}
                 >
@@ -108,14 +108,14 @@ export const NavBar = () => {
 
           {loading ? (
             <LoadingState
-              className="hidden md:flex"
+              className="hidden lg:flex"
               kind="inline"
               label="Checking authentication"
             />
           ) : !isAuthenticated ? (
             <Button
               onClick={loginWithGithub}
-              className="hidden md:flex items-center gap-2 bg-[#24292f] hover:bg-[#1e2227] text-white px-4 py-2 rounded-md transition"
+              className="hidden lg:flex items-center gap-2 bg-[#24292f] hover:bg-[#1e2227] text-white px-4 py-2 rounded-md transition"
             >
               <GitHubIcon className="h-4 w-4" />
               <span>Log in</span>
@@ -123,7 +123,7 @@ export const NavBar = () => {
           ) : (
             <DropdownMenu open={open} onOpenChange={setOpen}>
               <DropdownMenuTrigger asChild>
-                <button className="hidden md:flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent hover:text-accent-foreground transition">
+                <button className="hidden lg:flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent hover:text-accent-foreground transition">
                   <Avatar className="h-8 w-8">
                     <AvatarImage src="/avatars/default.jpg" />
                     <AvatarFallback>
