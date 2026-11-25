@@ -131,6 +131,22 @@ class TestCompareEndpoint:
         assert body["set"]["name"] == "polar"
         assert len(body["sets"]) == 2
 
+    def test_all_sets_details_every_shared_set_in_one_response(self, client):
+        polar = e3sm(["polar/X/X-PRECT-ANN-polar_N.png"])
+        catalogs = {HIST: run(HIST, e3sm(LAT_LON), polar)}
+        body = self._post(
+            client, catalogs, {"runs": [{"url": HIST}], "allSets": True}
+        ).json()
+        assert [d["name"] for d in body["details"]] == ["lat_lon", "polar"]
+        assert [s["name"] for s in body["sets"]] == ["lat_lon", "polar"]
+        assert body["details"][0] == body["set"]
+        assert body["details"][1]["groups"][0]["plots"][0]["paths"] == [
+            "polar/X/X-PRECT-ANN-polar_N.png"
+        ]
+        # Without the flag the response is unchanged.
+        plain = self._post(client, catalogs, {"runs": [{"url": HIST}]}).json()
+        assert plain["details"] is None
+
     def test_an_unreadable_run_is_reported_and_left_out(self, client):
         catalogs = {
             HIST: run(HIST, e3sm(LAT_LON)),
