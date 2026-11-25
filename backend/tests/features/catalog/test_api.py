@@ -948,6 +948,46 @@ class TestListCases:
         # Search and execution filters keep only the matching campaign.
         assert execution_facets["campaigns"] == ["campaign-a"]
 
+    def test_execution_count_bounds_filter_before_pagination(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        counts = {"none": 0, "one": 1, "two": 2, "three": 3}
+        for name, count in counts.items():
+            case = _create_case(db, f"count-{name}")
+            for index in range(count):
+                _create_execution_record(
+                    db,
+                    case=case,
+                    ingestion_id=ingestion.id,
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    execution_id=f"count-{name}-{index}",
+                )
+        db.commit()
+
+        def names(**params) -> tuple[int, list[str]]:
+            data = client.get(
+                f"{API_BASE}/cases",
+                params={"sort_by": "execution_count", "sort_order": "asc", **params},
+            ).json()
+            return data["total"], [item["name"] for item in data["items"]]
+
+        assert names(min_executions=2) == (2, ["count-two", "count-three"])
+        assert names(max_executions=1) == (2, ["count-none", "count-one"])
+        assert names(min_executions=1, max_executions=2) == (
+            2,
+            ["count-one", "count-two"],
+        )
+        # Totals count every match, not just the requested page.
+        assert names(min_executions=1, page_size=1) == (3, ["count-one"])
+        assert names(min_executions=3, max_executions=1) == (0, [])
+        assert names() == (4, ["count-none", "count-one", "count-two", "count-three"])
+
+        rejected = client.get(f"{API_BASE}/cases", params={"min_executions": -1})
+        assert rejected.status_code == 422
+
     @pytest.mark.parametrize(
         ("now", "cutoff"),
         [

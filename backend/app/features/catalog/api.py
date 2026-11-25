@@ -104,6 +104,12 @@ def list_cases(
         False,
         description="Only cases that link to published diagnostics.",
     ),
+    min_executions: int | None = Query(
+        None, ge=0, description="Only cases with at least this many executions."
+    ),
+    max_executions: int | None = Query(
+        None, ge=0, description="Only cases with at most this many executions."
+    ),
     sort_by: str = Query(
         "updated_at",
         pattern=(
@@ -143,6 +149,10 @@ def list_cases(
         rows_query = rows_query.filter(latest_execution.c.latest_run_activity >= cutoff)
     if past_execution:
         rows_query = rows_query.filter(latest_execution.c.latest_run_activity < cutoff)
+    if min_executions is not None:
+        rows_query = rows_query.filter(execution_count >= min_executions)
+    if max_executions is not None:
+        rows_query = rows_query.filter(execution_count <= max_executions)
 
     total = rows_query.order_by(None).count()
     ordering = _case_list_ordering(
