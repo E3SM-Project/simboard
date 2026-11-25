@@ -31,26 +31,49 @@ export const loadComparisonGroups = async (
         client.fetchQuery({
           queryKey: ['diagnostics', 'compare', [run], allSets ? 'all-sets' : set],
           queryFn: () => compareRuns([run], set, allSets),
-          staleTime: 10 * 60_000,
+          // A run that was partly read or unreadable may recover; ask again
+          // after the backend's short partial cache instead of ten minutes.
+          staleTime: (query) =>
+            query.state.data?.runs.some((item) => item.error || item.partial)
+              ? 30_000
+              : 10 * 60_000,
           retry: false,
         });
       const summary = await read(null, true);
-      // A backend that predates allSets omits details; read each set instead.
-      const details =
-        summary.details ??
-        (
+      const summaryAt = client.getQueryState([
+        'diagnostics',
+        'compare',
+        [run],
+        'all-sets',
+      ])?.dataUpdatedAt;
+      // Seed a per-set entry the compare view reads, unless a newer response
+      // is already there, so opening a set after grouping does not ask again.
+      const seed = (set: string | null, detail: SetDetailOut) => {
+        const key = ['diagnostics', 'compare', [run], set];
+        const existing = client.getQueryState(key)?.dataUpdatedAt ?? 0;
+        if (existing >= (summaryAt ?? 0) && client.getQueryData(key)) return;
+        client.setQueryData(
+          key,
+          { ...summary, set: detail, details: undefined },
+          {
+            updatedAt: summaryAt,
+          },
+        );
+      };
+      let details: SetDetailOut[];
+      if (summary.details) {
+        details = summary.details;
+        details.forEach((detail) => seed(detail.name, detail));
+        // The view asks for the default set as `null` on a link without one.
+        if (summary.set) seed(null, summary.set);
+      } else {
+        // A backend that predates allSets omits details; read each set, and
+        // keep those separately fetched responses as they are.
+        details = (
           await Promise.all(
             summary.sets.map((set) => (set.name === summary.set?.name ? summary : read(set.name))),
           )
         ).flatMap((detail) => (detail.set ? [detail.set] : []));
-      // Seed the per-set entries the compare view reads, so opening a set
-      // after grouping does not ask again.
-      for (const detail of details) {
-        client.setQueryData(['diagnostics', 'compare', [run], detail.name], {
-          ...summary,
-          set: detail,
-          details: undefined,
-        });
       }
       const plots = new Set(
         summary.runs.some((item) => item.error)

@@ -819,6 +819,22 @@ test('comparison grouping sends one compare request per run, not one per set', a
     // Per-set entries are seeded, so opening a set later needs no request.
     const seeded = client.getQueryData(['diagnostics', 'compare', [runs[0]], 'polar']);
     assert.equal(seeded.set.name, 'polar');
+    // The view's default-set request (`null`) is seeded too.
+    assert.equal(
+      client.getQueryData(['diagnostics', 'compare', [runs[0]], null]).set.name,
+      'lat_lon',
+    );
+
+    // A newer per-set response is not overwritten when grouping reruns.
+    const fresher = { ...seeded, sets: [], marker: 'fresh' };
+    client.setQueryData(['diagnostics', 'compare', [runs[0]], 'polar'], fresher, {
+      updatedAt: Date.now() + 60_000,
+    });
+    await loadComparisonGroups(client, runs);
+    assert.equal(
+      client.getQueryData(['diagnostics', 'compare', [runs[0]], 'polar']).marker,
+      'fresh',
+    );
 
     // An older backend ignores allSets; grouping still reads every set.
     requests.length = 0;
