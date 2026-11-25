@@ -340,11 +340,15 @@ class TestSingleFlight:
             return 42
 
         with ThreadPoolExecutor(max_workers=5) as pool:
-            futures = [pool.submit(flight.run, "k", read) for _ in range(5)]
+            leader = pool.submit(flight.run, "k", read)
             while not calls:
-                pass
+                threading.Event().wait(0.001)
+            followers = [pool.submit(flight.run, "k", read) for _ in range(4)]
+            # Release only once every follower is waiting on the leader's read.
+            while flight.waiting("k") < 4:
+                threading.Event().wait(0.001)
             release.set()
-            assert [f.result(5) for f in futures] == [42] * 5
+            assert [f.result(5) for f in [leader, *followers]] == [42] * 5
         assert calls == [1]
 
     def test_a_failed_read_reaches_every_waiter_and_is_not_kept(self):
@@ -372,3 +376,10 @@ def test_a_shared_budget_never_exceeds_its_request_limit():
         list(pool.map(lambda i: budget.fetch(fetch, f"u{i}"), range(50)))
     assert len(fetched) == 10
     assert budget.requests_made == 10 and budget.truncated
+
+
+def test_requests_left_counts_down():
+    budget = Budget(max_requests=2, deadline_seconds=30)
+    assert budget.requests_left == 2
+    budget.fetch(lambda _url, _remaining: FetchResult(body="x"), "u")
+    assert budget.requests_left == 1

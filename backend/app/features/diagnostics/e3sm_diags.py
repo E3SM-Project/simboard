@@ -20,6 +20,13 @@ from app.core.config import settings
 from app.features.diagnostics.archive import Budget, Fetcher, is_allowed_url
 from app.features.diagnostics.plots import Catalog, Plot, PlotSet
 
+# One page-worker pool for the whole process, sized like the in-flight cap, so
+# concurrent comparisons cannot multiply threads that only wait for a slot.
+_PAGE_POOL = ThreadPoolExecutor(
+    max_workers=settings.diagnostics_max_concurrent_requests,
+    thread_name_prefix="diagnostics-pages",
+)
+
 SEASONS = ("ANN", "DJF", "MAM", "JJA", "SON")
 
 # Sets with no comparable images: ``table`` is text, ``taylor`` and ``cmip6``
@@ -208,8 +215,8 @@ def read_catalog(
 ) -> Catalog:
     """Read every comparable plot set from the run at ``url``.
 
-    Set pages are fetched in parallel within the read's budget; the
-    process-wide in-flight cap in ``archive`` still bounds the total.
+    Set pages are fetched in parallel within the read's budget, on a shared
+    process-wide pool; the in-flight cap in ``archive`` bounds the requests.
     """
     viewer = normalize_url(url)
     image_base = urljoin(viewer, "../")
@@ -236,12 +243,24 @@ def read_catalog(
             return PlotSet(name, titles[name], tuple(plots))
         return None
 
+    # Never schedule more pages than the budget can fetch: a large index must
+    # not turn into thousands of queued tasks.
+    names = list(titles)[: budget.requests_left]
+    if len(names) < len(titles):
+        budget.truncated = True
     workers = page_concurrency or settings.diagnostics_catalog_page_concurrency
-    if workers > 1 and len(titles) > 1:
-        with ThreadPoolExecutor(max_workers=min(workers, len(titles))) as pool:
-            found = list(pool.map(read_set, titles))
-    else:
-        found = [read_set(name) for name in titles]
-    # pool.map keeps the viewer's order, so sets appear as the run lists them.
+    found: list[PlotSet | None] = []
+    for start in range(0, len(names), max(1, workers)):
+        batch = names[start : start + max(1, workers)]
+        if budget.remaining <= 0:
+            budget.truncated = True
+            break
+        if workers > 1 and len(batch) > 1:
+            found += [
+                f.result() for f in [_PAGE_POOL.submit(read_set, n) for n in batch]
+            ]
+        else:
+            found += [read_set(name) for name in batch]
+    # Results keep the viewer's order, so sets appear as the run lists them.
     sets = tuple(plot_set for plot_set in found if plot_set)
     return Catalog(viewer, "e3sm_diags", image_base, sets, budget.partial)

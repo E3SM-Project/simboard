@@ -125,6 +125,11 @@ class Budget:
         return max(0.0, self.deadline - time.monotonic())
 
     @property
+    def requests_left(self) -> int:
+        with self._lock:
+            return max(0, self.max_requests - self.requests_made)
+
+    @property
     def partial(self) -> bool:
         """Something was not read: the budget ran out or a fetch failed."""
         return self.truncated or self.failed
@@ -245,6 +250,12 @@ class SingleFlight(Generic[T]):
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._running: dict[str, Future[T]] = {}
+        self._waiting: dict[str, int] = {}
+
+    def waiting(self, key: str) -> int:
+        """Callers currently waiting on another caller's read of ``key``."""
+        with self._lock:
+            return self._waiting.get(key, 0)
 
     def run(self, key: str, read: Callable[[], T]) -> T:
         with self._lock:
@@ -252,8 +263,16 @@ class SingleFlight(Generic[T]):
             leader = running is None
             if running is None:
                 running = self._running[key] = Future()
+            else:
+                self._waiting[key] = self._waiting.get(key, 0) + 1
         if not leader:
-            return running.result()
+            try:
+                return running.result()
+            finally:
+                with self._lock:
+                    self._waiting[key] -= 1
+                    if not self._waiting[key]:
+                        del self._waiting[key]
         try:
             result = read()
         except BaseException as exc:

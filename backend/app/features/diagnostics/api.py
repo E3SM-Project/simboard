@@ -110,10 +110,12 @@ def _summary(shared: compare.SharedSet) -> SetSummaryOut:
 def _detail(shared: compare.SharedSet, catalogs: list[Catalog]) -> SetDetailOut:
     tool = next(c.tool for c in catalogs if c.error is None)
     panels = compare.panels(tool, shared.name)
+    # Index each run's set once; scanning it per plot is quadratic.
+    indexes = [compare.plot_index(c, shared.name) for c in catalogs]
 
     def compared(plot: Plot) -> ComparedPlotOut:
         # One entry per requested run; None where a run could not be read.
-        per_run = [compare.find_plot(c, shared.name, plot.key) for c in catalogs]
+        per_run = [index.get(plot.key) for index in indexes]
         return ComparedPlotOut(
             key=plot.key,
             season=plot.season,

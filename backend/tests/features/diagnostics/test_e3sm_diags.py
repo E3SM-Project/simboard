@@ -226,3 +226,11 @@ def test_set_pages_are_read_in_parallel_and_keep_viewer_order():
     ]
     sequential = read_catalog(VIEWER, fetch, page_concurrency=1)
     assert [s.name for s in sequential.sets] == [s.name for s in catalog.sets]
+
+
+def test_a_huge_index_schedules_no_more_pages_than_the_budget_allows():
+    links = "".join(f'<a href="set{i}/index.html">Set {i}</a>' for i in range(5000))
+    fetch, calls = site({VIEWER + "index.html": f"<html>{links}</html>"})
+    catalog = read_catalog(VIEWER, fetch, max_requests=10, page_concurrency=4)
+    assert catalog.partial
+    assert len(calls) == 10
