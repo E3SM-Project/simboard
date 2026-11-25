@@ -21,6 +21,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import Future
 from dataclasses import dataclass
 from enum import Enum
 from typing import Generic, TypeVar
@@ -106,7 +107,10 @@ def is_allowed_url(url: str) -> bool:
 
 
 class Budget:
-    """A request count and a deadline shared by every fetch in one read."""
+    """A request count and a deadline shared by every fetch in one read.
+
+    Safe to share between threads, so one read can fetch pages in parallel.
+    """
 
     def __init__(self, max_requests: int, deadline_seconds: float) -> None:
         self.max_requests = max_requests
@@ -114,6 +118,7 @@ class Budget:
         self.requests_made = 0
         self.truncated = False
         self.failed = False
+        self._lock = threading.Lock()
 
     @property
     def remaining(self) -> float:
@@ -126,12 +131,15 @@ class Budget:
 
     def fetch(self, fetch: Fetcher, url: str) -> FetchResult | None:
         """Fetch ``url`` if budget remains; ``None`` once it is spent."""
-        if self.requests_made >= self.max_requests or self.remaining <= 0:
-            self.truncated = True
-            return None
-        self.requests_made += 1
+        with self._lock:
+            if self.requests_made >= self.max_requests or self.remaining <= 0:
+                self.truncated = True
+                return None
+            self.requests_made += 1
         result = fetch(url, self.remaining)
-        self.failed |= result.failed
+        if result.failed:
+            with self._lock:
+                self.failed = True
         return result
 
 
@@ -227,6 +235,38 @@ def with_http_fetcher(read: Callable[[Fetcher], T]) -> T:
         return read(http_fetcher(client))
 
 
+class SingleFlight(Generic[T]):
+    """Run one read per key at a time; concurrent callers share its result.
+
+    A shared link or a reload starts several requests for the same uncached
+    run at once. Without this, each would read the archive separately.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._running: dict[str, Future[T]] = {}
+
+    def run(self, key: str, read: Callable[[], T]) -> T:
+        with self._lock:
+            running = self._running.get(key)
+            leader = running is None
+            if running is None:
+                running = self._running[key] = Future()
+        if not leader:
+            return running.result()
+        try:
+            result = read()
+        except BaseException as exc:
+            running.set_exception(exc)
+            raise
+        else:
+            running.set_result(result)
+            return result
+        finally:
+            with self._lock:
+                del self._running[key]
+
+
 class TTLCache(Generic[T]):
     """A small thread-safe, size-capped, in-process cache with expiry."""
 
@@ -250,15 +290,16 @@ class TTLCache(Generic[T]):
                 return None
             return entry[1]
 
-    def put(self, key: str, value: T) -> None:
+    def put(self, key: str, value: T, ttl_seconds: float | None = None) -> None:
         now = time.monotonic()
+        ttl = self._ttl if ttl_seconds is None else ttl_seconds
         with self._lock:
             self._entries.pop(key, None)
             for stale in [k for k, (exp, _) in self._entries.items() if exp < now]:
                 del self._entries[stale]
             while len(self._entries) >= self._max_entries:
                 del self._entries[next(iter(self._entries))]
-            self._entries[key] = (now + self._ttl, value)
+            self._entries[key] = (now + ttl, value)
 
     def __len__(self) -> int:
         with self._lock:
