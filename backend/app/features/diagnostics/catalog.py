@@ -4,8 +4,14 @@ from __future__ import annotations
 
 from urllib.parse import urlsplit
 
+from app.core.config import settings
 from app.features.diagnostics import e3sm_diags, mpas_analysis
-from app.features.diagnostics.archive import Fetcher, TTLCache, with_http_fetcher
+from app.features.diagnostics.archive import (
+    Fetcher,
+    SingleFlight,
+    TTLCache,
+    with_http_fetcher,
+)
 from app.features.diagnostics.plots import Catalog
 
 
@@ -20,12 +26,16 @@ def read_catalog(url: str, fetch: Fetcher, label: str = "") -> Catalog:
 
 
 _cache: TTLCache[Catalog] = TTLCache()
+_in_flight: SingleFlight[Catalog] = SingleFlight()
 
 
 def read_catalog_cached(url: str, label: str = "") -> Catalog:
-    """``read_catalog`` over HTTP; complete, error-free reads are cached.
+    """``read_catalog`` over HTTP, cached and read at most once at a time.
 
-    A label can rename an MPAS case, so it is part of the cache key there.
+    Complete reads are kept for the full cache lifetime. Partial reads are
+    kept briefly, so retries during an outage or a busy spell do not re-crawl
+    the run; errors are never cached. A label can rename an MPAS case, so it is
+    part of the cache key there.
     """
     if not _is_parseable(url):
         return _unrecognized(url)
@@ -34,9 +44,19 @@ def read_catalog_cached(url: str, label: str = "") -> Catalog:
         key = f"{key} {label}"
     if cached := _cache.get(key):
         return cached
+    return _in_flight.run(key, lambda: _read_and_cache(key, url, label))
+
+
+def _read_and_cache(key: str, url: str, label: str) -> Catalog:
+    # A caller that waited for another read may find it already cached.
+    if cached := _cache.get(key):
+        return cached
     catalog = with_http_fetcher(lambda fetch: read_catalog(url, fetch, label))
-    if catalog.error is None and not catalog.partial:
-        _cache.put(key, catalog)
+    if catalog.error is None:
+        ttl = (
+            settings.diagnostics_partial_cache_ttl_seconds if catalog.partial else None
+        )
+        _cache.put(key, catalog, ttl_seconds=ttl)
     return catalog
 
 

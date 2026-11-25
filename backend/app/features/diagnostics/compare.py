@@ -69,6 +69,12 @@ def group_plots(plots: tuple[Plot, ...]) -> list[Group]:
     ]
 
 
+def plot_index(catalog: Catalog, set_name: str) -> dict[str, Plot]:
+    """A run's plots in one set by key, for repeated lookups."""
+    plot_set = _set(catalog, set_name)
+    return {p.key: p for p in plot_set.plots} if plot_set else {}
+
+
 def find_plot(catalog: Catalog, set_name: str, key: str) -> Plot | None:
     plot_set = _set(catalog, set_name)
     return next((p for p in plot_set.plots if p.key == key), None) if plot_set else None

@@ -1,5 +1,7 @@
 """Archive access: allowlist, fetch outcomes, limits, redirects and cache."""
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 import httpx
@@ -12,6 +14,7 @@ from app.features.diagnostics.archive import (
     Budget,
     FetchOutcome,
     FetchResult,
+    SingleFlight,
     TTLCache,
     http_fetcher,
     is_allowed_url,
@@ -256,6 +259,16 @@ class TestTTLCache:
         assert len(cache) == 2
         assert cache.get("a") is None
 
+    def test_an_entry_can_expire_sooner(self):
+        cache: TTLCache[str] = TTLCache(ttl_seconds=600)
+        with patch(CLOCK) as clock:
+            clock.return_value = 0.0
+            cache.put("short", "x", ttl_seconds=30)
+            cache.put("long", "x")
+            clock.return_value = 31.0
+            assert cache.get("short") is None
+            assert cache.get("long") == "x"
+
     def test_expired_entries_go_before_live_ones(self):
         cache: TTLCache[str] = TTLCache(ttl_seconds=60, max_entries=2)
         with patch(CLOCK) as clock:
@@ -313,3 +326,60 @@ def test_waiting_for_a_slot_counts_against_the_deadline():
     ):
         assert http_fetcher(client)(ROOT + "/e3sm_diags/", 5.0).failed
     assert requested == []
+
+
+class TestSingleFlight:
+    def test_concurrent_callers_share_one_read(self):
+        flight: SingleFlight[int] = SingleFlight()
+        release = threading.Event()
+        calls = []
+
+        def read():
+            calls.append(1)
+            release.wait(5)
+            return 42
+
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            leader = pool.submit(flight.run, "k", read)
+            while not calls:
+                threading.Event().wait(0.001)
+            followers = [pool.submit(flight.run, "k", read) for _ in range(4)]
+            # Release only once every follower is waiting on the leader's read.
+            while flight.waiting("k") < 4:
+                threading.Event().wait(0.001)
+            release.set()
+            assert [f.result(5) for f in [leader, *followers]] == [42] * 5
+        assert calls == [1]
+
+    def test_a_failed_read_reaches_every_waiter_and_is_not_kept(self):
+        flight: SingleFlight[int] = SingleFlight()
+        with pytest.raises(RuntimeError):
+            flight.run("k", lambda: (_ for _ in ()).throw(RuntimeError("down")))
+        assert flight.run("k", lambda: 7) == 7
+
+    def test_different_keys_read_independently(self):
+        flight: SingleFlight[str] = SingleFlight()
+        assert [flight.run(k, lambda k=k: k) for k in "ab"] == ["a", "b"]
+
+
+def test_a_shared_budget_never_exceeds_its_request_limit():
+    budget = Budget(max_requests=10, deadline_seconds=30)
+    fetched = []
+    lock = threading.Lock()
+
+    def fetch(url, _remaining):
+        with lock:
+            fetched.append(url)
+        return FetchResult(body="x")
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda i: budget.fetch(fetch, f"u{i}"), range(50)))
+    assert len(fetched) == 10
+    assert budget.requests_made == 10 and budget.truncated
+
+
+def test_requests_left_counts_down():
+    budget = Budget(max_requests=2, deadline_seconds=30)
+    assert budget.requests_left == 2
+    budget.fetch(lambda _url, _remaining: FetchResult(body="x"), "u")
+    assert budget.requests_left == 1

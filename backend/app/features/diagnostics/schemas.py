@@ -47,6 +47,11 @@ class CompareRequest(CamelInBaseModel):
     set: str | None = Field(
         None, description="Plot set to detail; the first if omitted."
     )
+    all_sets: bool = Field(
+        False,
+        description="Also detail every shared set in ``details``, so a caller "
+        "that needs all of them sends one request instead of one per set.",
+    )
 
 
 class CompareRunOut(CamelOutBaseModel):
@@ -106,3 +111,5 @@ class CompareOut(CamelOutBaseModel):
     runs: list[CompareRunOut]
     sets: list[SetSummaryOut]
     set: SetDetailOut | None = None
+    # Every shared set in detail, in ``sets`` order; only with ``all_sets``.
+    details: list[SetDetailOut] | None = None

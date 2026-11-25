@@ -188,3 +188,49 @@ def test_a_failed_set_page_makes_the_catalog_partial():
     catalog = read_catalog(VIEWER, fetch)
     assert catalog.partial and catalog.error is None
     assert [s.name for s in catalog.sets] == ["lat_lon"]
+
+
+def test_set_pages_are_read_in_parallel_and_keep_viewer_order():
+    import threading
+    import time
+
+    index = fixture("viewer_index")
+    names = list(parse_viewer_index(index))
+    supported = [
+        n
+        for n in names
+        if n not in {"table", "taylor", "cmip6", "tropical_subseasonal"}
+    ]
+    page = fixture("lat_lon_index")
+    active = {"now": 0, "peak": 0}
+    lock = threading.Lock()
+
+    def fetch(url, _remaining=30.0):
+        if url == VIEWER + "index.html":
+            return FetchResult(body=index)
+        with lock:
+            active["now"] += 1
+            active["peak"] = max(active["peak"], active["now"])
+        time.sleep(0.05)
+        with lock:
+            active["now"] -= 1
+        # Serve the lat_lon page under every set name so each set has plots.
+        name = url.removeprefix(VIEWER).split("/")[0]
+        return FetchResult(body=page.replace("lat_lon/", f"{name}/"))
+
+    catalog = read_catalog(VIEWER, fetch, page_concurrency=4)
+    assert not catalog.partial and catalog.error is None
+    assert active["peak"] > 1
+    assert [s.name for s in catalog.sets] == [
+        n for n in supported if parse_set_page(page.replace("lat_lon/", f"{n}/"), n)
+    ]
+    sequential = read_catalog(VIEWER, fetch, page_concurrency=1)
+    assert [s.name for s in sequential.sets] == [s.name for s in catalog.sets]
+
+
+def test_a_huge_index_schedules_no_more_pages_than_the_budget_allows():
+    links = "".join(f'<a href="set{i}/index.html">Set {i}</a>' for i in range(5000))
+    fetch, calls = site({VIEWER + "index.html": f"<html>{links}</html>"})
+    catalog = read_catalog(VIEWER, fetch, max_requests=10, page_concurrency=4)
+    assert catalog.partial
+    assert len(calls) == 10

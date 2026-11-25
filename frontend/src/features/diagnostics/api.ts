@@ -15,11 +15,12 @@ export const getCaseDiagnosticsRuns = async (caseId: string): Promise<CaseDiagno
 export const compareRuns = async (
   runs: { url: string; label: string }[],
   set: string | null,
+  allSets = false,
 ): Promise<CompareOut> =>
   (
     await api.post<CompareOut>(
       '/diagnostics/compare',
-      { runs, set },
+      allSets ? { runs, set, allSets } : { runs, set },
       { timeout: ARCHIVE_TIMEOUT_MS },
     )
   ).data;

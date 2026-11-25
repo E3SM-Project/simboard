@@ -15,32 +15,73 @@ export interface ComparisonGroup {
 export const comparisonGroupId = (runs: CompareRun[]) =>
   JSON.stringify(runs.map((run) => [run.url, run.label]).sort());
 
-/** Partition selections by a shared plot intersection, not tool metadata. */
+/**
+ * Partition selections by a shared plot intersection, not tool metadata.
+ *
+ * Sends one compare request per run (every set in detail), not one per run
+ * per set.
+ */
 export const loadComparisonGroups = async (
   client: QueryClient,
   runs: CompareRun[],
 ): Promise<ComparisonGroup[]> => {
   const catalogs = await Promise.all(
     runs.map(async (run) => {
-      const read = (set: string | null) =>
+      const read = (set: string | null, allSets = false) =>
         client.fetchQuery({
-          queryKey: ['diagnostics', 'compare', [run], set],
-          queryFn: () => compareRuns([run], set),
-          staleTime: 10 * 60_000,
+          queryKey: ['diagnostics', 'compare', [run], allSets ? 'all-sets' : set],
+          queryFn: () => compareRuns([run], set, allSets),
+          // A run that was partly read or unreadable may recover; ask again
+          // after the backend's short partial cache instead of ten minutes.
+          staleTime: (query) =>
+            query.state.data?.runs.some((item) => item.error || item.partial)
+              ? 30_000
+              : 10 * 60_000,
           retry: false,
         });
-      const summary = await read(null);
-      const details = await Promise.all(
-        summary.sets.map((set) => (set.name === summary.set?.name ? summary : read(set.name))),
-      );
+      const summary = await read(null, true);
+      const summaryAt = client.getQueryState([
+        'diagnostics',
+        'compare',
+        [run],
+        'all-sets',
+      ])?.dataUpdatedAt;
+      // Seed a per-set entry the compare view reads, unless a newer response
+      // is already there, so opening a set after grouping does not ask again.
+      const seed = (set: string | null, detail: SetDetailOut) => {
+        const key = ['diagnostics', 'compare', [run], set];
+        const existing = client.getQueryState(key)?.dataUpdatedAt ?? 0;
+        if (existing >= (summaryAt ?? 0) && client.getQueryData(key)) return;
+        client.setQueryData(
+          key,
+          { ...summary, set: detail, details: undefined },
+          {
+            updatedAt: summaryAt,
+          },
+        );
+      };
+      let details: SetDetailOut[];
+      if (summary.details) {
+        details = summary.details;
+        details.forEach((detail) => seed(detail.name, detail));
+        // The view asks for the default set as `null` on a link without one.
+        if (summary.set) seed(null, summary.set);
+      } else {
+        // A backend that predates allSets omits details; read each set, and
+        // keep those separately fetched responses as they are.
+        details = (
+          await Promise.all(
+            summary.sets.map((set) => (set.name === summary.set?.name ? summary : read(set.name))),
+          )
+        ).flatMap((detail) => (detail.set ? [detail.set] : []));
+      }
       const plots = new Set(
         summary.runs.some((item) => item.error)
           ? []
-          : details.flatMap(
-              (detail) =>
-                detail.set?.groups.flatMap((group) =>
-                  group.plots.map((plot) => JSON.stringify([detail.set?.name, plot.key])),
-                ) ?? [],
+          : details.flatMap((detail) =>
+              detail.groups.flatMap((group) =>
+                group.plots.map((plot) => JSON.stringify([detail.name, plot.key])),
+              ),
             ),
       );
       const tool = summary.runs[0]?.tool;
@@ -55,7 +96,7 @@ export const loadComparisonGroups = async (
         run,
         plots,
         title,
-        details: details.flatMap((detail) => (detail.set ? [detail.set] : [])),
+        details,
       };
     }),
   );

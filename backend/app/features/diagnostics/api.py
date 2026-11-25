@@ -66,8 +66,9 @@ def compare_runs(payload: CompareRequest):
     """Line up the plots several diagnostics runs published.
 
     Returns every plot set the runs share and, for one of them (``set``, or
-    the first), its variables with each run's image path. Plots only some
-    runs published are left out and counted in ``missing``.
+    the first), its variables with each run's image path. With ``all_sets``,
+    ``details`` holds every shared set the same way. Plots only some runs
+    published are left out and counted in ``missing``.
     """
     # Archive fetches are also capped process-wide in archive.http_fetcher.
     with ThreadPoolExecutor(max_workers=min(len(payload.runs), 4)) as pool:
@@ -93,6 +94,7 @@ def compare_runs(payload: CompareRequest):
         ],
         sets=[_summary(s) for s in shared],
         set=_detail(active, catalogs) if active else None,
+        details=[_detail(s, catalogs) for s in shared] if payload.all_sets else None,
     )
 
 
@@ -108,10 +110,12 @@ def _summary(shared: compare.SharedSet) -> SetSummaryOut:
 def _detail(shared: compare.SharedSet, catalogs: list[Catalog]) -> SetDetailOut:
     tool = next(c.tool for c in catalogs if c.error is None)
     panels = compare.panels(tool, shared.name)
+    # Index each run's set once; scanning it per plot is quadratic.
+    indexes = [compare.plot_index(c, shared.name) for c in catalogs]
 
     def compared(plot: Plot) -> ComparedPlotOut:
         # One entry per requested run; None where a run could not be read.
-        per_run = [compare.find_plot(c, shared.name, plot.key) for c in catalogs]
+        per_run = [index.get(plot.key) for index in indexes]
         return ComparedPlotOut(
             key=plot.key,
             season=plot.season,

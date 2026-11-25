@@ -218,9 +218,27 @@ export const ComparePage = () => {
   useEffect(() => {
     if (query.isPlaceholderData) return;
     if (detail && activePlot && (state.set !== detail.name || state.plot !== activePlot.key)) {
+      // Naming the default set in the URL changes the query key; reuse this
+      // response under that name instead of asking the backend again.
+      if (data && state.set !== detail.name) {
+        const resolved = ['diagnostics', 'compare', state.runs, detail.name];
+        if (!client.getQueryData(resolved))
+          client.setQueryData(resolved, data, { updatedAt: query.dataUpdatedAt });
+      }
       update({ set: detail.name, plot: activePlot.key });
     }
-  }, [activePlot, detail, query.isPlaceholderData, state.plot, state.set, update]);
+  }, [
+    activePlot,
+    client,
+    data,
+    detail,
+    query.dataUpdatedAt,
+    query.isPlaceholderData,
+    state.plot,
+    state.runs,
+    state.set,
+    update,
+  ]);
 
   const step = useCallback(
     (delta: number) => {
@@ -414,7 +432,8 @@ export const ComparePage = () => {
                   {comparisonGroups.filter((item) => item.title === group.title).length > 1
                     ? ` · Group ${index + 1}`
                     : ''}{' '}
-                  ({group.runs.length} {group.runs.length === 1 ? 'set' : 'sets'}){!group.plots.size ? ' · No plots' : ''}
+                  ({group.runs.length} {group.runs.length === 1 ? 'set' : 'sets'})
+                  {!group.plots.size ? ' · No plots' : ''}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -461,7 +480,15 @@ export const ComparePage = () => {
               variant="outline"
               size="sm"
               disabled={query.isFetching}
-              onClick={() => void query.refetch()}
+              onClick={() => {
+                // Refresh grouping too, so a recovered run is regrouped.
+                void client.invalidateQueries({
+                  predicate: ({ queryKey }) =>
+                    queryKey[0] === 'diagnostics' &&
+                    (queryKey[1] === 'comparison-groups' || queryKey[3] === 'all-sets'),
+                });
+                void query.refetch();
+              }}
             >
               Retry diagnostics
             </Button>
