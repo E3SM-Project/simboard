@@ -128,7 +128,10 @@ const getTextParam = (params: URLSearchParams, key: string): string =>
 // Execution-count bounds stay as strings so a cleared input round-trips to the URL.
 const parseExecutionBound = (value: string | null): string => {
   const trimmed = value?.trim() ?? '';
-  return /^\d+$/.test(trimmed) ? String(Number(trimmed)) : '';
+  if (!/^\d+$/.test(trimmed)) return '';
+  const bound = Number(trimmed);
+  // Larger values lose precision or become Infinity and stop round-tripping.
+  return Number.isSafeInteger(bound) ? String(bound) : '';
 };
 
 const parsePositiveInteger = (value: string | null, fallback: number): number => {
@@ -281,8 +284,18 @@ export const CasesPage = () => {
       compiler: executionFilters.compiler || undefined,
       gitTag: executionFilters.gitTag || undefined,
       simulationType: simulationType || undefined,
+      minExecutions: minExecutions ? Number(minExecutions) : undefined,
+      maxExecutions: maxExecutions ? Number(maxExecutions) : undefined,
     }),
-    [caseGroupFilter, debouncedCaseName, executionFilters, selectedMachineId, simulationType],
+    [
+      caseGroupFilter,
+      debouncedCaseName,
+      executionFilters,
+      maxExecutions,
+      minExecutions,
+      selectedMachineId,
+      simulationType,
+    ],
   );
   const { data: filterOptions } = useCaseFilterOptions(caseFilterOptionParams);
   const {
@@ -351,7 +364,9 @@ export const CasesPage = () => {
     setLegacyMachineId(next.legacyMachineId);
     setSorting(next.sorting);
     setPagination(next.pagination);
-    setShowAdvancedFilters(
+    // Open for active advanced filters, but never close here: clearing the
+    // last one while editing would otherwise hide the input being edited.
+    if (
       [
         next.executionFilters.campaign,
         next.executionFilters.initializationType,
@@ -359,8 +374,9 @@ export const CasesPage = () => {
         next.executionFilters.gitTag,
         next.minExecutions,
         next.maxExecutions,
-      ].some(Boolean),
-    );
+      ].some(Boolean)
+    )
+      setShowAdvancedFilters(true);
 
     if (normalizedParams.toString() !== searchParams.toString()) {
       setSearchParams(normalizedParams, { replace: true });

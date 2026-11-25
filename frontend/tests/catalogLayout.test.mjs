@@ -786,7 +786,7 @@ test('execution-count bounds load from the URL and count as advanced filters', a
     assert.match(bounded, /No cases match the current filters\./);
 
     // Invalid bounds are ignored rather than sent to the API.
-    const invalid = render('/cases?minExecutions=-3&maxExecutions=abc');
+    const invalid = render('/cases?minExecutions=-3&maxExecutions=1000000000000000000000');
     assert.doesNotMatch(invalid, /More filters \(/);
     assert.match(invalid, /No cases yet\./);
   } finally {
