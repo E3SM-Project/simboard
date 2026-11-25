@@ -46,7 +46,9 @@ type ActiveFilterKey =
   | 'compiler'
   | 'gitTag'
   | 'caseGroup'
-  | 'simulationType';
+  | 'simulationType'
+  | 'minExecutions'
+  | 'maxExecutions';
 
 interface CaseExecutionFilters {
   hpcUsername: string;
@@ -100,6 +102,8 @@ const CASE_SEARCH_PARAM_KEYS = [
   'compiler',
   'gitTag',
   'simulationType',
+  'minExecutions',
+  'maxExecutions',
   'sortBy',
   'sortOrder',
   'page',
@@ -110,6 +114,8 @@ interface CaseSearchState {
   caseNameFilter: string;
   caseGroupFilter: string;
   simulationType: 'production' | 'development' | '';
+  minExecutions: string;
+  maxExecutions: string;
   executionFilters: CaseExecutionFilters;
   legacyMachineId: string;
   sorting: SortingState;
@@ -118,6 +124,15 @@ interface CaseSearchState {
 
 const getTextParam = (params: URLSearchParams, key: string): string =>
   params.get(key)?.trim() ?? '';
+
+// Execution-count bounds stay as strings so a cleared input round-trips to the URL.
+const parseExecutionBound = (value: string | null): string => {
+  const trimmed = value?.trim() ?? '';
+  if (!/^\d+$/.test(trimmed)) return '';
+  const bound = Number(trimmed);
+  // Larger values lose precision or become Infinity and stop round-tripping.
+  return Number.isSafeInteger(bound) ? String(bound) : '';
+};
 
 const parsePositiveInteger = (value: string | null, fallback: number): number => {
   const parsed = Number(value);
@@ -138,6 +153,8 @@ const parseCaseSearchState = (params: URLSearchParams): CaseSearchState => {
         : params.get('simulationType') === 'development'
           ? 'development'
           : '',
+    minExecutions: parseExecutionBound(params.get('minExecutions')),
+    maxExecutions: parseExecutionBound(params.get('maxExecutions')),
     executionFilters: {
       hpcUsername: getTextParam(params, 'hpcUsername'),
       machineName: getTextParam(params, 'machine'),
@@ -164,6 +181,8 @@ const serializeCaseSearchState = ({
   caseNameFilter,
   caseGroupFilter,
   simulationType,
+  minExecutions,
+  maxExecutions,
   executionFilters,
   legacyMachineId,
   sorting,
@@ -175,6 +194,8 @@ const serializeCaseSearchState = ({
   if (search) params.set('search', search);
   if (caseGroupFilter) params.set('caseGroup', caseGroupFilter);
   if (simulationType) params.set('simulationType', simulationType);
+  if (minExecutions) params.set('minExecutions', minExecutions);
+  if (maxExecutions) params.set('maxExecutions', maxExecutions);
 
   if (executionFilters.machineName) params.set('machine', executionFilters.machineName);
   else if (legacyMachineId) params.set('machineId', legacyMachineId);
@@ -228,6 +249,8 @@ export const CasesPage = () => {
   const [debouncedCaseName, setDebouncedCaseName] = useState(initialSearchState.caseNameFilter);
   const [caseGroupFilter, setCaseGroupFilter] = useState(initialSearchState.caseGroupFilter);
   const [simulationType, setSimulationType] = useState(initialSearchState.simulationType);
+  const [minExecutions, setMinExecutions] = useState(initialSearchState.minExecutions);
+  const [maxExecutions, setMaxExecutions] = useState(initialSearchState.maxExecutions);
   const [executionFilters, setExecutionFilters] = useState<CaseExecutionFilters>(
     initialSearchState.executionFilters,
   );
@@ -238,6 +261,8 @@ export const CasesPage = () => {
       initialSearchState.executionFilters.initializationType,
       initialSearchState.executionFilters.compiler,
       initialSearchState.executionFilters.gitTag,
+      initialSearchState.minExecutions,
+      initialSearchState.maxExecutions,
     ].some(Boolean),
   );
   const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
@@ -259,8 +284,18 @@ export const CasesPage = () => {
       compiler: executionFilters.compiler || undefined,
       gitTag: executionFilters.gitTag || undefined,
       simulationType: simulationType || undefined,
+      minExecutions: minExecutions ? Number(minExecutions) : undefined,
+      maxExecutions: maxExecutions ? Number(maxExecutions) : undefined,
     }),
-    [caseGroupFilter, debouncedCaseName, executionFilters, selectedMachineId, simulationType],
+    [
+      caseGroupFilter,
+      debouncedCaseName,
+      executionFilters,
+      maxExecutions,
+      minExecutions,
+      selectedMachineId,
+      simulationType,
+    ],
   );
   const { data: filterOptions } = useCaseFilterOptions(caseFilterOptionParams);
   const {
@@ -291,6 +326,8 @@ export const CasesPage = () => {
         caseNameFilter: debouncedCaseName,
         caseGroupFilter,
         simulationType,
+        minExecutions,
+        maxExecutions,
         executionFilters,
         legacyMachineId,
         sorting,
@@ -301,6 +338,8 @@ export const CasesPage = () => {
       debouncedCaseName,
       executionFilters,
       legacyMachineId,
+      maxExecutions,
+      minExecutions,
       pagination,
       simulationType,
       sorting,
@@ -319,18 +358,25 @@ export const CasesPage = () => {
     setDebouncedCaseName(next.caseNameFilter);
     setCaseGroupFilter(next.caseGroupFilter);
     setSimulationType(next.simulationType);
+    setMinExecutions(next.minExecutions);
+    setMaxExecutions(next.maxExecutions);
     setExecutionFilters(next.executionFilters);
     setLegacyMachineId(next.legacyMachineId);
     setSorting(next.sorting);
     setPagination(next.pagination);
-    setShowAdvancedFilters(
+    // Open for active advanced filters, but never close here: clearing the
+    // last one while editing would otherwise hide the input being edited.
+    if (
       [
         next.executionFilters.campaign,
         next.executionFilters.initializationType,
         next.executionFilters.compiler,
         next.executionFilters.gitTag,
-      ].some(Boolean),
-    );
+        next.minExecutions,
+        next.maxExecutions,
+      ].some(Boolean)
+    )
+      setShowAdvancedFilters(true);
 
     if (normalizedParams.toString() !== searchParams.toString()) {
       setSearchParams(normalizedParams, { replace: true });
@@ -388,6 +434,8 @@ export const CasesPage = () => {
     compiler: executionFilters.compiler || undefined,
     gitTag: executionFilters.gitTag || undefined,
     simulationType: simulationType || undefined,
+    minExecutions: minExecutions ? Number(minExecutions) : undefined,
+    maxExecutions: maxExecutions ? Number(maxExecutions) : undefined,
     sortBy: primarySort ? CASE_SORT_FIELDS[primarySort.id] : 'latest_run_activity',
     sortOrder: primarySort?.desc === false ? 'asc' : 'desc',
   });
@@ -461,6 +509,8 @@ export const CasesPage = () => {
     caseNameFilter.trim().length > 0 ||
     caseGroupFilter.length > 0 ||
     simulationType !== '' ||
+    minExecutions !== '' ||
+    maxExecutions !== '' ||
     hasActiveExecutionFilters ||
     Boolean(legacyMachineId);
   const advancedFilterCount = useMemo(
@@ -470,8 +520,10 @@ export const CasesPage = () => {
         executionFilters.initializationType,
         executionFilters.compiler,
         executionFilters.gitTag,
+        minExecutions,
+        maxExecutions,
       ].filter(Boolean).length,
-    [executionFilters],
+    [executionFilters, maxExecutions, minExecutions],
   );
   const activeFilterPills = useMemo(() => {
     const filters: ActiveFilterPill[] = [];
@@ -515,9 +567,20 @@ export const CasesPage = () => {
     if (caseGroupFilter) filters.push({ key: 'caseGroup', label: 'Group', value: caseGroupFilter });
     if (simulationType)
       filters.push({ key: 'simulationType', label: 'Type', value: simulationType });
+    if (minExecutions)
+      filters.push({ key: 'minExecutions', label: 'Min executions', value: minExecutions });
+    if (maxExecutions)
+      filters.push({ key: 'maxExecutions', label: 'Max executions', value: maxExecutions });
 
     return filters;
-  }, [caseGroupFilter, caseNameFilter, executionFilters, simulationType]);
+  }, [
+    caseGroupFilter,
+    caseNameFilter,
+    executionFilters,
+    maxExecutions,
+    minExecutions,
+    simulationType,
+  ]);
 
   const setExecutionFilter = (key: keyof CaseExecutionFilters, value: string) => {
     setExecutionFilters((current) => ({
@@ -528,10 +591,17 @@ export const CasesPage = () => {
     table.setPageIndex(0);
   };
 
+  const setExecutionBound = (setter: (value: string) => void, value: string) => {
+    setter(parseExecutionBound(value));
+    table.setPageIndex(0);
+  };
+
   const clearAllFilters = () => {
     setCaseNameFilter('');
     setCaseGroupFilter('');
     setSimulationType('');
+    setMinExecutions('');
+    setMaxExecutions('');
     setExecutionFilters(createEmptyExecutionFilters());
     setLegacyMachineId('');
     setShowAdvancedFilters(false);
@@ -548,6 +618,12 @@ export const CasesPage = () => {
         break;
       case 'simulationType':
         setSimulationType('');
+        break;
+      case 'minExecutions':
+        setMinExecutions('');
+        break;
+      case 'maxExecutions':
+        setMaxExecutions('');
         break;
       default:
         setExecutionFilters((current) => ({
@@ -1067,6 +1143,43 @@ export const CasesPage = () => {
                           options: gitTagOptions,
                           onValueChange: (value) => setExecutionFilter('gitTag', value),
                         })}
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-4 border-t border-border pt-4">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-foreground">Execution count</p>
+                        <p className="text-xs text-muted-foreground">
+                          Hide one-off and debugging cases by requiring a minimum number of
+                          executions.
+                        </p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {(
+                          [
+                            ['min', 'Minimum executions', minExecutions, setMinExecutions],
+                            ['max', 'Maximum executions', maxExecutions, setMaxExecutions],
+                          ] as const
+                        ).map(([key, label, value, setter]) => (
+                          <div key={key} className="space-y-2">
+                            <label
+                              htmlFor={`cases-filter-${key}-executions`}
+                              className="text-xs font-medium text-muted-foreground"
+                            >
+                              {label}
+                            </label>
+                            <Input
+                              id={`cases-filter-${key}-executions`}
+                              type="number"
+                              inputMode="numeric"
+                              min={0}
+                              step={1}
+                              placeholder="Any"
+                              value={value}
+                              onChange={(event) => setExecutionBound(setter, event.target.value)}
+                              className="h-10 rounded-xl border-border bg-card shadow-none"
+                            />
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>

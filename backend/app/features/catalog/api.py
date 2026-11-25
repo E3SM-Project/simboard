@@ -104,6 +104,12 @@ def list_cases(
         False,
         description="Only cases that link to published diagnostics.",
     ),
+    min_executions: int | None = Query(
+        None, ge=0, description="Only cases with at least this many executions."
+    ),
+    max_executions: int | None = Query(
+        None, ge=0, description="Only cases with at most this many executions."
+    ),
     sort_by: str = Query(
         "updated_at",
         pattern=(
@@ -143,6 +149,8 @@ def list_cases(
         rows_query = rows_query.filter(latest_execution.c.latest_run_activity >= cutoff)
     if past_execution:
         rows_query = rows_query.filter(latest_execution.c.latest_run_activity < cutoff)
+    if bounds := _execution_count_bounds(db, min_executions, max_executions):
+        rows_query = rows_query.filter(*bounds)
 
     total = rows_query.order_by(None).count()
     ordering = _case_list_ordering(
@@ -212,6 +220,19 @@ def _filtered_case_list_query(
     if predicates:
         query = query.filter(Case.executions.any(and_(*predicates)))
     return query
+
+
+def _execution_count_bounds(
+    db: Session, min_executions: int | None, max_executions: int | None
+) -> list[ColumnElement[bool]]:
+    """Predicates bounding each case's total execution count."""
+    execution_count = _case_execution_count_subquery(db)
+    bounds: list[ColumnElement[bool]] = []
+    if min_executions is not None:
+        bounds.append(execution_count >= min_executions)
+    if max_executions is not None:
+        bounds.append(execution_count <= max_executions)
+    return bounds
 
 
 def _case_execution_count_subquery(db: Session):
@@ -380,6 +401,8 @@ def get_case_filter_options(
     git_tag: str | None = Query(None),
     created_by: UUID | None = Query(None),
     simulation_type: CaseSimulationType | None = Query(None),
+    min_executions: int | None = Query(None, ge=0),
+    max_executions: int | None = Query(None, ge=0),
 ) -> CaseFilterOptionsOut:
     """Return scalar case facets constrained by all other active filters."""
     filters = {
@@ -396,6 +419,8 @@ def get_case_filter_options(
         "git_tag": git_tag,
         "created_by": created_by,
         "simulation_type": simulation_type,
+        "min_executions": min_executions,
+        "max_executions": max_executions,
     }
 
     def case_query(exclude: str):
@@ -1630,7 +1655,7 @@ def _filtered_cases_for_facets(db: Session, filters: dict, *, exclude: str):
     predicates = _case_execution_facet_predicates(filters, exclude=exclude)
     if predicates:
         query = query.filter(Case.executions.any(and_(*predicates)))
-    return query
+    return _with_execution_count_bounds(db, query, filters)
 
 
 def _filtered_executions_for_facets(db: Session, filters: dict, *, exclude: str):
@@ -1650,7 +1675,15 @@ def _filtered_executions_for_facets(db: Session, filters: dict, *, exclude: str)
     predicates = _case_execution_facet_predicates(filters, exclude=exclude)
     if predicates:
         query = query.filter(*predicates)
-    return query
+    return _with_execution_count_bounds(db, query, filters)
+
+
+def _with_execution_count_bounds(db: Session, query, filters: dict):
+    """Keep facets to cases inside the active execution-count bounds."""
+    bounds = _execution_count_bounds(
+        db, filters.get("min_executions"), filters.get("max_executions")
+    )
+    return query.filter(*bounds) if bounds else query
 
 
 def _case_execution_facet_predicates(filters: dict, *, exclude: str):

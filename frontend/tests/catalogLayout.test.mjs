@@ -760,6 +760,40 @@ test('Case Group stays visible without opening or counting as an advanced filter
   }
 });
 
+test('execution-count bounds load from the URL and count as advanced filters', async () => {
+  const { CasesPage } = await server.ssrLoadModule('/src/features/catalog/CasesPage.tsx');
+  const { MemoryRouter } = await server.ssrLoadModule('react-router-dom');
+  const client = new QueryClient();
+  client.setQueryDefaults(['cases', 'page'], {
+    initialData: { items: [], total: 0, page: 1, pageSize: 25 },
+  });
+  const render = (url) =>
+    renderToStaticMarkup(
+      createElement(
+        QueryClientProvider,
+        { client },
+        createElement(MemoryRouter, { initialEntries: [url] }, createElement(CasesPage)),
+      ),
+    );
+
+  try {
+    const bounded = render('/cases?minExecutions=10&maxExecutions=50');
+    assert.match(bounded, /More filters \(2\)/);
+    assert.match(bounded, /<label for="cases-filter-min-executions"/);
+    assert.match(bounded, /<input[^>]*id="cases-filter-min-executions"[^>]*value="10"/);
+    assert.match(bounded, /<input[^>]*id="cases-filter-max-executions"[^>]*value="50"/);
+    assert.match(bounded, />Min executions<\/span><span[^>]*>10</);
+    assert.match(bounded, /No cases match the current filters\./);
+
+    // Invalid bounds are ignored rather than sent to the API.
+    const invalid = render('/cases?minExecutions=-3&maxExecutions=1000000000000000000000');
+    assert.doesNotMatch(invalid, /More filters \(/);
+    assert.match(invalid, /No cases yet\./);
+  } finally {
+    client.clear();
+  }
+});
+
 test('alert announces errors assertively and lets layout classes override defaults', async () => {
   const { Alert } = await server.ssrLoadModule('/src/components/ui/alert.tsx');
   const render = (props) => renderToStaticMarkup(createElement(Alert, props, 'Notice'));
