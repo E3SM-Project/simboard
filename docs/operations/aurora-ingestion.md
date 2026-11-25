@@ -36,14 +36,20 @@ Because staging output only lives until the next PACE run, the archive scan of
 `OLD_PERF` is the authoritative source for Aurora. Staging scans add runs that
 PACE has not processed yet.
 
-## Still to confirm on Aurora
+## Confirmed on Aurora
+
+| Item | Finding |
+| --- | --- |
+| Scheduler | PACE runs `pace_archive_aurora.sh` from an ALCF GitLab pipeline (`anl/e3sm_dec`), not cron; Aurora login nodes have no `crontab`. SimBoard uses a separate pipeline in the same group. |
+| Execution host | The `.aurora-shell-runner` from `anl/ci-resources/defaults` runs jobs as the operator on a login node. Jobs need `ANL_AURORA_SCHEDULER_PARAMETERS` with `-A <project>` set. |
+| Network egress | Login nodes reach the SimBoard API directly. Compute nodes need the ALCF proxy settings from the [Aurora guide](https://docs.alcf.anl.gov/aurora/getting-started-on-aurora/#proxy). |
+| API credentials | Stored as protected, masked GitLab CI/CD variables, or in `operations/env.<env>.sh` for manual runs. |
+
+## Still to confirm
 
 | Item | Why it is open |
 | --- | --- |
-| Scheduler | Which host and account run `pace_archive_aurora.sh`, and whether SimBoard's job can run the same way. |
-| Scheduler identity | Which account owns the SimBoard job, with at least one backup operator. |
-| API credentials | A dedicated SimBoard service account for Aurora, stored as a protected variable or protected file. |
-| Network egress | Whether the scheduling host can reach the SimBoard API over HTTPS. |
+| Scheduler identity | The pipeline currently runs as a personal account; name a backup operator. |
 | Diagnostics | Whether Aurora publishes zppy diagnostics, and where. |
 
 Diagnostics scheduling is disabled for Aurora
@@ -89,8 +95,10 @@ account is in place:
      SIMBOARD_ROOT=<deployment-root> MAX_CASES_PER_RUN=5
    ```
 
-2. Run the full archive scan against development, then production. Completed
-   snapshots are checkpointed, so reruns skip them.
+2. Run the archive scan against development, then production. Completed
+   snapshots are checkpointed, so reruns skip them. To load only recent
+   history, set a later lower bound, for example `ARCHIVE_YEAR_START=2025-12`
+   (values may be `YYYY` or `YYYY-MM`).
 
 ## Enable scheduled ingestion
 
