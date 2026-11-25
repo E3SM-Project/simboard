@@ -182,9 +182,7 @@ without echoing either token. It creates `operations/env.dev.sh` and
 
 ### Install scheduler configuration
 
-Render the site crontab into `operations/`. The initializer substitutes the
-site name, and omits diagnostics jobs for sites whose config sets
-`SIMBOARD_DIAGNOSTICS_ENABLED=false`:
+Copy the site crontab into `operations/`:
 
 ```bash
 make ops-init-cron site=chrysalis

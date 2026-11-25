@@ -52,9 +52,8 @@ PACE has not processed yet.
 | Scheduler identity | The pipeline currently runs as a personal account; name a backup operator. |
 | Diagnostics | Whether Aurora publishes zppy diagnostics, and where. |
 
-Diagnostics scheduling is disabled for Aurora
-(`SIMBOARD_DIAGNOSTICS_ENABLED=false`), so `make ops-init-cron site=aurora`
-produces staging and archive jobs only. Enable it after adding Aurora to
+Diagnostics are disabled for Aurora (`SIMBOARD_DIAGNOSTICS_ENABLED=false`).
+Enable them after adding Aurora to
 `backend/app/scripts/ingestion/diagnostics_archives.py` with a verified root and
 public URL.
 
@@ -102,22 +101,31 @@ account is in place:
 
 ## Enable scheduled ingestion
 
-After validation and an agreed owner:
+Aurora login nodes have no `crontab`, so `make ops-init-cron` does not apply;
+schedule the launcher from an ALCF GitLab pipeline instead. After validation
+and an agreed owner:
 
 1. Create the Aurora service account and token (see
-   [HPC API Token Authentication](hpc-api-token-authentication.md)), then
-   `make ops-init-env site=aurora SIMBOARD_ROOT=<deployment-root>`.
-2. Schedule the launcher. For cron, `make ops-init-cron site=aurora` renders the
-   schedule. For another scheduler, invoke the same command:
+   [HPC API Token Authentication](hpc-api-token-authentication.md)). Store it as
+   protected, masked GitLab CI/CD variables `SIMBOARD_API_TOKEN` and
+   `SIMBOARD_API_BASE_URL`, or run
+   `make ops-init-env site=aurora SIMBOARD_ROOT=<deployment-root>` for manual
+   runs.
+2. Add a pipeline job that runs on the `.aurora-shell-runner` from
+   `anl/ci-resources/defaults`, sets
+   `ANL_AURORA_SCHEDULER_PARAMETERS` with `-A <project>`, and runs a live
+   archive scan:
 
    ```bash
-   SIMBOARD_ROOT=<deployment-root> \
-   SIMBOARD_ENV_FILE=<deployment-root>/operations/env.dev.sh \
-   <deployment-root>/repository/simboard/backend/app/scripts/ingestion/sites/site_ingestion_launcher.sh \
-     aurora archive
+   cd <deployment-root>/repository/simboard
+   make ingest-apply machine=aurora env=dev scan_mode=archive \
+     SIMBOARD_ROOT=<deployment-root> env_file=<protected-env-file>
    ```
 
-   The launcher requires `flock`.
+   `make ingest-apply` sets `DRY_RUN=false`; calling `site_ingestion_launcher.sh`
+   directly defaults to a dry run unless `DRY_RUN=false` is exported.
+3. Add a pipeline schedule after PACE's daily job has moved the day's batch into
+   `OLD_PERF`.
 
 The scans are read-only, so they can run alongside PACE's collector against the
 same directories.
