@@ -51,6 +51,7 @@ an approved deployment requires a different source, branch, or tag.
 | --------- | --------------------------- | -------------------------------- | -------------------------------------- |
 | Chrysalis | `/lcrc/group/e3sm/simboard` | `sites/configs/chrysalis.config` | `${SIMBOARD_ROOT}/repository/simboard` |
 | Compy     | `/compyfs/simboard`         | `sites/configs/compy.config`     | `${SIMBOARD_ROOT}/repository/simboard` |
+| Aurora    | `/lus/flare/projects/E3SM_Dec/simboard` | `sites/configs/aurora.config` | `${SIMBOARD_ROOT}/repository/simboard` |
 
 The operator's user account owns scheduling for this deployment.
 

@@ -58,9 +58,9 @@ help:
 	@echo '  make ops-configure-access site=<site> SIMBOARD_ROOT=<path> operators="<users>" [apply=true] # Preview or apply operator ACLs'
 	@echo ""
 	@echo "  Ingestion:"
-	@echo "  make ingest-dry-run machine=<chrysalis|compy|perlmutter> env=<dev|prod> scan_mode=<archive|staging> # General ingestion without writes"
-	@echo "  make ingest-apply machine=<chrysalis|compy|perlmutter> env=<dev|prod> scan_mode=<archive|staging>   # General live ingestion"
-	@echo "    Chrysalis/Compy: SIMBOARD_ROOT=<path>; Perlmutter: env_file=<path> or exported API settings"
+	@echo "  make ingest-dry-run machine=<aurora|chrysalis|compy|perlmutter> env=<dev|prod> scan_mode=<archive|staging> # General ingestion without writes"
+	@echo "  make ingest-apply machine=<aurora|chrysalis|compy|perlmutter> env=<dev|prod> scan_mode=<archive|staging>   # General live ingestion"
+	@echo "    Aurora/Chrysalis/Compy: SIMBOARD_ROOT=<path>; Perlmutter: env_file=<path> or exported API settings"
 	@echo "    Required: scan_mode=<archive|staging>; optional: env_file=<path>, archive bounds and case limits"
 	@echo "    execution_dir=<absolute-path> selects one execution without completing snapshot checkpoints"
 	@echo "  make v3-ingest-dry-run SIMBOARD_ROOT=<path> env=<dev|prod> # Run Chrysalis v3 archive backfill without uploads"
