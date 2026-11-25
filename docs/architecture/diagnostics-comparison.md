@@ -20,10 +20,10 @@ pasted run address  ────────────────────
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `archive.py`       | Every HTTP read. Allowlisted URL prefixes (`diagnostics_allowed_url_prefixes`), re-checked on each redirect hop; a request budget and deadline per read; a body size cap; a TTL cache. A missing page (`ABSENT`) is kept distinct from an unreachable server (`FAILED`) so outages are never cached as "no runs". |
 | `discovery.py`     | Lists the runs under a case's zppy root from Apache directory listings, following only zppy's `e3sm_diags/<sub>/model_vs_*_Y1-Y2/viewer/` and `mpas_analysis/ts_*_climo_*/` layout.                                                                                                                               |
-| `e3sm_diags.py`    | Reads `viewer/index.html` and each set page's `data-preview` images. Also holds the panel windows used to crop the stacked test/reference/difference composites.                                                                                                                                                  |
+| `e3sm_diags.py`    | Reads `viewer/index.html` and each set page's `data-preview` images, fetching set pages in parallel (`diagnostics_catalog_page_concurrency`) within the read's budget. Also holds the panel windows used to crop the stacked test/reference/difference composites.                                                 |
 | `mpas_analysis.py` | Reads the `ocean/` and `sea_ice/` galleries: image, caption, section, and a description that is a season and/or region. Supports older layouts and the `!case` label convention from IICE.                                                                                                                        |
 | `plots.py`         | The shared `Catalog` / `PlotSet` / `Plot` model both readers produce.                                                                                                                                                                                                                                             |
-| `catalog.py`       | Picks the reader from the URL; caches complete reads.                                                                                                                                                                                                                                                             |
+| `catalog.py`       | Picks the reader from the URL. Caches complete reads for the full TTL and partial reads briefly (`diagnostics_partial_cache_ttl_seconds`), never errors, and coalesces concurrent misses for one run into a single archive read.                                                                                   |
 | `compare.py`       | Keeps the plots every run shares and groups a variable's seasons and regions.                                                                                                                                                                                                                                     |
 | `api.py`           | `GET /cases/{id}/diagnostics/runs` and `POST /diagnostics/compare`.                                                                                                                                                                                                                                               |
 
@@ -34,7 +34,9 @@ regions into one row.
 
 `POST /diagnostics/compare` reads the runs' catalogs in parallel, returns all
 shared sets as a summary and one set in detail (each plot's path in every run),
-and is gzipped. Parsers are tested against excerpts of real pages
+and is gzipped. With `allSets`, it also details every shared set in `details`;
+grouping incompatible selections uses this to send one request per run rather
+than one per run per set. Parsers are tested against excerpts of real pages
 in `tests/fixtures/diagnostics/`.
 
 ## Frontend: `src/features/diagnostics/`

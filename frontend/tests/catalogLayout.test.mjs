@@ -760,6 +760,79 @@ test('Case Group stays visible without opening or counting as an advanced filter
   }
 });
 
+test('comparison grouping sends one compare request per run, not one per set', async () => {
+  const { api } = await server.ssrLoadModule('/src/api/api.ts');
+  const { loadComparisonGroups } = await server.ssrLoadModule(
+    '/src/features/diagnostics/comparisonGroups.ts',
+  );
+  const detail = (name, key) => ({
+    name,
+    title: name,
+    plotCount: 1,
+    missing: 0,
+    imageWidth: null,
+    panels: {},
+    groups: [{ id: key, title: key, reference: 'obs', plots: [{ key, paths: ['p'] }] }],
+  });
+  const requests = [];
+  let legacy = false;
+  const originalAdapter = api.defaults.adapter;
+  api.defaults.adapter = async (config) => {
+    const body = JSON.parse(config.data);
+    requests.push(body);
+    const [{ url }] = body.runs;
+    const sets = url.endsWith('a/') ? ['lat_lon', 'polar', 'zonal'] : ['lat_lon', 'zonal'];
+    const details = sets.map((name) => detail(name, `${name}-PRECT`));
+    return {
+      data: {
+        runs: [{ url, label: '', tool: 'e3sm_diags', imageBaseUrl: url, partial: false }],
+        sets: details.map(({ name, title, plotCount, missing }) => ({
+          name,
+          title,
+          plotCount,
+          missing,
+        })),
+        set: details.find((item) => item.name === body.set) ?? details[0],
+        details: body.allSets && !legacy ? details : undefined,
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config,
+    };
+  };
+  const client = new QueryClient();
+  const runs = ['https://h.test/a/', 'https://h.test/b/', 'https://h.test/c/'].map((url) => ({
+    url,
+    label: '',
+  }));
+
+  try {
+    const groups = await loadComparisonGroups(client, runs);
+    assert.equal(requests.length, runs.length);
+    assert.ok(requests.every((body) => body.allSets === true && body.runs.length === 1));
+    assert.equal(groups.length, 1);
+    assert.deepEqual([...groups[0].plots].sort(), [
+      JSON.stringify(['lat_lon', 'lat_lon-PRECT']),
+      JSON.stringify(['zonal', 'zonal-PRECT']),
+    ]);
+    // Per-set entries are seeded, so opening a set later needs no request.
+    const seeded = client.getQueryData(['diagnostics', 'compare', [runs[0]], 'polar']);
+    assert.equal(seeded.set.name, 'polar');
+
+    // An older backend ignores allSets; grouping still reads every set.
+    requests.length = 0;
+    legacy = true;
+    client.clear();
+    const legacyGroups = await loadComparisonGroups(client, runs);
+    assert.deepEqual([...legacyGroups[0].plots].sort(), [...groups[0].plots].sort());
+    assert.ok(requests.length > runs.length);
+  } finally {
+    api.defaults.adapter = originalAdapter;
+    client.clear();
+  }
+});
+
 test('alert announces errors assertively and lets layout classes override defaults', async () => {
   const { Alert } = await server.ssrLoadModule('/src/components/ui/alert.tsx');
   const render = (props) => renderToStaticMarkup(createElement(Alert, props, 'Notice'));

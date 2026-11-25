@@ -300,6 +300,38 @@ api.defaults.adapter = async (config) => {
       plotCount: 1,
       missing: 0,
     }));
+    const detail = (setName: string | null) => ({
+      ...(sets.find((set) => set.name === setName) ?? sets[0]),
+      imageWidth: composite ? 1000 : null,
+      panels: composite
+        ? {
+            test: { width: 1000, height: 200, top: 0, left: 0 },
+            ref: { width: 1000, height: 200, top: 200, left: 0 },
+            diff: { width: 1000, height: 200, top: 400, left: 0 },
+          }
+        : {},
+      groups: ['temperature', 'precipitation'].map((variable) => ({
+        id: variable,
+        title: variable === 'temperature' ? 'Temperature' : 'Precipitation',
+        reference: 'Observations',
+        plots: ['ANN', 'DJF'].map((season) => ({
+          key: grouped
+            ? `${setName === 'polar' ? family : body.runs[0].url}/${variable}/${season}`
+            : `${variable}/${season}`,
+          season,
+          region: 'global',
+          singlePanel: !composite,
+          paths: body.runs.map((run: { url: string }) =>
+            run.url.includes('/unreadable/') ? null : 'plot.png',
+          ),
+          references: body.runs.map((item: { url: string }, index: number) =>
+            composite && index && !item.url.includes('/composite-same-')
+              ? 'Reference model'
+              : 'Observations',
+          ),
+        })),
+      })),
+    });
     data = {
       runs: body.runs.map((item: { url: string; label: string }) => ({
         ...item,
@@ -311,38 +343,9 @@ api.defaults.adapter = async (config) => {
         partial: false,
       })),
       sets: incompatible ? [] : sets,
-      set: {
-        ...(sets.find((set) => set.name === body.set) ?? sets[0]),
-        imageWidth: composite ? 1000 : null,
-        panels: composite
-          ? {
-              test: { width: 1000, height: 200, top: 0, left: 0 },
-              ref: { width: 1000, height: 200, top: 200, left: 0 },
-              diff: { width: 1000, height: 200, top: 400, left: 0 },
-            }
-          : {},
-        groups: ['temperature', 'precipitation'].map((variable) => ({
-          id: variable,
-          title: variable === 'temperature' ? 'Temperature' : 'Precipitation',
-          reference: 'Observations',
-          plots: ['ANN', 'DJF'].map((season) => ({
-            key: grouped
-              ? `${body.set === 'polar' ? family : body.runs[0].url}/${variable}/${season}`
-              : `${variable}/${season}`,
-            season,
-            region: 'global',
-            singlePanel: !composite,
-            paths: body.runs.map((run: { url: string }) =>
-              run.url.includes('/unreadable/') ? null : 'plot.png',
-            ),
-            references: body.runs.map((item: { url: string }, index: number) =>
-              composite && index && !item.url.includes('/composite-same-')
-                ? 'Reference model'
-                : 'Observations',
-            ),
-          })),
-        })),
-      },
+      set: detail(body.set),
+      // Mirrors the backend: allSets details every shared set at once.
+      details: body.allSets && !incompatible ? sets.map((set) => detail(set.name)) : null,
     };
   } else if (endpoint.startsWith('/cases/')) {
     const id = endpoint.split('/')[2];

@@ -80,6 +80,8 @@ export interface CompareOut {
   runs: CompareRunOut[];
   sets: SetSummaryOut[];
   set: SetDetailOut | null;
+  /** Every shared set in detail; present only when requested with allSets. */
+  details?: SetDetailOut[] | null;
 }
 
 export type PanelView = 'test' | 'ref' | 'diff';
