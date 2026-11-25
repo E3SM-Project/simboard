@@ -11,6 +11,7 @@ Image names follow ``<reference>-<VARIABLE>[-<level>]-<SEASON>-<region>.png``.
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from html.parser import HTMLParser
 from typing import NamedTuple
 from urllib.parse import unquote, urljoin, urlsplit
@@ -203,8 +204,13 @@ def read_catalog(
     *,
     max_requests: int | None = None,
     deadline_seconds: float | None = None,
+    page_concurrency: int | None = None,
 ) -> Catalog:
-    """Read every comparable plot set from the run at ``url``."""
+    """Read every comparable plot set from the run at ``url``.
+
+    Set pages are fetched in parallel within the read's budget; the
+    process-wide in-flight cap in ``archive`` still bounds the total.
+    """
     viewer = normalize_url(url)
     image_base = urljoin(viewer, "../")
     if not is_allowed_url(viewer):
@@ -218,14 +224,24 @@ def read_catalog(
     if index is None or index.body is None:
         return Catalog(viewer, "e3sm_diags", image_base, error="catalog_unavailable")
 
-    sets = []
-    for name, title in parse_viewer_index(index.body).items():
-        if name in UNSUPPORTED_SETS:
-            continue
-        page = budget.fetch(fetch, urljoin(viewer, f"{name}/index.html"))
-        if page is None:
-            break
-        if page.body and (plots := parse_set_page(page.body, name)):
-            sets.append(PlotSet(name, title, tuple(plots)))
+    titles = {
+        name: title
+        for name, title in parse_viewer_index(index.body).items()
+        if name not in UNSUPPORTED_SETS
+    }
 
-    return Catalog(viewer, "e3sm_diags", image_base, tuple(sets), budget.partial)
+    def read_set(name: str) -> PlotSet | None:
+        page = budget.fetch(fetch, urljoin(viewer, f"{name}/index.html"))
+        if page and page.body and (plots := parse_set_page(page.body, name)):
+            return PlotSet(name, titles[name], tuple(plots))
+        return None
+
+    workers = page_concurrency or settings.diagnostics_catalog_page_concurrency
+    if workers > 1 and len(titles) > 1:
+        with ThreadPoolExecutor(max_workers=min(workers, len(titles))) as pool:
+            found = list(pool.map(read_set, titles))
+    else:
+        found = [read_set(name) for name in titles]
+    # pool.map keeps the viewer's order, so sets appear as the run lists them.
+    sets = tuple(plot_set for plot_set in found if plot_set)
+    return Catalog(viewer, "e3sm_diags", image_base, sets, budget.partial)
