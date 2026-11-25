@@ -1,5 +1,7 @@
 """Lining up plots across runs, and the comparison endpoint."""
 
+import threading
+import time
 from unittest.mock import patch
 
 import pytest
@@ -163,12 +165,38 @@ class TestReadCatalogCached:
             "https://h.test/x", lambda *_: None
         ).error == ("unrecognized_url")
 
-    def test_partial_reads_are_not_cached(self):
+    def test_partial_reads_are_cached_briefly(self):
         calls = []
 
         def fake(url, fetch, label=""):
             calls.append(url)
             return Catalog(url, "e3sm_diags", url, partial=True)
+
+        clock = "app.features.diagnostics.archive.time.monotonic"
+        ttl = catalog_module.settings.diagnostics_partial_cache_ttl_seconds
+        with (
+            patch.object(catalog_module, "read_catalog", fake),
+            patch.object(catalog_module, "with_http_fetcher", lambda read: read(None)),
+            patch(clock) as now,
+        ):
+            now.return_value = 0.0
+            catalog_module.read_catalog_cached(HIST)
+            now.return_value = ttl - 1
+            catalog_module.read_catalog_cached(HIST)
+            assert len(calls) == 1
+            # Past the short TTL the run is read again, well before a complete
+            # read would expire.
+            now.return_value = ttl + 1
+            catalog_module.read_catalog_cached(HIST)
+        assert len(calls) == 2
+        assert ttl < catalog_module.settings.diagnostics_cache_ttl_seconds
+
+    def test_errors_are_never_cached(self):
+        calls = []
+
+        def fake(url, fetch, label=""):
+            calls.append(url)
+            return Catalog(url, "e3sm_diags", url, error="catalog_unavailable")
 
         with (
             patch.object(catalog_module, "read_catalog", fake),
@@ -177,6 +205,41 @@ class TestReadCatalogCached:
             catalog_module.read_catalog_cached(HIST)
             catalog_module.read_catalog_cached(HIST)
         assert len(calls) == 2
+
+    def test_concurrent_misses_read_the_archive_once(self):
+        calls = []
+        started = threading.Event()
+
+        def fake(url, fetch, label=""):
+            calls.append(url)
+            started.set()
+            time.sleep(0.2)  # long enough for every caller to arrive
+            return run(url, e3sm(LAT_LON))
+
+        with (
+            patch.object(catalog_module, "read_catalog", fake),
+            patch.object(catalog_module, "with_http_fetcher", lambda read: read(None)),
+        ):
+            first = threading.Thread(
+                target=catalog_module.read_catalog_cached, args=(HIST,)
+            )
+            first.start()
+            started.wait(5)
+            results = []
+            waiters = [
+                threading.Thread(
+                    target=lambda: results.append(
+                        catalog_module.read_catalog_cached(HIST)
+                    )
+                )
+                for _ in range(4)
+            ]
+            for thread in waiters:
+                thread.start()
+            for thread in [first, *waiters]:
+                thread.join(5)
+        assert calls == [HIST]
+        assert len(results) == 4 and all(r.error is None for r in results)
 
     def test_mpas_labels_are_part_of_the_key(self):
         calls = []

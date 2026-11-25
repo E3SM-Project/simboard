@@ -174,6 +174,12 @@ class Settings(BaseSettings):
     diagnostics_max_concurrent_requests: int = 8
     diagnostics_max_page_bytes: int = 2_000_000
     diagnostics_cache_ttl_seconds: float = 600.0
+    # A partial read (budget spent, or a page failed) is kept briefly so a burst
+    # of retries does not re-crawl the run; a complete read is kept longer.
+    diagnostics_partial_cache_ttl_seconds: float = 45.0
+    # Set pages one catalog read fetches at once; all reads share the
+    # process-wide cap above.
+    diagnostics_catalog_page_concurrency: int = 4
     diagnostics_cache_max_entries: int = 200
 
     @property
