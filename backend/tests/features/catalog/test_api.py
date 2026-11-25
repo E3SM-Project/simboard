@@ -988,6 +988,35 @@ class TestListCases:
         rejected = client.get(f"{API_BASE}/cases", params={"min_executions": -1})
         assert rejected.status_code == 422
 
+    def test_execution_count_bounds_narrow_filter_options(
+        self, client, db: Session, normal_user_sync, admin_user_sync
+    ):
+        machine = db.query(Machine).first()
+        ingestion = _create_ingestion(db, machine.id, normal_user_sync["id"])
+        for name, count, campaign in (("busy", 3, "kept"), ("once", 1, "dropped")):
+            case = _create_case(db, f"facet-{name}")
+            case.case_group = f"group-{name}"
+            for index in range(count):
+                _create_execution_record(
+                    db,
+                    case=case,
+                    ingestion_id=ingestion.id,
+                    created_by=normal_user_sync["id"],
+                    last_updated_by=admin_user_sync["id"],
+                    execution_id=f"facet-{name}-{index}",
+                    campaign=campaign,
+                )
+        db.commit()
+
+        facets = client.get(
+            f"{API_BASE}/cases/filter-options", params={"min_executions": 2}
+        ).json()
+        # Options from cases the bounds exclude would lead to an empty list.
+        assert facets["caseGroups"] == ["group-busy"]
+        assert facets["campaigns"] == ["kept"]
+        unbounded = client.get(f"{API_BASE}/cases/filter-options").json()
+        assert set(unbounded["caseGroups"]) >= {"group-busy", "group-once"}
+
     @pytest.mark.parametrize(
         ("now", "cutoff"),
         [
